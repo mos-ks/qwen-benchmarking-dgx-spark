@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Qwen on DGX Spark vs Opus 5.5</title>
+<style>
+/* Layout: a viewing bench, reference fixed on the left, local runs paged on the right. */
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --ink: #141413; --muted: #5d5c57; --line: #e3e2dc;
+  --accent: #1baf7a; --ref: #52514e; --warn: #b4540f;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #141413; --panel: #1d1d1b; --ink: #f2f1ec; --muted: #a9a79d; --line: #33322e; --accent: #2bc48c; --ref: #a9a79d; --warn: #e8894a; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #141413; --panel: #1d1d1b; --ink: #f2f1ec; --muted: #a9a79d; --line: #33322e; --accent: #2bc48c; --ref: #a9a79d; --warn: #e8894a; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+.wrap { max-width: 82rem; margin-inline: auto; padding: 1.5rem 1rem 3rem; display: flex; flex-direction: column; gap: 1.25rem; }
+h1 { font-family: var(--display); font-weight: 400; font-size: clamp(1.6rem, 3.5vw, 2.4rem); margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 68ch; margin: 0; }
+.lede a, .meta a, footer a { color: inherit; text-underline-offset: 3px; }
+.tabs { display: flex; flex-wrap: wrap; gap: .5rem; }
+.tabs button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: .4rem .9rem; border-radius: 999px; cursor: pointer; }
+.tabs button[aria-selected="true"] { border-color: var(--ink); font-weight: 600; }
+.tabs button:focus-visible, .nav button:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bench { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 1rem; }
+.pane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: .9rem; display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+.pane h2 { font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0; font-weight: 600; }
+.shot { position: relative; aspect-ratio: 16 / 10; background: #0d0d0c; border-radius: 6px; overflow: hidden; max-width: 100%; }
+.shot img { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
+.shot .badge { position: absolute; top: .5rem; left: .5rem; font: 600 .78rem var(--body); padding: .15rem .55rem; border-radius: 999px; background: rgba(0,0,0,.66); color: #fff; }
+.meta { display: grid; grid-template-columns: auto 1fr; gap: .15rem .9rem; font-size: .9rem; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; font-variant-numeric: tabular-nums; min-width: 0; }
+.score { font-family: var(--display); font-size: 1.6rem; line-height: 1; }
+.score small { font-family: var(--body); font-size: .85rem; color: var(--muted); }
+.nav { display: flex; align-items: center; gap: .6rem; }
+.nav button { font: 600 1rem var(--body); width: 2.4rem; height: 2.4rem; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; flex: none; }
+.nav input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; }
+.nav .pos { font: .85rem var(--mono); color: var(--muted); flex: none; min-width: 3.5rem; text-align: right; }
+.pill { display: inline-block; padding: 0 .5rem; border: 1px solid var(--line); border-radius: 999px; font-size: .8rem; }
+.pill.bad { color: var(--warn); border-color: var(--warn); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 1rem; }
+.charts img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: #fcfcfb; }
+footer { color: var(--muted); font-size: .85rem; }
+@media (prefers-reduced-motion: no-preference) { .shot img { transition: opacity .2s ease; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Qwen on one DGX Spark vs Claude Opus 5.5</h1>
+    <p class="lede">The same one-shot front-end brief for every model. Opus's page stays on the left; page through the local runs on the right with the arrows, the slider or your keyboard. Scores are 1–10 from a not-blind Opus judge, so judge for yourself. Method and caveats in the <a href="https://github.com/mos-ks/qwen-benchmarking-dgx-spark">repository</a>.</p>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Brief" id="tabs"></nav>
+
+  <section class="bench">
+    <article class="pane">
+      <h2>Reference</h2>
+      <div class="shot"><img id="ref-img" alt=""><span class="badge" id="ref-badge">Opus 5.5</span></div>
+      <dl class="meta" id="ref-meta"></dl>
+    </article>
+    <article class="pane" aria-live="polite">
+      <h2>Local runs</h2>
+      <div class="shot"><img id="run-img" alt=""><span class="badge" id="run-badge"></span></div>
+      <div class="nav">
+        <button id="prev" aria-label="Previous run">&#8592;</button>
+        <input type="range" id="slider" min="0" max="0" value="0" aria-label="Choose a run">
+        <button id="next" aria-label="Next run">&#8594;</button>
+        <span class="pos" id="pos"></span>
+      </div>
+      <dl class="meta" id="run-meta"></dl>
+    </article>
+  </section>
+
+  <section class="charts" aria-label="Charts">
+    <img src="results/charts/bonsai_quality_vs_time.png" alt="Bonsai brief: score against minutes for every run">
+    <img src="results/charts/best_per_brief.png" alt="Best score per brief and setup">
+    <img src="results/charts/decode_speed.png" alt="Decode speed per model">
+  </section>
+
+  <footer>Pages, screenshots and data: <a href="https://github.com/mos-ks/qwen-benchmarking-dgx-spark/tree/main/results">results/</a>. Runs sorted by score, best first.</footer>
+</div>
+
+<script>
+(function () {
+  const BRIEFS = ["Bonsai", "Lighthouse", "Dashboard"];
+  const slug = (run) => run.split(" · ").slice(1).join(" · ").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const shot = (r) => `results/screenshots/${r.brief.toLowerCase()}/${slug(r.run)}/desktop-1.png`;
+  const app = (r) => `results/apps/${r.brief.toLowerCase()}/${slug(r.run)}/`;
+  let runs = [], brief = "Bonsai", list = [], i = 0;
+
+  function meta(dl, r) {
+    dl.textContent = "";
+    const rows = [
+      ["Score", null],
+      ["Time", r.minutes.toFixed(1) + " min" + (r.outcome === "timeout" ? " (hit the limit)" : "")],
+      ["Harness", r.kit + (r.attempt && !["ref", "best"].includes(r.attempt) ? " · run " + r.attempt : r.attempt === "best" ? " · picked" : "")],
+      ["Shows", r.note],
+    ];
+    for (const [k, v] of rows) {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd");
+      if (k === "Score") {
+        const s = document.createElement("span"); s.className = "score"; s.textContent = r.score.toFixed(1);
+        const of = document.createElement("small"); of.textContent = " / 10";
+        s.appendChild(of); dd.appendChild(s);
+        if (r.outcome !== "done") { const p = document.createElement("span"); p.className = "pill bad"; p.textContent = r.outcome; dd.append(" ", p); }
+      } else dd.textContent = v;
+      dl.append(dt, dd);
+    }
+    const dt = document.createElement("dt"); dt.textContent = "Page";
+    const dd = document.createElement("dd"); const a = document.createElement("a"); a.href = app(r); a.textContent = "open it live"; a.target = "_blank"; a.rel = "noopener";
+    dd.appendChild(a); dl.append(dt, dd);
+  }
+
+  function showRun() {
+    const r = list[i];
+    const img = document.getElementById("run-img");
+    if (!r) { img.removeAttribute("src"); document.getElementById("run-meta").textContent = ""; return; }
+    img.src = shot(r); img.alt = `${r.brief} page built by ${r.model} (${r.kit})`;
+    img.onerror = () => { img.removeAttribute("src"); img.alt = "No page was produced for this run"; };
+    document.getElementById("run-badge").textContent = r.model;
+    document.getElementById("slider").value = i;
+    document.getElementById("pos").textContent = `${i + 1} / ${list.length}`;
+    meta(document.getElementById("run-meta"), r);
+  }
+
+  function showBrief(b) {
+    brief = b;
+    document.querySelectorAll("#tabs button").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.brief === b)));
+    const all = runs.filter((r) => r.brief === b);
+    const ref = all.find((r) => r.model === "Opus 5.5");
+    list = all.filter((r) => r.model !== "Opus 5.5").sort((p, q) => q.score - p.score || p.minutes - q.minutes);
+    i = 0;
+    const refImg = document.getElementById("ref-img");
+    if (ref) { refImg.src = shot(ref); refImg.alt = `${b} page built by Opus 5.5`; meta(document.getElementById("ref-meta"), ref); }
+    const slider = document.getElementById("slider"); slider.max = Math.max(0, list.length - 1);
+    showRun();
+  }
+
+  const step = (d) => { if (!list.length) return; i = (i + d + list.length) % list.length; showRun(); };
+  document.getElementById("prev").addEventListener("click", () => step(-1));
+  document.getElementById("next").addEventListener("click", () => step(1));
+  document.getElementById("slider").addEventListener("input", (e) => { i = Number(e.target.value); showRun(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight") step(1);
+    if (e.key === "ArrowLeft") step(-1);
+  });
+
+  const tabs = document.getElementById("tabs");
+  for (const b of BRIEFS) {
+    const t = document.createElement("button"); t.role = "tab"; t.dataset.brief = b; t.textContent = b;
+    t.addEventListener("click", () => showBrief(b)); tabs.appendChild(t);
+  }
+
+  fetch("results/data/visual_runs.json").then((r) => r.json()).then((data) => {
+    runs = data.map((r) => ({ ...r, minutes: Number(r.minutes), score: Number(r.score) }));
+    const hash = decodeURIComponent(location.hash.slice(1));
+    showBrief(BRIEFS.includes(hash) ? hash : "Bonsai");
+  }).catch(() => { document.getElementById("run-meta").textContent = "Could not load results/data/visual_runs.json."; });
+})();
+</script>
+</body>
+</html>

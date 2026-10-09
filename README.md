@@ -21,9 +21,13 @@ Spark) reaches 7.5 on the bonsai brief in 10.9 minutes. Its other runs are in pr
 | Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.0 in 18.7 min (Qwen3.6-35B-A3B + kit v3) | -2.0 |
 | Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3) | -2.0 |
 
-Every run of the bonsai brief, one frame each (Opus first):
+**[Open the results viewer](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/)**: Opus's page
+on the left, every local run on a slider on the right, per brief.
 
-![Every bonsai run](results/screenshots/sheet-bonsai-oneshot-all.png)
+Static comparison sheets (Opus first, then runs by score):
+[bonsai](results/screenshots/sheet-bonsai.png) ·
+[lighthouse](results/screenshots/sheet-lighthouse.png) ·
+[dashboard](results/screenshots/sheet-dashboard.png)
 
 Open the pages live (they animate):
 
