@@ -6,8 +6,9 @@ at the quality of Claude Opus 5.5, in at most twice Opus's time?
 **Not yet.** The best local setup is Qwen3.8-Flash-Next (the strongest model that fits on one
 Spark) in OpenCode, with a harness that screenshots the page, critiques it and hands the agent a
 tested pixel-art drawing library. It scores 7.5 on the bonsai and lighthouse briefs inside the time
-budget, against Opus's 9.0, and 6.5 on the windmill brief that no harness change was tuned on. The
-dashboard brief still overruns its budget (see [Status](#status)).
+budget, against Opus's 9.0. With thinking switched on at low effort it reached 8.0 on the windmill
+brief, which no harness change was tuned on, in Opus's time (17.8 vs 17.7 minutes). See
+[Status](#status) for the dashboard and the open experiments.
 
 ![Bonsai brief: quality against time](results/charts/bonsai_quality_vs_time.png)
 
@@ -19,7 +20,7 @@ dashboard brief still overruns its budget (see [Status](#status)).
 |---|---|---|---|
 | Pixel-art bonsai with wind | 9.0 in 14 min | 7.5 in 10.9 min (Qwen3.8-Flash-Next + kit v3) | -1.5 |
 | Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.5 in 25.9 min (Qwen3.8-Flash-Next + kit v5) | -1.5 |
-| Pixel-art windmill in a tulip field (held out from every kit change) | 9.0 in 17.7 min | 6.5 in 30.9 min (Qwen3.8-Flash-Next + kit v5) | -2.5 |
+| Pixel-art windmill in a tulip field (held out from every kit change) | 9.0 in 17.7 min | 8.0 in 17.8 min (Qwen3.8-Flash-Next + kit v5, thinking low) | -1.0 |
 | Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3) and 7.5 in 21.7 min (Qwen3.8-Flash-Next + kit v5.1); 8.0 in 26.7 min, just over budget (Flash-Next + kit v5.1) | -2.0 in budget |
 
 **[Open the results viewer](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/)**: Opus's page
@@ -37,7 +38,7 @@ Open the pages live (they animate):
 |---|---|---|
 | Bonsai | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/qwen3-8-flash-next-kit-v3-1/) (Flash-Next + kit v3) |
 | Lighthouse | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/qwen3-8-flash-next-kit-v5-1/) (Flash-Next + kit v5) |
-| Windmill | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/windmill/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/windmill/qwen3-8-flash-next-kit-v5-1/) (Flash-Next + kit v5) |
+| Windmill | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/windmill/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/windmill/qwen3-8-flash-next-kit-v5-thinking-low-1/) (Flash-Next + kit v5, thinking low) |
 | Dashboard | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/qwen3-6-35b-a3b-kit-v3-1/) (Qwen3.6-35B-A3B + kit v3) |
 
 All generated pages are in [`results/apps/`](results/apps/) and open directly in a browser; the
@@ -154,7 +155,8 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 - Kit v5 (drawing library): bonsai 7.5 in 11.9 min, lighthouse 7.5 in 25.9 min, the best lighthouse and the fastest good bonsai so far. The critic scored both 8 or more on its first look, so no supervisor rounds ran.
 - Kit v5 on the windmill brief: 6.5 in 30.9 min, up from kit v4's 5.0. The drawing library carried over to a scene it was not built for.
 - Kit v5.1 on the dashboard (from minute 20, tool results carry a note to stop self-checking and finish): 8.0 in 26.7 min and 7.5 in 21.7 min. Both stopped on their own, against kit v4's 45-minute timeout.
-- In progress: kit v5 with thinking on at `reasoning_effort: low` (every run so far had thinking off) on windmill and bonsai.
+- Kit v5 with thinking on at `reasoning_effort: low` (every earlier run had thinking off): windmill 8.0 in 17.8 min (from 6.5 in 30.9 min, with real lattice sails and tulip rows in perspective), bonsai 7.0 in 23.0 min (from 7.5 in 11.9 min). One run each; the windmill jump is the largest single gain so far, on the brief no harness change was tuned on.
+- In progress: thinking low on lighthouse and dashboard; an offline replay of every saved screenshot through four critic designs (absolute score, checklist, anchored, pairwise) to fix the lenient self-critic.
 - This repository is updated as runs finish.
 
 ## Reproduce

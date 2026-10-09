@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai in the wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #16242e; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+"use strict";
+const R = PK.ramps;
+const hazy = ["#8fb2c6", "#9dc0d2", "#aecddc", "#c2dcea", "#d8ecf4"];
+
+const TERRA = { outline: "#3f1d10", dark: "#6e3018", mid: "#a34e26", body: "#c96b34", lit: "#e8935a", gloss: "#f6c088" };
+
+const leaves = PK.drift({ n: 26, seed: 21, area: [0, 0, 1, 1], vx: [10, 27], vy: [4, 14] });
+const streaks = PK.drift({ n: 22, seed: 5, area: [0, 0, 1, 1], vx: [36, 66], vy: [-3, 3], len: [6, 11] });
+
+let bg = null, pads = [];
+
+function scene(v) {
+  const cx = Math.round(v.W / 2);
+  const gy = Math.round(v.H * (v.portrait ? 0.72 : 0.8));
+  const baseX = cx - 4;
+  const bottom = gy - 7;
+  const soilY = bottom - 11;
+
+  bg = PK.layer(v.W, v.H, () => {
+    PK.gradient(0, 0, v.W, gy, PK.skies.day);
+    PK.glow(Math.round(v.W * 0.16), Math.round(v.H * 0.13), 11, "#ffe9a8", 0.5);
+    PK.disc(Math.round(v.W * 0.16), Math.round(v.H * 0.13), 4, "#fff6c8");
+    cloud(Math.round(v.W * 0.68), Math.round(v.H * 0.15), 14);
+    cloud(Math.round(v.W * 0.3), Math.round(v.H * 0.24), 10);
+    if (v.W > 180) cloud(Math.round(v.W * 0.86), Math.round(v.H * 0.3), 9);
+    bird(Math.round(v.W * 0.74), Math.round(v.H * 0.27));
+    bird(Math.round(v.W * 0.8), Math.round(v.H * 0.31));
+
+    PK.rock(Math.round(v.W * 0.06), gy + 1, Math.round(v.W * 0.55), 17, hazy, { seed: 7, rough: 3, profile: u => Math.sin(Math.PI * u) ** 0.5 });
+    PK.rock(Math.round(v.W * 0.52), gy + 1, Math.round(v.W * 0.62), 24, hazy, { seed: 9, rough: 3, profile: u => Math.sin(Math.PI * (u + 0.15)) ** 0.6 });
+
+    PK.rect(0, gy, v.W, v.H - gy, R.foliage[1]);
+    PK.rect(0, gy + 3, v.W, v.H - gy - 3, R.foliage[0]);
+    const rnd = PK.rng(77);
+    for (let i = 0; i < v.W * 1.6; i++) {
+      const x = Math.floor(rnd() * v.W), y = gy + 1 + Math.floor(rnd() * 3);
+      PK.px(x, y, rnd() < 0.4 ? R.foliage[2] : rnd() < 0.7 ? R.foliage[1] : R.foliage[3]);
+    }
+    for (let i = 0; i < 16; i++) {
+      const x = Math.floor(rnd() * v.W);
+      PK.px(x, gy - 1, R.foliage[2]);
+      PK.px(x, gy - 2, R.foliage[3]);
+      PK.px(x + 1, gy - 1, R.foliage[1]);
+    }
+
+    PK.rect(cx - 25, gy, 51, 1, "#122a1c");
+    PK.rect(cx - 24, gy - 7, 49, 2, R.stone[3]);
+    PK.rect(cx - 24, gy - 5, 49, 3, R.stone[2]);
+    PK.rect(cx + 12, gy - 5, 12, 3, R.stone[1]);
+    PK.rect(cx - 24, gy - 2, 49, 2, R.stone[1]);
+    for (let i = 0; i < 10; i++) PK.px(cx - 22 + Math.floor(rnd() * 40), gy - 7, R.stone[4]);
+    for (let i = 0; i < 14; i++) PK.px(cx - 22 + Math.floor(rnd() * 44), gy - 5 + Math.floor(rnd() * 3), rnd() < 0.5 ? R.stone[1] : R.stone[3]);
+    PK.rock(cx + 23, gy, 9, 4, R.stone, { seed: 41, rough: 2 });
+    PK.rock(cx - 32, gy, 8, 3, R.stone, { seed: 42, rough: 2 });
+
+    const bottom = gy - 7;
+    const soilY = bottom - 11;
+    PK.rect(cx - 12, soilY - 1, 24, 2, "#3a2417");
+    PK.rect(cx - 12, soilY - 1, 24, 1, "#54371f");
+    for (let i = 0; i < 14; i++) {
+      const x = cx - 11 + Math.floor(rnd() * 22);
+      PK.px(x, soilY, rnd() < 0.35 ? R.foliage[2] : "#2a1810");
+    }
+    PK.rect(cx - 18, bottom - 11, 20, 1, TERRA.gloss);
+    PK.rect(cx + 2, bottom - 11, 17, 1, TERRA.lit);
+    PK.rect(cx - 18, bottom - 10, 37, 2, TERRA.body);
+    PK.rect(cx + 10, bottom - 10, 9, 2, TERRA.mid);
+    PK.rect(cx - 18, bottom - 10, 5, 2, TERRA.lit);
+    PK.px(cx - 18, bottom - 10, TERRA.gloss);
+    PK.px(cx - 17, bottom - 10, TERRA.gloss);
+    PK.poly([[cx - 15, bottom - 8], [cx + 14, bottom - 8], [cx + 12, bottom - 3], [cx - 13, bottom - 3]], TERRA.mid);
+    PK.poly([[cx - 15, bottom - 8], [cx - 11, bottom - 8], [cx - 9, bottom - 3], [cx - 13, bottom - 3]], TERRA.body);
+    PK.rect(cx - 15, bottom - 8, 2, 5, TERRA.lit);
+    PK.px(cx - 15, bottom - 8, TERRA.gloss);
+    PK.poly([[cx + 8, bottom - 8], [cx + 14, bottom - 8], [cx + 12, bottom - 3], [cx + 6, bottom - 3]], TERRA.dark);
+    PK.rect(cx - 13, bottom - 3, 26, 1, TERRA.dark);
+    PK.rect(cx - 13, bottom - 2, 26, 1, TERRA.outline);
+    PK.rect(cx - 12, bottom - 1, 5, 1, TERRA.dark);
+    PK.rect(cx - 12, bottom, 5, 1, TERRA.outline);
+    PK.rect(cx + 7, bottom - 1, 5, 1, TERRA.dark);
+    PK.rect(cx + 7, bottom, 5, 1, TERRA.outline);
+
+    PK.limb(baseX + 1, soilY - 11, baseX - 8, soilY - 14, baseX - 16, soilY - 15, 3.4, 1.4, R.bark, 101);
+    PK.limb(baseX + 3, soilY - 18, baseX + 11, soilY - 20, baseX + 17, soilY - 22, 3.2, 1.3, R.bark, 102);
+    PK.limb(baseX - 1, soilY - 28, baseX - 8, soilY - 31, baseX - 12, soilY - 32, 2.4, 1.1, R.bark, 103);
+    PK.limb(baseX - 1, soilY - 32, baseX + 4, soilY - 34, baseX + 6, soilY - 35, 1.9, 0.9, R.bark, 104);
+    PK.limb(baseX - 4, soilY + 1, baseX - 10, soilY + 3, baseX - 15, soilY + 5, 6.5, 2, R.bark, 105);
+    PK.limb(baseX + 4, soilY + 1, baseX + 10, soilY + 3, baseX + 15, soilY + 5, 6.5, 2, R.bark, 106);
+    PK.limb(baseX, soilY + 1, baseX - 1, soilY - 3, baseX, soilY - 6, 11, 7, R.bark, 111);
+    PK.limb(baseX, soilY - 2, baseX + 8, soilY - 10, baseX + 4, soilY - 18, 7, 3.4, R.bark, 107);
+    PK.limb(baseX + 4, soilY - 17, baseX - 7, soilY - 26, baseX - 1, soilY - 34, 3.4, 1.5, R.bark, 108);
+  });
+
+  pads = [
+    padDef(baseX, soilY - 15, 12, 6.5, 11),
+    padDef(baseX + 17, soilY - 23, 10.5, 5.5, 23),
+    padDef(baseX - 12, soilY - 32, 8, 4.5, 37),
+    padDef(baseX, soilY - 39, 11.5, 6.5, 3),
+  ];
+  function padDef(x, y, rx, ry, seed) {
+    return { x, y, rx, ry, seed, phase: seed * 0.9, amp: Math.max(1, Math.round((soilY - y) / 16)) };
+  }
+
+  leaves.setArea([-4, -8, v.W + 8, v.H]);
+  streaks.setArea([0, Math.round(v.H * 0.08), v.W, gy - 4]);
+}
+
+function cloud(x, y, w) {
+  PK.rect(x, y, w, 2, "#cfe0ee");
+  PK.rect(x + 2, y - 1, w - 5, 1, "#eef6fc");
+  PK.rect(x + 4, y + 2, w - 6, 1, "#b8cfe0");
+}
+function bird(x, y) {
+  PK.px(x - 2, y - 1, "#5a6a86");
+  PK.px(x - 1, y, "#5a6a86");
+  PK.px(x, y - 1, "#5a6a86");
+  PK.px(x + 1, y, "#5a6a86");
+  PK.px(x + 2, y - 1, "#5a6a86");
+}
+
+PK.fit(document.getElementById("c"), 112, scene);
+
+PK.loop((t, dt) => {
+  PK.blit(bg);
+  const gust = 0.75 + 0.25 * Math.sin(t * 0.45 + 1.7);
+  for (const p of pads) {
+    const dx = Math.round(Math.sin(t * 1.1 + p.phase) * p.amp * gust);
+    const dy = Math.round(Math.sin(t * 0.8 + p.phase * 2) * 0.5);
+    PK.ellipse(p.x + dx, p.y + dy + 2, Math.round(p.rx), Math.max(2, Math.round(p.ry) - 1), R.foliage[0]);
+    PK.pad(p.x + dx, p.y + dy, p.rx, p.ry, R.foliage, { seed: p.seed, r: Math.max(3, Math.round(p.ry * 0.8)) });
+  }
+  leaves.step(dt);
+  leaves.dots([R.foliage[1], R.foliage[2], R.foliage[3], R.foliage[3]]);
+  streaks.step(dt);
+  for (const p of streaks.particles) {
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    const ux = p.vx / sp;
+    const uy = p.vy / sp;
+    for (let s = 0; s < p.len; s++) PK.px(p.x - ux * (s + 0.5), p.y + 1 - uy * (s + 0.5), "#41648e");
+    for (let s = 0; s < p.len; s++) {
+      PK.px(p.x - ux * s, p.y - uy * s, s < 1 ? "#ffffff" : "#dcedf8");
+      PK.px(p.x - ux * s, p.y - 1 - uy * s, s < 2 ? "#ffffff" : "#b9d6ee");
+    }
+  }
+});
+</script>
+</body>
+</html>

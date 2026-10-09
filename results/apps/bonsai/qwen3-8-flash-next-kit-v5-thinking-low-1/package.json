@@ -1,0 +1,7 @@
+{
+  "name": "bonsai-wind",
+  "private": true,
+  "scripts": {
+    "check": "node --check pixel-kit.js && node -e \"const s=require('fs').readFileSync('index.html','utf8');const m=[...s.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)];if(!m.length)throw new Error('no inline script');m.forEach(x=>new Function(x[1]));console.log('syntax ok')\""
+  }
+}
