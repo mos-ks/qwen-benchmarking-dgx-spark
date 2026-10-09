@@ -95,6 +95,10 @@ toward the light, then highlights on the light-facing edge. That alone gives vol
 - Back to front layers: sky gradient, far shapes (mountains, city) in desaturated light colors,
   mid ground, subject, foreground details. Farther layers have less contrast.
 - Leave breathing room; do not let the subject touch the canvas edges.
+- Fill the screen. The scene's background (sky, ground, water) runs edge to edge of the viewport; the
+  low-res canvas is scaled up to cover it (integer scale, letterbox only with scene-colored bars),
+  never a small framed box floating in an empty page. Choose the logical canvas aspect ratio from
+  the viewport (landscape on desktop, portrait on a phone) and recompute on resize.
 
 ## 7. Animation
 

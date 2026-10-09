@@ -7,7 +7,11 @@
 import { appendFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const MAX_ROUNDS = Number(process.env.VISUAL_SUPERVISOR_ROUNDS ?? 3);
+const MAX_ROUNDS = Number(process.env.VISUAL_SUPERVISOR_ROUNDS ?? 4);
+// Keep polishing while the critic scores below this and time remains: a model that is "done" at
+// minute 11 of a 28-minute budget leaves quality on the table.
+const TARGET_SCORE = Number(process.env.VISUAL_SUPERVISOR_TARGET ?? 8);
+const BUDGET_MIN = Number(process.env.VISUAL_SUPERVISOR_BUDGET_MIN ?? 25);
 const PAGE = process.env.VISUAL_SUPERVISOR_PAGE ?? "index.html";
 const sessions = new Map(); // sessionID -> { started, rounds, done }
 const LOG = process.env.VISUAL_SUPERVISOR_LOG;
@@ -65,7 +69,10 @@ async function handle({ client, $, directory, event }) {
       .nothrow()
       .text();
     log(`look returned ${out.length} chars: ${out.slice(0, 160).replace(/\n/g, " ")}`);
-    if (/VERDICT:\s*GOOD/i.test(out)) {
+    const score = Number((out.match(/SCORE:\s*(\d+(?:\.\d+)?)/i) || [])[1] ?? NaN);
+    const elapsedMin = (Date.now() - s.started) / 60000;
+    log(`score=${score} elapsed=${elapsedMin.toFixed(1)}min`);
+    if ((Number.isFinite(score) ? score >= TARGET_SCORE : /VERDICT:\s*GOOD/i.test(out)) || elapsedMin >= BUDGET_MIN) {
       s.done = true;
       return;
     }
@@ -78,9 +85,9 @@ async function handle({ client, $, directory, event }) {
     s.rounds += 1;
     const critique = out.replace(/^screenshots:.*$/m, "").trim();
     const text =
-      `Automatic visual check, round ${s.rounds} of ${MAX_ROUNDS} (sent by the harness, not the user). ` +
+      `Automatic visual check, round ${s.rounds} of ${MAX_ROUNDS} (sent by the harness, not the user). The target is ${TARGET_SCORE}/10 and there is time left to reach it. ` +
       `A vision model looked at ${PAGE} in a browser:\n\n${critique}\n\n` +
-      `Fix the console errors first, then the top fixes that are real. Keep what already works. ` +
+      `Fix the console errors first, then the unmet requirements, then the top fixes. Keep what already works. ` +
       `Do not run look yourself; the harness checks again when you stop.`;
     // Not awaited: the follow-up turn ends in its own session.idle, which re-enters this handler.
     client.session.prompt({ path: { id }, body: { parts: [{ type: "text", text }] } }).catch(() => {});

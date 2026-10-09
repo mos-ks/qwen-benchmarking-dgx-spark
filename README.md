@@ -19,7 +19,7 @@ Spark) reaches 7.5 on the bonsai brief in 10.9 minutes. Its other runs are in pr
 |---|---|---|---|
 | Pixel-art bonsai with wind | 9.0 in 14 min | 7.5 in 10.9 min (Qwen3.8-Flash-Next + kit v3) | -1.5 |
 | Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.0 in 18.7 min (Qwen3.6-35B-A3B + kit v3) | -2.0 |
-| Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3) | -2.0 |
+| Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3); 8.5 but in 37.3 min, over budget (Qwen3.8-Flash-Next + kit v3) | -2.0 in budget |
 
 **[Open the results viewer](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/)**: Opus's page
 on the left, every local run on a slider on the right, per brief.
@@ -136,7 +136,8 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 ## Status
 
 - Done: Qwen3-Coder-Next, Qwen3.8-27B, Qwen3.6-35B-A3B on all briefs and harness versions above.
-- Qwen3.8-Flash-Next: bonsai 7.5 in 10.9 min; lighthouse 7.0 but still iterating at the 45 min cap (234 steps); a second bonsai attempt and the dashboard in progress, then an A/B of harness kit v4 (score-driven polish, fill-the-screen rule) with and without the ponytail skill.
+- Qwen3.8-Flash-Next with kit v3: bonsai 7.5 (10.9 and 21.7 min), lighthouse 7.0 (hit the 45 min cap), dashboard 8.5 (37.3 min, over its 23 min budget). Best quality so far, but slower than the budget on the larger briefs.
+- In progress: an A/B of harness kit v4 (score-driven polish, fill-the-screen rule) with and without the ponytail skill on Flash-Next.
 - This repository is updated as runs finish.
 
 ## Reproduce

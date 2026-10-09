@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finance — Dashboard</title>
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --surface: #ffffff;
+    --surface-2: #eef1f7;
+    --text: #0e1526;
+    --muted: #5b667c;
+    --line: #e3e8f0;
+    --accent: #4655f5;
+    --series-income: #005C90;
+    --series-spend: #B26A00;
+    --accent-soft: #ecefff;
+    --pos: #0f8a54;
+    --pos-soft: #e2f5ec;
+    --neg: #cf3a3a;
+    --neg-soft: #fbe9e9;
+    --warn: #b26a00;
+    --ink-housing: #00446B; --ink-groceries: #8A5E00; --ink-dining: #00714F; --ink-transport: #9E4E83;
+    --ink-entertainment: #005E93; --ink-health: #A34A00; --ink-shopping: #563AD4; --ink-subscriptions: #475569;
+    --track: #e7ebf2;
+    --c1: #0072B2; --c2: #E69F00; --c3: #009E73; --c4: #CC79A7; --c5: #56B4E9; --c6: #D55E00; --c7: #7A5AF8; --c8: #64748B;
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+    --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px; --fs-2xl: 28px;
+    --shadow: 0 1px 2px rgba(14,21,38,.05), 0 4px 16px rgba(14,21,38,.05);
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0f18;
+      --surface: #131a29;
+      --surface-2: #1a2334;
+      --text: #e8ecf5;
+      --muted: #93a0b8;
+      --line: #26304a;
+      --accent: #8b97ff;
+      --series-income: #6FC0EE;
+      --series-spend: #F2A93B;
+      --accent-soft: #232c55;
+      --pos: #43cf93;
+      --pos-soft: #123127;
+      --neg: #ff7b7b;
+      --neg-soft: #3a1d24;
+      --warn: #f5b04c;
+      --track: #232d45;
+      --c1: #56B4E9; --c2: #E69F00; --c3: #2fca9c; --c4: #E29BC0; --c5: #7CC7F0; --c6: #EF8342; --c7: #9E8CFF; --c8: #94A3B8;
+      --ink-housing: #7CC7F0; --ink-groceries: #F2B441; --ink-dining: #4EDDB0; --ink-transport: #F0B8D4;
+      --ink-entertainment: #9ED9F7; --ink-health: #FBA86B; --ink-shopping: #B7AAFF; --ink-subscriptions: #B9C4D8;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    font-size: var(--fs-md);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: var(--sp-5) var(--sp-4) var(--sp-6); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- header ---------- */
+  .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-5); }
+  .brand { display: flex; align-items: center; gap: var(--sp-3); }
+  .logo { width: 40px; height: 40px; border-radius: var(--r-md); background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 15px; letter-spacing: .02em; flex: none; }
+  .brand h1 { font-size: var(--fs-lg); font-weight: 600; letter-spacing: -0.01em; }
+  .brand .who { font-size: var(--fs-sm); color: var(--muted); }
+  .month-select { display: flex; align-items: center; gap: var(--sp-1); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-1); box-shadow: var(--shadow); }
+  .month-select button { width: 36px; height: 36px; border: 0; background: transparent; color: var(--text); opacity: .72; border-radius: var(--r-sm); cursor: pointer; display: grid; place-items: center; transition: background .15s ease, opacity .15s ease; }
+  .month-select button:hover:not(:disabled) { background: var(--surface-2); opacity: 1; }
+  .month-select button:active:not(:disabled) { transform: scale(.94); }
+  .month-select button:disabled { opacity: .3; cursor: default; }
+  .month-select select { appearance: none; border: 0; background: transparent; color: var(--text); font: 600 var(--fs-md) var(--font); padding: 0 var(--sp-2); cursor: pointer; text-align: center; }
+  .month-select select:focus-visible, .month-select button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* ---------- cards ---------- */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: var(--sp-5); }
+  .card h2 { font-size: var(--fs-lg); font-weight: 600; letter-spacing: -0.01em; }
+  .card .sub { font-size: var(--fs-sm); color: var(--muted); margin-top: 2px; }
+  .card-head { margin-bottom: var(--sp-4); }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4); margin-bottom: var(--sp-4); }
+  .kpi { padding: var(--sp-4) var(--sp-5); }
+  .kpi-label { font-size: var(--fs-sm); color: var(--muted); font-weight: 500; }
+  .kpi-value { font-size: var(--fs-2xl); font-weight: 650; letter-spacing: -0.02em; margin: var(--sp-1) 0 var(--sp-2); }
+  .delta { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+  .delta.pos { color: var(--pos); background: var(--pos-soft); }
+  .delta.neg { color: var(--neg); background: var(--neg-soft); }
+  .delta svg { width: 10px; height: 10px; }
+
+  .grid-charts { display: grid; grid-template-columns: 5fr 7fr; gap: var(--sp-4); margin-bottom: var(--sp-4); }
+  .grid-bottom { display: grid; grid-template-columns: 7fr 5fr; gap: var(--sp-4); }
+
+  .chart-box { position: relative; margin-top: var(--sp-2); }
+  svg.chart { display: block; width: 100%; height: auto; }
+  svg.chart text { fill: var(--muted); font-family: var(--font); }
+  .gridline { stroke: var(--line); stroke-width: 1; }
+  .cat-seg { transition: opacity .15s ease; }
+  .cat-seg.hot { opacity: .82; }
+  .hit { cursor: pointer; outline: none; }
+  .hit:focus-visible { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
+
+  .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-3); }
+  .legend .item { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  .tip { position: absolute; z-index: 10; pointer-events: none; background: var(--text); color: var(--bg); font-size: var(--fs-xs); line-height: 1.45; padding: 7px 10px; border-radius: var(--r-sm); box-shadow: 0 6px 20px rgba(0,0,0,.18); white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); opacity: 0; transition: opacity .12s ease; }
+  .tip.show { opacity: 1; }
+  .tip b { font-weight: 650; font-variant-numeric: tabular-nums; }
+  .tip .row { display: flex; align-items: center; gap: 6px; }
+  .tip .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  /* ---------- transactions ---------- */
+  ul.txns { list-style: none; }
+  li.txn { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; border-top: 1px solid var(--line); }
+  li.txn:first-child { border-top: 0; padding-top: 0; }
+  .txn-ico { width: 38px; height: 38px; border-radius: var(--r-md); display: grid; place-items: center; flex: none; background: var(--surface-2); }
+  .txn-ico svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .txn-info { min-width: 0; flex: 1; }
+  .txn-merchant { font-weight: 550; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .txn-meta { font-size: var(--fs-xs); color: var(--muted); }
+  .txn-amt { font-weight: 600; text-align: right; }
+  .txn-amt.in { color: var(--pos); }
+
+  /* ---------- budgets ---------- */
+  .bud-row { padding: var(--sp-3) 0; border-top: 1px solid var(--line); }
+  .bud-row:first-of-type { border-top: 0; padding-top: 0; }
+  .bud-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-2); margin-bottom: 6px; }
+  .bud-head .name { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 550; }
+  .bud-head .vals { font-size: var(--fs-xs); color: var(--muted); }
+  .bud-head .vals .over { color: var(--neg); font-weight: 650; }
+  .bud-head .vals .near { color: var(--warn); font-weight: 650; }
+  .bud-track { height: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
+  .bud-fill { height: 100%; border-radius: 999px; transition: width .4s cubic-bezier(.2,.7,.3,1); }
+  .bud-state { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 650; margin-top: 5px; }
+  .bud-state.ok { color: var(--muted); }
+  .bud-state.near { color: var(--warn); }
+  .bud-state.over { color: var(--neg); }
+  .bud-state svg { width: 11px; height: 11px; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; clip: rect(0 0 0 0); overflow: hidden; white-space: nowrap; }
+  .foot { margin-top: var(--sp-5); font-size: var(--fs-xs); color: var(--muted); text-align: center; }
+
+  @media (min-width: 1100px) {
+    .cat-layout { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: var(--sp-4); align-items: center; }
+    .cat-layout .legend { grid-template-columns: 1fr; margin-top: 0; }
+  }
+  @media (max-width: 980px) {
+    .grid-charts, .grid-bottom { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: var(--sp-4) var(--sp-3) var(--sp-5); }
+    .topbar { flex-direction: column; align-items: stretch; }
+    .month-select { justify-content: space-between; }
+    .month-select button { width: 44px; height: 44px; }
+    .card { padding: var(--sp-4); }
+    .kpi { padding: var(--sp-4); }
+    .kpi-value { font-size: var(--fs-xl); }
+    .kpis { gap: var(--sp-3); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, .bud-fill, .cat-seg, .tip, .kpi, .card { transition: none !important; animation: none !important; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .kpi, .card { animation: card-in .25s ease-out backwards; }
+    .kpis .kpi:nth-child(2) { animation-delay: 40ms; }
+    .kpis .kpi:nth-child(3) { animation-delay: 80ms; }
+    .kpis .kpi:nth-child(4) { animation-delay: 120ms; }
+    .grid-charts .card:nth-child(2) { animation-delay: 60ms; }
+    .grid-bottom .card:nth-child(2) { animation-delay: 60ms; }
+    @keyframes card-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">MF</div>
+      <div>
+        <h1>Money at a glance</h1>
+        <div class="who">Maya Fischer · Personal finance</div>
+      </div>
+    </div>
+    <div class="month-select" role="group" aria-label="Month selector">
+      <button id="prevMonth" aria-label="Previous month">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <select id="monthSelect" aria-label="Select month"></select>
+      <button id="nextMonth" aria-label="Next month">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-label="Key metrics"></section>
+
+  <section class="grid-charts">
+    <div class="card">
+      <div class="card-head">
+        <h2 id="catTitle">Where the money went</h2>
+        <p class="sub" id="catSub"></p>
+      </div>
+      <div class="cat-layout">
+        <div class="chart-box">
+          <svg class="chart" id="catChart" role="img"></svg>
+          <div class="tip" id="catTip"></div>
+        </div>
+        <div class="legend" id="catLegend"></div>
+      </div>
+      <table class="sr-only" id="catTable"></table>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>Income vs spending</h2>
+        <p class="sub" id="ivSub"></p>
+      </div>
+      <div class="chart-box">
+        <svg class="chart" id="ivChart" role="img"></svg>
+        <div class="tip" id="ivTip"></div>
+      </div>
+      <div class="legend" id="ivLegend"></div>
+      <table class="sr-only" id="ivTable"></table>
+    </div>
+  </section>
+
+  <section class="grid-bottom">
+    <div class="card">
+      <div class="card-head">
+        <h2 id="txTitle">Recent transactions</h2>
+        <p class="sub" id="txSub"></p>
+      </div>
+      <ul class="txns" id="txns"></ul>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>Budgets</h2>
+        <p class="sub" id="budSub"></p>
+      </div>
+      <div id="budgets"></div>
+    </div>
+  </section>
+
+  <p class="foot">Sample data · Figures in USD · Front-end demo, nothing is stored.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var MONTHS = [
+    { key: "2026-04", label: "April 2026",     income: 5344, startBalance: 21200 },
+    { key: "2026-05", label: "May 2026",       income: 5452, startBalance: 24230.02 },
+    { key: "2026-06", label: "June 2026",      income: 5790, startBalance: 27288.54 },
+    { key: "2026-07", label: "July 2026",      income: 5621, startBalance: 30401.77 },
+    { key: "2026-08", label: "August 2026",    income: 5605, startBalance: 33311.20 },
+    { key: "2026-09", label: "September 2026", income: 5590, startBalance: 36046.84 }
+  ];
+  var CATS = [
+    { id: "housing",       name: "Housing & bills",   color: "--c1" },
+    { id: "groceries",     name: "Groceries",         color: "--c2" },
+    { id: "dining",        name: "Dining out",        color: "--c3" },
+    { id: "transport",     name: "Transport",         color: "--c4" },
+    { id: "entertainment", name: "Entertainment",     color: "--c5" },
+    { id: "health",        name: "Health & fitness",  color: "--c6" },
+    { id: "shopping",      name: "Shopping",          color: "--c7" },
+    { id: "subscriptions", name: "Subscriptions",     color: "--c8" }
+  ];
+  var CAT_BY_ID = {};
+  CATS.forEach(function (c) { CAT_BY_ID[c.id] = c; });
+
+  var BUDGETS = { housing: 1750, groceries: 520, dining: 300, transport: 200, entertainment: 120, health: 150, shopping: 350, subscriptions: 80 };
+
+  function T(day, cat, merchant, detail, amount) {
+    return { day: day, cat: cat, merchant: merchant, detail: detail, amount: amount };
+  }
+  function S(day, merchant, detail, amount) {
+    return T(day, "subscriptions", merchant, detail, amount);
+  }
+  var DATA = {
+    "2026-04": [
+      T(1,  "income", "Paycheck — Northwind Labs", "Net deposit", 4180),
+      T(3,  "housing", "Rent — Maple Court", "Monthly rent", 1420),
+      T(4,  "groceries", "Green Basket Market", "Weekly groceries", 82.40),
+      T(5,  "transport", "Metro Card Top-up", "Transit pass", 39),
+      T(6,  "dining", "Café Lumen", "Coffee & pastry", 12.80),
+      T(8,  "subscriptions", "Ripple", "Streaming bundle", 15.99),
+      T(9,  "groceries", "Green Basket Market", "Weekly groceries", 76.15),
+      T(10, "health", "FitLife Studio", "Yoga membership", 45),
+      T(11, "dining", "Saffron Table", "Dinner", 58.20),
+      T(12, "shopping", "Loft Goods", "Desk lamp", 49),
+      T(14, "transport", "CityCabs", "Ride home", 21.50),
+      T(15, "income", "Freelance — Pixel & Co", "Landing page", 620),
+      T(16, "groceries", "Corner Grocer", "Top-up shop", 34.90),
+      T(18, "dining", "Pho Hanoi", "Lunch", 18.40),
+      T(19, "entertainment", "Cinema Paradiso", "Two tickets", 26),
+      T(21, "groceries", "Green Basket Market", "Weekly groceries", 88.20),
+      T(22, "shopping", "Paper Planes Stationery", "Notebooks", 18.75),
+      T(24, "health", "Vitality Pharmacy", "Vitamins", 23.10),
+      T(25, "transport", "CityCabs", "Airport ride", 54),
+      T(26, "dining", "Bodega 9", "Tapas night", 44.30),
+      T(27, "housing", "Electricity — GridOne", "Power bill", 61.20),
+      T(28, "housing", "Fiberline", "Internet", 49.99),
+      T(28, "groceries", "Corner Grocer", "Weekend shop", 41.60),
+      T(29, "entertainment", "Vinyl Depot", "Used LP", 24),
+      T(30, "dining", "Café Lumen", "Takeaway", 9.50)
+    ],
+    "2026-05": [
+      T(1,  "income", "Paycheck — Northwind Labs", "Net deposit", 4180),
+      T(2,  "groceries", "Green Basket Market", "Weekly groceries", 79.30),
+      T(3,  "transport", "Metro Card Top-up", "Transit pass", 39),
+      T(4,  "dining", "Café Lumen", "Flat white", 5.20),
+      T(5,  "housing", "Rent — Maple Court", "Monthly rent", 1420),
+      T(7,  "subscriptions", "Ripple", "Streaming bundle", 15.99),
+      T(8,  "groceries", "Green Basket Market", "Weekly groceries", 91.05),
+      T(9,  "health", "FitLife Studio", "Yoga membership", 45),
+      T(10, "dining", "Osteria Bella", "Dinner with Sam", 66.80),
+      T(12, "shopping", "Thread & Co", "Oxford shirt", 78),
+      T(13, "transport", "CityCabs", "Ride to station", 18.75),
+      T(14, "groceries", "Corner Grocer", "Top-up shop", 27.45),
+      T(15, "income", "Freelance — Bright Ideas Ltd", "Brand workshop", 480),
+      T(16, "dining", "Pho Hanoi", "Lunch", 17.20),
+      T(17, "entertainment", "Riverside Cinema", "Two tickets + snacks", 31.50),
+      T(19, "groceries", "Green Basket Market", "Weekly groceries", 84.75),
+      T(20, "shopping", "Loft Goods", "Storage boxes", 36.40),
+      T(21, "transport", "CityCabs", "Ride home", 23.10),
+      T(22, "health", "Dr. Okafor", "Dermatology copay", 40),
+      T(23, "dining", "Bodega 9", "Drinks & bites", 38.60),
+      T(24, "groceries", "Corner Grocer", "Weekend shop", 46.30),
+      T(26, "housing", "Water — City Utility", "Quarterly", 32.80),
+      T(27, "entertainment", "Vinyl Depot", "Reissue LP", 28.50),
+      T(28, "housing", "Fiberline", "Internet", 49.99),
+      T(29, "dining", "Café Lumen", "Takeaway", 8.90),
+      T(31, "groceries", "Green Basket Market", "Weekly groceries", 68.90)
+    ],
+    "2026-06": [
+      T(1,  "income", "Paycheck — Northwind Labs", "Net deposit", 4180),
+      T(1,  "income", "Freelance — Pixel & Co", "Retainer", 1050),
+      T(2,  "groceries", "Green Basket Market", "Weekly groceries", 86.20),
+      T(3,  "transport", "Metro Card Top-up", "Transit pass", 39),
+      T(4,  "housing", "Rent — Maple Court", "Monthly rent", 1420),
+      T(5,  "dining", "Osteria Bella", "Anniversary dinner", 92.40),
+      T(7,  "subscriptions", "Ripple", "Streaming bundle", 15.99),
+      T(8,  "shopping", "Trailhead Outfitters", "Hiking socks + flask", 54.30),
+      T(9,  "health", "FitLife Studio", "Yoga membership", 45),
+      T(9,  "groceries", "Green Basket Market", "Weekly groceries", 73.60),
+      T(11, "transport", "CityCabs", "Ride home", 19.80),
+      T(12, "dining", "Pho Hanoi", "Lunch", 16.90),
+      T(12, "subscriptions", "CloudNine Storage", "Annual plan, billed monthly", 9.99),
+      T(12, "subscriptions", "PulseRead", "News subscription", 12),
+      T(12, "subscriptions", "Vinyl Disc Club", "Monthly record pick", 22),
+      T(14, "subscriptions", "Lantern Room", "Monthly live-music pass", 34),
+      T(14, "groceries", "Corner Grocer", "Top-up shop", 31.25),
+      T(15, "housing", "GridOne", "Electricity", 63.40),
+      T(17, "shopping", "Paper Planes Stationery", "Art supplies", 22.40),
+      T(18, "dining", "Bodega 9", "Tapas", 51.70),
+      T(19, "groceries", "Green Basket Market", "Weekly groceries", 97.15),
+      T(20, "transport", "CityCabs", "Weekend rides", 36.25),
+      T(21, "health", "Vitality Pharmacy", "Copay + refill", 47.60),
+      T(22, "entertainment", "Riverside Cinema", "Two tickets", 26),
+      T(24, "dining", "Café Lumen", "Takeaway", 10.40),
+      T(25, "groceries", "Corner Grocer", "Weekend shop", 52.80),
+      T(26, "shopping", "Thread & Co", "Chinos", 96),
+      T(27, "housing", "Fiberline", "Internet", 49.99),
+      T(28, "dining", "Saffron Table", "Dinner", 54.90),
+      T(29, "transport", "CityCabs", "Late ride", 24.30),
+      T(30, "groceries", "Green Basket Market", "Weekly groceries", 71.45)
+    ],
+    "2026-07": [
+      T(1,  "income", "Paycheck — Northwind Labs", "Net deposit", 4180),
+      T(2,  "groceries", "Green Basket Market", "Weekly groceries", 89.60),
+      T(2,  "transport", "Metro Card Top-up", "Transit pass", 39),
+      T(3,  "dining", "Rooftop Social", "Drinks", 42.50),
+      T(4,  "housing", "Rent — Maple Court", "Monthly rent", 1420),
+      T(5,  "subscriptions", "PulseRead", "News subscription", 12),
+      T(6,  "groceries", "Green Basket Market", "Weekly groceries", 64.20),
+      T(7,  "health", "FitLife Studio", "Yoga membership", 45),
+      T(8,  "dining", "Pho Hanoi", "Lunch", 17.60),
+      T(9,  "subscriptions", "Ripple", "Streaming bundle", 15.99),
+      T(10, "shopping", "Trailhead Outfitters", "Trail shorts", 58.90),
+      T(11, "transport", "CityCabs", "Ride home", 22.40),
+      T(12, "groceries", "Corner Grocer", "Top-up shop", 29.95),
+      T(13, "dining", "Bodega 9", "Tapas night", 47.80),
+      T(14, "entertainment", "Amphitheater", "Outdoor concert", 38),
+      T(16, "groceries", "Green Basket Market", "Weekly groceries", 92.30),
+      T(16, "subscriptions", "CloudNine Storage", "Annual plan, billed monthly", 9.99),
+      T(17, "housing", "GridOne", "Electricity — A/C season", 88.60),
+      T(18, "dining", "Café Lumen", "Takeaway", 9.80),
+      T(19, "transport", "CityCabs", "Weekend rides", 33.15),
+      T(20, "health", "Vitality Pharmacy", "Sunscreen + vitamins", 26.45),
+      T(21, "shopping", "Loft Goods", "Picnic set", 47.20),
+      T(22, "groceries", "Corner Grocer", "Weekend shop", 55.40),
+      T(23, "dining", "Osteria Bella", "Dinner", 61.30),
+      T(25, "entertainment", "Vinyl Depot", "Two used LPs", 42),
+      T(26, "housing", "Fiberline", "Internet", 49.99),
+      T(27, "groceries", "Green Basket Market", "Weekly groceries", 69.75),
+      T(28, "dining", "Saffron Table", "Curry night", 49.20),
+      T(29, "transport", "Metro Card Top-up", "Transit pass", 39),
+      T(30, "shopping", "Loft Goods", "Bedding", 68.50),
+      T(31, "entertainment", "Riverside Cinema", "Two tickets", 26)
+    ],
+    "2026-08": [
+      T(1,  "income", "Paycheck — Northwind Labs", "Net deposit", 4180),
+      T(1,  "housing", "Rent — Maple Court", "Monthly rent", 1420),
+      T(2,  "groceries", "Green Basket Market", "Weekly groceries", 84.90),
+      T(3,  "transport", "CityCabs", "Ride to office", 17.30),
+      T(4,  "dining", "Pho Hanoi", "Lunch", 16.80),
+      T(5,  "entertainment", "Escape Co", "Escape room", 30),
+      T(6,  "groceries", "Green Basket Market", "Weekly groceries", 76.40),
+      T(6,  "subscriptions", "CloudNine Storage", "Annual plan, billed monthly", 9.99),
+      T(7,  "health", "FitLife Studio", "Yoga membership", 45),
+      T(8,  "dining", "Rooftop Social", "Drinks + fries", 39.70),
+      T(9,  "subscriptions", "Ripple", "Streaming bundle", 15.99),
+      T(10, "shopping", "Loft Goods", "Bookshelf", 94),
+      T(11, "groceries", "Corner Grocer", "Top-up shop", 33.55),
+      T(12, "transport", "CityCabs", "Ride home", 25.60),
+      T(13, "dining", "Osteria Bella", "Dinner with Sam", 71.40),
+      T(14, "entertainment", "Riverside Cinema", "Two tickets + snacks", 33.50),
+      T(15, "groceries", "Green Basket Market", "Weekly groceries", 94.80),
+      T(16, "health", "Dr. Okafor", "Annual checkup copay", 60),
+      T(17, "transport", "Amtrak", "Weekend trip to Hartford", 98),
+      T(18, "shopping", "Loft Goods", "Desk organizer", 36.50),
+      T(19, "dining", "Bodega 9", "Tapas", 46.90),
+      T(20, "groceries", "Corner Grocer", "Weekend shop", 48.20),
+      T(21, "subscriptions", "Ripple", "Movie rental", 5.99),
+      T(22, "dining", "Saffron Table", "Dinner", 52.70),
+      T(23, "transport", "CityCabs", "Late ride", 21.90),
+      T(24, "groceries", "Green Basket Market", "Weekly groceries", 78.35),
+      T(25, "housing", "GridOne", "Electricity", 82.30),
+      T(26, "shopping", "Loft Goods", "Blanket", 48.90),
+      T(27, "dining", "Pho Hanoi", "Lunch", 15.90),
+      T(28, "health", "Vitality Pharmacy", "Prescription refill", 15),
+      T(28, "housing", "Fiberline", "Internet", 49.99),
+      T(29, "entertainment", "Bouldering Club", "Two-day gym pass", 16),
+      T(30, "groceries", "Green Basket Market", "Weekly groceries", 72.60),
+      T(31, "dining", "Café Lumen", "Takeaway", 11.20)
+    ],
+    "2026-09": [
+      T(1,  "income", "Paycheck — Northwind Labs", "Net deposit", 4180),
+      T(1,  "income", "Milestone bonus — Northwind Labs", "Q3 launch bonus", 400),
+      T(1,  "housing", "Rent — Maple Court", "Monthly rent", 1420),
+      T(2,  "income", "Freelance — Studio Mira", "Design review", 280),
+      T(2,  "groceries", "Green Basket Market", "Weekly groceries", 81.30),
+      T(3,  "transport", "Metro Card Top-up", "Transit pass", 39),
+      T(3,  "dining", "Pho Hanoi", "Lunch", 16.40),
+      T(4,  "subscriptions", "Ripple", "Streaming bundle", 15.99),
+      T(5,  "groceries", "Green Basket Market", "Weekly groceries", 69.90),
+      T(6,  "health", "FitLife Studio", "Yoga membership", 45),
+      T(8,  "shopping", "Loft Goods", "Throw pillows", 82),
+      T(9,  "groceries", "Corner Grocer", "Top-up shop", 41.20),
+      T(10, "transport", "CityCabs", "Ride home", 24.80),
+      T(11, "dining", "Bodega 9", "Tapas night", 49.30),
+      T(12, "groceries", "Green Basket Market", "Weekly groceries", 95.45),
+      T(13, "health", "Vitality Pharmacy", "Cold season kit", 18.60),
+      T(14, "entertainment", "Riverside Cinema", "Two tickets", 26),
+      T(15, "shopping", "Paper Planes Stationery", "Planner + pens", 21.50),
+      T(16, "dining", "Café Lumen", "Takeaway", 10.30),
+      T(17, "transport", "CityCabs", "Airport ride", 46.70),
+      T(18, "groceries", "Green Basket Market", "Weekly groceries", 88.70),
+      T(19, "shopping", "Loft Goods", "Throw pillows", 82),
+      T(20, "dining", "Saffron Table", "Dinner", 55.40),
+      T(21, "entertainment", "Vinyl Depot", "Reissue LP", 29.90),
+      T(22, "health", "FitLife Studio", "Spin class pack", 25),
+      T(23, "groceries", "Corner Grocer", "Weekend shop", 52.15),
+      T(23, "dining", "Osteria Bella", "Friends' farewell dinner", 126.30),
+      T(24, "dining", "Pho Hanoi", "Lunch", 17.50),
+      T(25, "housing", "GridOne", "Electricity", 67.80),
+      T(26, "housing", "Fiberline", "Internet", 49.99),
+      T(27, "transport", "Metro Card Top-up", "Transit pass", 39),
+      T(28, "groceries", "Green Basket Market", "Weekly groceries", 74.90),
+      T(29, "dining", "Bodega 9", "Drinks", 33.80),
+      T(30, "entertainment", "Comedy Cellar", "Show tickets", 30)
+    ]
+  };
+
+  var ICONS = {
+    housing: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/>',
+    groceries: '<path d="M6 8h12l-1.2 12H7.2L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/>',
+    dining: '<path d="M7 3v8"/><path d="M5 3v4.5a2 2 0 0 0 4 0V3"/><path d="M7 11v10"/><path d="M16 21V11c-1.8 0-3-1.2-3-3.5C13 5.2 14.2 3 16 3s3 2.2 3 4.5c0 2.3-1.2 3.5-3 3.5"/>',
+    transport: '<path d="M4 13.5 5.6 7.8A2 2 0 0 1 7.5 6.3h9a2 2 0 0 1 1.9 1.5L20 13.5"/><path d="M3.5 13.5h17"/><path d="M5.5 16.5h1.5M17 16.5h1.5"/>',
+    entertainment: '<path d="M15 4.5v10.2"/><circle cx="12.5" cy="16.5" r="2.6"/><path d="M15 4.5 20.5 6"/>',
+    health: '<path d="M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20z"/>',
+    shopping: '<path d="M6 8h12l1 12H5L6 8z"/><path d="M9 10V6.5a3 3 0 0 1 6 0V10"/>',
+    subscriptions: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9.5h17"/><path d="M6.5 14.5h4"/>',
+    income: '<path d="M12 3v18"/><path d="M16.5 7c0-1.9-2-3.2-4.5-3.2S7.5 5.1 7.5 7s2 2.7 4.5 3.3 4.5 1.4 4.5 3.3-2 3.2-4.5 3.2-4.5-1.3-4.5-3.2"/>'
+  };
+
+  var state = { month: 5 };
+
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function money(n, dec) {
+    if (dec === undefined) dec = 2;
+    return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: dec, maximumFractionDigits: dec });
+  }
+  function moneyK(n) {
+    if (Math.abs(n) >= 1000) return "$" + (n / 1000).toFixed(1) + "k";
+    return "$" + Math.round(n);
+  }
+  function monthTx(i) { return DATA[MONTHS[i].key]; }
+  function sumSpending(txns) { var s = 0; txns.forEach(function (t) { if (t.cat !== "income") s += t.amount; }); return s; }
+  function spendingByCat(i) {
+    var map = {};
+    CATS.forEach(function (c) { map[c.id] = 0; });
+    monthTx(i).forEach(function (t) { if (t.cat !== "income") map[t.cat] += t.amount; });
+    return map;
+  }
+  function savingsRate(i) {
+    var spend = sumSpending(monthTx(i));
+    return (MONTHS[i].income - spend) / MONTHS[i].income * 100;
+  }
+  function balanceAt(i) { return MONTHS[i].startBalance + MONTHS[i].income - sumSpending(monthTx(i)); }
+
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function svg(tag, attrs, parent) {
+    var n = document.createElementNS(SVGNS, tag);
+    if (attrs) for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function txt(parent, x, y, str, size, anchor, weight) {
+    var t = svg("text", { x: x, y: y, "font-size": size, "text-anchor": anchor || "start" }, parent);
+    if (weight) t.setAttribute("font-weight", weight);
+    t.textContent = str;
+    return t;
+  }
+  function niceTicks(max, count) {
+    if (max <= 0) max = 1;
+    var rough = max / count;
+    var p = Math.pow(10, Math.floor(Math.log(rough) / Math.LN10));
+    var r = rough / p;
+    var s = r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10;
+    var step = s * p;
+    var top = Math.ceil(max / step) * step;
+    if (top - max < 0.08 * step) top += step;
+    var ticks = [];
+    for (var v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+    return { step: step, top: top, ticks: ticks };
+  }
+  function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+  function iconSvg(catId) {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[catId] || ICONS.shopping) + "</svg>";
+  }
+
+  /* ---------- tooltip ---------- */
+  function placeTip(box, tip, evt) {
+    var br = box.getBoundingClientRect();
+    var x = Math.max(8, Math.min(evt.clientX - br.left, br.width - 8));
+    var y = Math.max(8, evt.clientY - br.top);
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+    tip.classList.add("show");
+  }
+  function hideTip(tip) { tip.classList.remove("show"); }
+
+  /* ---------- KPI cards ---------- */
+  var KPI_DEFS = [
+    { label: "Balance",       goodUp: true,  value: function (i) { return balanceAt(i); },                   fmt: function (v) { return money(v, 0); },        deltaFmt: function (d) { return money(Math.abs(d), 0); } },
+    { label: "Income",        goodUp: true,  value: function (i) { return MONTHS[i].income; },                fmt: function (v) { return money(v, 0); },        deltaFmt: function (d) { return money(Math.abs(d), 0); } },
+    { label: "Spending",      goodUp: false, value: function (i) { return sumSpending(monthTx(i)); },         fmt: function (v) { return money(v, 0); },        deltaFmt: function (d) { return money(Math.abs(d), 0); } },
+    { label: "Savings rate",  goodUp: true, isPct: true,  value: function (i) { return savingsRate(i); },                  fmt: function (v) { return v.toFixed(1) + "%"; }, deltaFmt: function (d) { return Math.abs(d).toFixed(1) + " pts"; } }
+  ];
+  function arrow(up) {
+    return '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="' + (up ? "M5 1.5 9 7H1z" : "M5 8.5 1 3h8z") + '" fill="currentColor"/></svg>';
+  }
+  function flatGlyph() {
+    return '<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="4" width="7" height="2" rx="1" fill="currentColor"/></svg>';
+  }
+  function renderKPIs(i) {
+    var el = document.getElementById("kpis");
+    clear(el);
+    KPI_DEFS.forEach(function (d) {
+      var card = document.createElement("div");
+      card.className = "card kpi";
+      var v = d.value(i);
+      var shortPrev = i > 0 ? MONTHS[i - 1].label.split(" ")[0] : "";
+      var deltaHtml = '<span class="delta" style="color:var(--muted);background:var(--surface-2)">first month</span>';
+      if (i > 0) {
+        var diff = d.value(i) - d.value(i - 1);
+        var prev = d.value(i - 1);
+        var eps = d.isPct ? 0.05 : Math.max(0.5, 0.0008 * Math.abs(prev));
+        var flat = Math.abs(diff) < eps;
+        if (flat) {
+          deltaHtml = '<span class="delta" style="color:var(--muted);background:transparent;padding-left:0" title="No change vs ' + MONTHS[i - 1].label + '">' +
+            flatGlyph() + "<span>no change vs " + shortPrev + "</span></span>";
+        } else {
+          var up = diff > 0;
+          var good = d.goodUp === up;
+          var cls = good ? "pos" : "neg";
+          deltaHtml = '<span class="delta ' + cls + '" title="Change vs ' + MONTHS[i - 1].label + '">' +
+            arrow(up) + "<span>" + d.deltaFmt(diff) + " vs " + shortPrev + "</span></span>";
+        }
+      }
+      card.innerHTML =
+        '<div class="kpi-label">' + d.label + "</div>" +
+        '<div class="kpi-value num">' + d.fmt(v) + "</div>" + deltaHtml;
+      el.appendChild(card);
+    });
+  }
+
+  /* ---------- category donut ---------- */
+  function renderCatChart(i) {
+    var svgEl = document.getElementById("catChart");
+    var tip = document.getElementById("catTip");
+    var box = svgEl.parentNode;
+    clear(svgEl);
+    var totals = spendingByCat(i);
+    var items = CATS.map(function (c) { return { cat: c, value: totals[c.id] }; })
+      .filter(function (x) { return x.value > 0; })
+      .sort(function (a, b) { return b.value - a.value; });
+    var total = items.reduce(function (s, x) { return s + x.value; }, 0);
+    var MIN_DEG = 2.5;
+    var big = items.filter(function (x) { return x.value / total * 360 >= MIN_DEG; });
+    var small = items.filter(function (x) { return x.value / total * 360 < MIN_DEG; });
+    if (small.length > 1) {
+      big = big.concat([{ cat: { id: "other", name: "Other", color: "--c8" }, value: small.reduce(function (s, x) { return s + x.value; }, 0) }]);
+    } else if (small.length === 1) {
+      big = big.concat(small);
+    }
+    items = big;
+    var W = 300, H = 210, cx = W / 2, cy = 105, R = 84, r = 55;
+
+    document.getElementById("catTitle").textContent = "Where the money went";
+    document.getElementById("catSub").textContent = MONTHS[i].label + " · " + money(total, 0) + " across " + items.length + " categories";
+    svgEl.setAttribute("aria-label", "Spending by category in " + MONTHS[i].label + ": " + items.map(function (x) { return x.cat.name + " " + money(x.value, 0); }).join(", ") + ".");
+    svgEl.setAttribute("viewBox", "0 0 " + W + " " + H);
+
+    if (!items.length) {
+      txt(svgEl, cx, cy, "No spending recorded", 13, "middle");
+      return;
+    }
+
+    var a = -Math.PI / 2;
+    var segs = [];
+    items.forEach(function (x) {
+      var a1 = a + (x.value / total) * Math.PI * 2;
+      var seg = svg("path", { fill: "var(" + x.cat.color + ")", "class": "cat-seg" }, svgEl);
+      segs.push({ x: x, el: seg, a0: a, a1: a1 });
+      a = a1;
+    });
+
+    function arcPath(a0, a1, ro, ri) {
+      if (a1 <= a0) return "M0 0";
+      function pt(a, rad) { return [cx + rad * Math.cos(a), cy + rad * Math.sin(a)]; }
+      var large = (a1 - a0) > Math.PI ? 1 : 0;
+      var p0 = pt(a0, ro), p1 = pt(a1, ro), p2 = pt(a1, ri), p3 = pt(a0, ri);
+      return "M" + p0 + "A" + ro + " " + ro + " 0 " + large + " 1 " + p1 +
+        "L" + p2 + "A" + ri + " " + ri + " 0 " + large + " 0 " + p3 + "Z";
+    }
+
+    var gapPx = 2.4;
+    segs.forEach(function (s) {
+      var g = Math.min(gapPx / R, (s.a1 - s.a0) * 0.4);
+      s.el.setAttribute("d", arcPath(s.a0 + g / 2, s.a1 - g / 2, R, r));
+      var x = s.x;
+      (function (seg, x, mid) {
+        seg.addEventListener("pointerenter", function () {
+          var pct = (x.value / total * 100).toFixed(1);
+          tip.innerHTML = '<span class="row"><span class="dot" style="background:var(' + x.cat.color + ')"></span>' + x.cat.name +
+            "</span><b>" + money(x.value) + "</b> · " + pct + "% of spend";
+          seg.classList.add("hot");
+        });
+        seg.addEventListener("pointermove", function (e) { placeTip(box, tip, e); });
+        seg.addEventListener("pointerleave", function () { hideTip(tip); seg.classList.remove("hot"); });
+        seg.addEventListener("click", function (e) {
+          var pct = (x.value / total * 100).toFixed(1);
+          tip.innerHTML = '<span class="row"><span class="dot" style="background:var(' + x.cat.color + ')"></span>' + x.cat.name +
+            "</span><b>" + money(x.value) + "</b> · " + pct + "% of spend";
+          placeTip(box, tip, e);
+          seg.classList.add("hot");
+        });
+      })(s.el, x);
+    });
+
+    txt(svgEl, cx, cy - 4, "Total spend", 11, "middle").setAttribute("pointer-events", "none");
+    var totalTxt = txt(svgEl, cx, cy + 16, money(total, 0), 17, "middle", "650");
+    totalTxt.setAttribute("fill", "var(--text)");
+    totalTxt.setAttribute("pointer-events", "none");
+
+    var legend = document.getElementById("catLegend");
+    clear(legend);
+    items.forEach(function (x) {
+      var d = document.createElement("div");
+      d.className = "item";
+      d.innerHTML = '<span class="sw" style="background:var(' + x.cat.color + ')"></span>' + x.cat.name;
+      legend.appendChild(d);
+    });
+
+    var tbl = document.getElementById("catTable");
+    clear(tbl);
+    tbl.innerHTML = "<caption>Spending by category, " + MONTHS[i].label + "</caption>" +
+      items.map(function (x) { return "<tr><th>" + x.cat.name + "</th><td>" + money(x.value) + "</td></tr>"; }).join("") +
+      "<tr><th>Total</th><td>" + money(total) + "</td></tr>";
+  }
+
+  /* ---------- income vs spending ---------- */
+  function renderIVChart(from, selected) {
+    var svgEl = document.getElementById("ivChart");
+    var tip = document.getElementById("ivTip");
+    var box = svgEl.parentNode;
+    clear(svgEl);
+
+    var series = [];
+    for (var i = 0; i < MONTHS.length; i++) {
+      series.push({ key: MONTHS[i].key, label: MONTHS[i].label, short: MONTHS[i].label.split(" ")[0].slice(0, 3), income: MONTHS[i].income, spend: sumSpending(monthTx(i)), sel: i === selected });
+    }
+    var maxV = 0;
+    series.forEach(function (s) { maxV = Math.max(maxV, s.income, s.spend); });
+    var ticks = niceTicks(maxV, 4);
+
+    var W = 640, H = 280;
+    var padL = 46, padR = 10, padT = 16, padB = 30;
+    var iw = W - padL - padR, ih = H - padT - padB;
+    svgEl.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svgEl.setAttribute("aria-label", "Income vs spending, " + series.length + " months. " +
+      series.map(function (s) { return s.label + " income " + money(s.income, 0) + " spending " + money(s.spend, 0); }).join(". ") + ".");
+
+    document.getElementById("ivSub").textContent =
+      "Six months · " + series[0].label.split(" ")[0] + "–" + series[series.length - 1].label.split(" ")[0] + " · monthly totals in USD";
+
+    ticks.ticks.forEach(function (v) {
+      var y = padT + ih - (v / ticks.top) * ih;
+      svg("line", { x1: padL, y1: y, x2: W - padR, y2: y, "class": "gridline" }, svgEl);
+      txt(svgEl, padL - 8, y + 4, moneyK(v), 11, "end");
+    });
+
+    var groupW = iw / series.length;
+    var barW = Math.min(26, groupW / 3.2);
+    var gap = 4;
+
+    series.forEach(function (s, idx) {
+      if (s.sel) {
+        svg("rect", { x: padL + groupW * idx + 1, y: padT, width: groupW - 2, height: ih, rx: 8, fill: "var(--accent-soft)" }, svgEl);
+      }
+      var cx = padL + groupW * idx + groupW / 2;
+      var hI = (s.income / ticks.top) * ih;
+      var hS = (s.spend / ticks.top) * ih;
+      var barI = svg("rect", { x: cx - barW - gap / 2, y: padT + ih - hI, width: barW, height: Math.max(1, hI), rx: 4, fill: "var(--series-income)", opacity: s.sel ? 1 : .45 }, svgEl);
+      var barS = svg("rect", { x: cx + gap / 2, y: padT + ih - hS, width: barW, height: Math.max(1, hS), rx: 4, fill: "var(--series-spend)", opacity: s.sel ? 1 : .45 }, svgEl);
+      var lbl = txt(svgEl, cx, padT + ih + 18, s.short, 11, "middle");
+      if (s.sel) lbl.setAttribute("fill", "var(--text)");
+      var valI = txt(svgEl, cx - barW / 2 - gap / 2, padT + ih - hI - 6, moneyK(s.income), 10, "middle", "600");
+      var valS = txt(svgEl, cx + barW / 2 + gap / 2, padT + ih - hS - 6, moneyK(s.spend), 10, "middle", "600");
+      [valI, valS].forEach(function (t) { t.setAttribute("pointer-events", "none"); t.style.opacity = s.sel ? 1 : 0; t.style.transition = "opacity .15s ease"; });
+      if (idx > 0) svg("line", { x1: padL + groupW * idx, y1: padT, x2: padL + groupW * idx, y2: padT + ih, stroke: "var(--line)", "stroke-dasharray": "2 4", opacity: .55 }, svgEl);
+
+      var hit = svg("rect", { x: padL + groupW * idx, y: padT, width: groupW, height: ih + padB, fill: "transparent", "class": "hit", tabindex: 0, role: "button", "aria-label": s.label + ": income " + money(s.income, 0) + ", spending " + money(s.spend, 0) + ". Activate to view this month." }, svgEl);
+      function ivTipHtml() {
+        return s.label +
+          '<br><span class="row"><span class="dot" style="background:var(--series-income)"></span>Income <b>' + money(s.income, 0) + "</b></span>" +
+          '<span class="row"><span class="dot" style="background:var(--series-spend)"></span>Spending <b>' + money(s.spend, 0) + "</b></span>" +
+          '<br>Net <b>' + money(s.income - s.spend, 0) + "</b>" +
+          (s.sel ? "" : '<br><span style="opacity:.75">Click to view month</span>');
+      }
+      function ivShow(x, y) {
+        tip.innerHTML = ivTipHtml();
+        placeTip(box, tip, { clientX: x, clientY: y });
+      }
+      function ivHover(on) {
+        barI.setAttribute("opacity", on ? 1 : (s.sel ? 1 : .45));
+        barS.setAttribute("opacity", on ? 1 : (s.sel ? 1 : .45));
+        valI.style.opacity = (on || s.sel) ? 1 : 0;
+        valS.style.opacity = (on || s.sel) ? 1 : 0;
+      }
+      hit.addEventListener("pointerenter", function () { tip.innerHTML = ivTipHtml(); ivHover(true); });
+      hit.addEventListener("pointermove", function (e) { placeTip(box, tip, e); });
+      hit.addEventListener("pointerleave", function () { hideTip(tip); ivHover(false); });
+      hit.addEventListener("click", function (e) {
+        if (!s.sel) { state.month = idx; render(); return; }
+        ivShow(e.clientX, e.clientY);
+      });
+      hit.addEventListener("focus", function () {
+        ivHover(true);
+        var br = svgEl.getBoundingClientRect();
+        ivShow(br.left + (padL + groupW * idx + groupW / 2) * (br.width / W), br.top + (padT + 20) * (br.height / H));
+      });
+      hit.addEventListener("blur", function () { hideTip(tip); ivHover(false); });
+      hit.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!s.sel) { state.month = idx; render(); } }
+      });
+    });
+
+    var legend = document.getElementById("ivLegend");
+    clear(legend);
+    [["Income", "--series-income"], ["Spending", "--series-spend"]].forEach(function (p) {
+      var d = document.createElement("div");
+      d.className = "item";
+      d.innerHTML = '<span class="sw" style="background:var(' + p[1] + ')"></span>' + p[0];
+      legend.appendChild(d);
+    });
+
+    var tbl = document.getElementById("ivTable");
+    clear(tbl);
+    tbl.innerHTML = "<caption>Income vs spending by month</caption>" +
+      "<tr><th>Month</th><th>Income</th><th>Spending</th></tr>" +
+      series.map(function (s) { return "<tr><th>" + s.label + "</th><td>" + money(s.income) + "</td><td>" + money(s.spend) + "</td></tr>"; }).join("");
+  }
+
+  /* ---------- transactions ---------- */
+  function isoDay(monthKey, day) {
+    return monthKey + "-" + String(day).padStart(2, "0");
+  }
+  function daySort(a, b) {
+    return (b.day - a.day) || (a.seq - b.seq);
+  }
+  function renderTxns(i) {
+    var ul = document.getElementById("txns");
+    clear(ul);
+    var txns = monthTx(i).slice().map(function (t, idx) { t.seq = idx; return t; })
+      .sort(daySort).slice(0, 9);
+    document.getElementById("txTitle").textContent = "Recent transactions";
+    document.getElementById("txSub").textContent = "Latest " + txns.length + " in " + MONTHS[i].label;
+    txns.forEach(function (t) {
+      var cat = t.cat === "income" ? { id: "income", name: "Income", color: "--pos" } : CAT_BY_ID[t.cat];
+      var li = document.createElement("li");
+      li.className = "txn";
+      var date = new Date(isoDay(MONTHS[i].key, t.day) + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" });
+      li.innerHTML =
+        '<span class="txn-ico" style="color:var(--ink-' + t.cat + ')">' + iconSvg(t.cat) + "</span>" +
+        '<span class="txn-info"><span class="txn-merchant">' + t.merchant + "</span>" +
+        '<br><span class="txn-meta">' + date + " · " + cat.name + (t.detail ? " · " + t.detail : "") + "</span></span>" +
+        '<span class="txn-amt num' + (t.cat === "income" ? " in" : "") + '">' + (t.cat === "income" ? "+" : "−") + money(t.amount) + "</span>";
+      ul.appendChild(li);
+    });
+  }
+
+  /* ---------- budgets ---------- */
+  function warnIcon() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
+  }
+  function renderBudgets(i) {
+    var el = document.getElementById("budgets");
+    clear(el);
+    var spend = spendingByCat(i);
+    document.getElementById("budSub").textContent = "Spending vs monthly limits · " + MONTHS[i].label;
+    var sorted = CATS.slice().sort(function (a, b) { return (spend[b.id] / BUDGETS[b.id]) - (spend[a.id] / BUDGETS[a.id]); });
+    sorted.forEach(function (c) {
+      var spent = spend[c.id], limit = BUDGETS[c.id];
+      var ratio = spent / limit;
+      var over = ratio > 1, near = !over && ratio >= 0.85;
+      var row = document.createElement("div");
+      row.className = "bud-row";
+      var fill = over ? "var(--neg)" : near ? "var(--warn)" : "var(" + c.color + ")";
+      var stateHtml = over
+        ? '<span class="bud-state over">' + warnIcon() + "Over budget by " + money(spent - limit) + "</span>"
+        : near ? '<span class="bud-state near">' + warnIcon() + "Near limit" + "</span>"
+        : '<span class="bud-state ok">' + money(Math.max(0, limit - spent), 0) + " left</span>";
+      row.innerHTML =
+        '<div class="bud-head"><span class="name">' + c.name + "</span>" +
+        '<span class="vals num">' + money(spent, 0) + " of " + money(limit, 0) +
+        (over ? ' · <span class="over">' + Math.round(ratio * 100) + "%</span>" : near ? ' · <span class="near">' + Math.round(ratio * 100) + "%</span>" : "") +
+        "</span></div>" +
+        '<div class="bud-track" role="progressbar" aria-valuemin="0" aria-valuemax="' + limit + '" aria-valuenow="' + Math.round(spent) + '" aria-label="' + c.name + ' budget"><div class="bud-fill" style="width:0%;background:' + fill + '"></div></div>' +
+        stateHtml;
+      el.appendChild(row);
+      var bar = row.querySelector(".bud-fill");
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { bar.style.width = Math.min(ratio, 1) * 100 + "%"; });
+      });
+    });
+  }
+
+  /* ---------- wiring ---------- */
+  var select = document.getElementById("monthSelect");
+  var prevBtn = document.getElementById("prevMonth");
+  var nextBtn = document.getElementById("nextMonth");
+
+  MONTHS.forEach(function (m, i) {
+    var o = document.createElement("option");
+    o.value = i;
+    o.textContent = m.label;
+    select.appendChild(o);
+  });
+
+  function render() {
+    select.value = state.month;
+    prevBtn.disabled = state.month === 0;
+    nextBtn.disabled = state.month === MONTHS.length - 1;
+    renderKPIs(state.month);
+    renderCatChart(state.month);
+    renderIVChart(0, state.month);
+    renderTxns(state.month);
+    renderBudgets(state.month);
+  }
+
+  select.addEventListener("change", function () { state.month = +select.value; render(); });
+  prevBtn.addEventListener("click", function () { if (state.month > 0) { state.month--; render(); } });
+  nextBtn.addEventListener("click", function () { if (state.month < MONTHS.length - 1) { state.month++; render(); } });
+
+  render();
+})();
+</script>
+</body>
+</html>

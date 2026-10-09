@@ -229,5 +229,27 @@
   "score": 7.0,
   "outcome": "timeout",
   "note": "striped tower, glowing lantern, sweeping beam, keeper's house with smoke, moon reflection, rain; squat tower, no cliff; still iterating at the 45 min cap (234 steps)"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v3 \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v3",
+  "attempt": "#2",
+  "minutes": 21.7,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "clustered layered shaded pads, trunk, blue-gray pot, mountains, grass, drifting leaves; canvas boxed small again"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 kit v3 \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v3",
+  "attempt": "#1",
+  "minutes": 37.3,
+  "score": 8.5,
+  "outcome": "done",
+  "note": "KPI cards with deltas, donut, income vs spending with the month highlighted, transactions, budgets turning red; over the 23 min budget"
  }
 ]
