@@ -273,5 +273,38 @@
   "score": 7.0,
   "outcome": "done",
   "note": "striped tower, lit lantern, keeper's house, jagged cliff, sweeping beam, moon, rain, edge to edge; the cliff is a flat dark slab"
+ },
+ {
+  "run": "Windmill \u00b7 Opus 5.5 \u00b7 Claude Code \u00b7 ref",
+  "brief": "Windmill",
+  "model": "Opus 5.5",
+  "kit": "Claude Code",
+  "attempt": "ref",
+  "minutes": 17.7,
+  "score": 9.0,
+  "outcome": "done",
+  "note": "tapered brick tower, thatched cap, gallery, lattice sails, tulip rows in perspective, canal reflecting the sky, sun, birds, a distant mill; framed"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v4 + ponytail \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v4 + ponytail",
+  "attempt": "#1",
+  "minutes": 30.1,
+  "score": 6.0,
+  "outcome": "done",
+  "note": "round pads stacked on a thin kinked trunk, flat slab pot, banded sky, framed; over the 28 min budget"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v4 + ponytail \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v4 + ponytail",
+  "attempt": "#1",
+  "minutes": 27.3,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "striped tower, lantern with a sweeping beam, moon behind clouds, slanted rain, splash on the rocks, edge to edge; small tower on a flat cliff band"
  }
 ]

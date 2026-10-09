@@ -90,7 +90,7 @@ footer { color: var(--muted); font-size: .85rem; }
 
 <script>
 (function () {
-  const BRIEFS = ["Bonsai", "Lighthouse", "Dashboard"];
+  const BRIEFS = ["Bonsai", "Lighthouse", "Dashboard", "Windmill"];
   const slug = (run) => run.split(" · ").slice(1).join(" · ").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const shot = (r) => `results/screenshots/${r.brief.toLowerCase()}/${slug(r.run)}/desktop-1.png`;
   const app = (r) => `results/apps/${r.brief.toLowerCase()}/${slug(r.run)}/`;
@@ -163,6 +163,7 @@ footer { color: var(--muted); font-size: .85rem; }
 
   fetch("results/data/visual_runs.json").then((r) => r.json()).then((data) => {
     runs = data.map((r) => ({ ...r, minutes: Number(r.minutes), score: Number(r.score) }));
+    document.querySelectorAll("#tabs button").forEach((t) => { t.hidden = !runs.some((r) => r.brief === t.dataset.brief); });
     const hash = decodeURIComponent(location.hash.slice(1));
     showBrief(BRIEFS.includes(hash) ? hash : "Bonsai");
   }).catch(() => { document.getElementById("run-meta").textContent = "Could not load results/data/visual_runs.json."; });

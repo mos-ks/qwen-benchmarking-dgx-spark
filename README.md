@@ -55,7 +55,10 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
    134.8 tok/s) runs the same loop in 7 to 19 minutes.
 4. **Best-of-N removes bad draws but does not raise the ceiling.** Three parallel attempts with the
    vision model picking the winner landed on the same 6.5 as the best single run.
-5. **Easy, well-scoped coding tasks do not separate anything.** Every model and harness passed five
+5. **A "write less code" skill hurts visual work.** Ponytail tells the agent to build the smallest
+   version that does the core job. On from-scratch pixel art that cut craft (stacked round pads, a
+   flat slab pot) without saving time: 6.0 and 6.5 against kit v4's 7.0 and 7.0.
+6. **Easy, well-scoped coding tasks do not separate anything.** Every model and harness passed five
    small agent tasks and a feature added to an existing codebase. Differences only appear on
    from-scratch and visual work.
 
@@ -80,6 +83,7 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 | kit v3 | the [`visual-supervisor`](harness/plugins/visual-supervisor.js) OpenCode plugin: the harness runs `look` when the agent stops and sends the critique back, up to 3 rounds |
 | best of 3 | three kit v3 sessions in parallel, [`pick`](harness/tools/pick) chooses the winner with the vision model |
 | kit v4 | score-driven supervision: the critic first lists the brief's requirements, scores 1 to 10 and names the unmet ones; the plugin keeps sending fixes until 8/10, 4 rounds or 25 minutes. The `pixel-art` skill gains a fill-the-screen rule |
+| kit v4 + ponytail | kit v4 with the [ponytail](https://github.com/DietrichGebert/ponytail) "smallest change that works" skill as always-on instructions |
 
 Third-party skills used (not redistributed here; install from their repos):
 [obra/superpowers](https://github.com/obra/superpowers) (TDD, debugging, verification, plans),
@@ -93,7 +97,8 @@ Third-party skills used (not redistributed here; install from their repos):
 ## Method
 
 - **Briefs**: [`tasks/`](tasks/). One-shot prompts, identical for every model. The bonsai brief is the
-  one the harness was iterated on; the lighthouse and dashboard briefs are held out.
+  one the harness was iterated on; the lighthouse and dashboard briefs are held out. Their
+  critiques informed kit v5, so the windmill brief was added afterwards as a fresh held-out test.
 - **Timing**: wall clock from the first prompt until the session settles (idle for 60 s after any
   supervisor round), capped at 45 minutes. The goal is at most 2x Opus's time on the same brief.
 - **Scoring**: screenshots (three desktop frames 1.5 s apart, one phone frame) judged 1 to 10 on
@@ -139,7 +144,8 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 - Done: Qwen3-Coder-Next, Qwen3.8-27B, Qwen3.6-35B-A3B on all briefs and harness versions above.
 - Qwen3.8-Flash-Next with kit v3: bonsai 7.5 (10.9 and 21.7 min), lighthouse 7.0 (hit the 45 min cap), dashboard 8.5 (37.3 min, over its 23 min budget). Best quality so far, but slower than the budget on the larger briefs.
 - Qwen3.8-Flash-Next with kit v4: bonsai 7.0 (15.8 min), lighthouse 7.0 (27.7 min, down from the 45 min cap with kit v3). The 25-minute supervision budget stopped the overrun; quality did not move (one run each, so within noise).
-- In progress: kit v4 plus the [ponytail](https://github.com/DietrichGebert/ponytail) skill on Flash-Next, same two briefs.
+- Kit v4 plus the [ponytail](https://github.com/DietrichGebert/ponytail) skill (loaded as always-on instructions) on Flash-Next: bonsai 6.0 (30.1 min), lighthouse 6.5 (27.3 min). Lower on both briefs and no faster, so it stays out of the kit.
+- In progress: kit v4 on the dashboard and the new windmill brief, then kit v5 (the agent gets a tested pixel-art drawing library instead of writing its own shapes) on bonsai, lighthouse and windmill.
 - This repository is updated as runs finish.
 
 ## Reproduce

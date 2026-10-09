@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1330; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Pixel-art bonsai tree swaying in the wind"></canvas>
+<script>
+"use strict";
+const cvs = document.getElementById("c");
+const ctx = cvs.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const WIND = REDUCED ? 0.25 : 1;
+
+function mulberry32(a){a=a>>>0;return function(){a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t=(t+Math.imul(t^t>>>7,t|61))^t;return((t^t>>>14)>>>0)/4294967296}}
+
+// ---- logical canvas: aspect follows the viewport (portrait on phones) ----
+let W = 180, H = 135;
+function resize() {
+  const ar = innerWidth / innerHeight;
+  if (ar < 0.9) { W = 136; H = Math.round(W / Math.max(0.5, ar)); }
+  else { H = 135; W = Math.round(H * Math.min(2.2, Math.max(1.05, ar))); }
+  cvs.width = W; cvs.height = H;
+  ctx.imageSmoothingEnabled = false;
+  const s = Math.max(1, Math.min(Math.floor(innerWidth / W), Math.floor(innerHeight / H)));
+  cvs.style.width = W * s + "px";
+  cvs.style.height = H * s + "px";
+  build();
+}
+
+// ---- pixel helpers ----
+function px(x, y, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), 1, 1); }
+function disc(cx, cy, r, c) { for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x*x + y*y <= r*r + r*0.8) px(cx + x, cy + y, c); }
+function ellipse(cx, cy, rx, ry, c) { for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) if ((x*x)/(rx*rx) + (y*y)/(ry*ry) <= 1.0) px(cx + x, cy + y, c); }
+function taper(x0, y0, cx, cy, x1, y1, w0, w1, c) {
+  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0)) * 2;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, u = 1 - t;
+    const x = u*u*x0 + 2*u*t*cx + t*t*x1, y = u*u*y0 + 2*u*t*cy + t*t*y1;
+    disc(x, y, Math.max(0, Math.round((w0 + (w1 - w0) * t) / 2)), c);
+  }
+}
+const dither = (x, y) => ((x ^ y) & 1) === 0;
+
+// ---- palette (light from top-left) ----
+const SKY = ["#101a3c", "#1b2a58", "#2a3e78", "#3d5596", "#5670ab"];
+const MOON = ["#c8cfe8", "#eef2fb"];
+const HILL = ["#2b3768", "#394a7e"];
+const GRD  = ["#233248", "#324659", "#475f6f", "#5f7a80", "#7d9888"];
+const POT  = ["#241019", "#47202f", "#7a3850", "#a85a68", "#d98f85"];
+const BARK = ["#24140e", "#3e2418", "#5c3826", "#7d5136", "#a5764d"];
+const LEAF = ["#16301f", "#274f2b", "#3d7a35", "#61a844", "#93cf62"];
+const LEAF_A = ["#20391f", "#355c2c", "#50893a", "#7ab44e", "#a9d877"];
+const STONE = ["#23222e", "#3d3d52", "#5e6178", "#8b90a6"];
+
+// ---- scene model (rebuilt on resize so the bonsai fills the canvas) ----
+let cx, gY, potTopY, potHalfW, potH, rimH, u, treeBaseY, trunkW, pads, tufts, stones, leaves, streaks, stars;
+
+function build() {
+  cx = Math.round(W / 2);
+  gY = Math.round(H * 0.8);
+  const treeH = Math.round(Math.min(H * 0.52, 78));
+  potH = 6; rimH = 2;
+  potHalfW = Math.round(Math.min(W * 0.19, 24));
+  potTopY = gY - potH;
+  treeBaseY = potTopY - 1;
+  u = treeH / 70;
+  trunkW = Math.max(5, Math.round(12 * u));
+  const cxTip = cx - Math.round(14 * u);
+
+  // trunk centreline in local coords: base at (0,70), tip at (0,0); S() maps it to the scene
+  const S = (x, y) => [Math.round(cxTip + x * u), Math.round(treeBaseY + (y - 70) * u)];
+  const PC = [
+    [0, 0, -8, 4, -8, 8],
+    [-8, 8, -11, 12, -11, 16],
+    [-11, 16, -6, 20, -4, 24],
+    [-4, 24, 2, 26, 6, 30],
+    [6, 30, 7, 34, 6, 38],
+    [6, 38, 1, 42, -2, 46],
+    [-2, 46, -4, 52, -3, 58],
+    [-3, 58, -1, 63, 0, 66],
+    [0, 66, 0, 68, 0, 70],
+  ];
+  const pts = [], segs = 8;
+  for (let c = 0; c < PC.length; c++) {
+    const [x0, y0, qx, qy, x1, y1] = PC[c];
+    for (let i = 0; i < segs; i++) {
+      const t = i / segs, u2 = 1 - t;
+      pts.push([u2*u2*x0 + 2*u2*t*qx + t*t*x1, u2*u2*y0 + 2*u2*t*qy + t*t*y1]);
+    }
+  }
+  pts.push([0, 70]);
+  const N = pts.length;
+  // short-crop the trunk under each pad so neighbouring pads never merge into one blob
+  const CUT = [[4, 6, 8], [10, 12, 16], [19, 21, 25], [29, 31, 35], [37, 39, 43], [45, 47, 49], [52, 54, 58]];
+  const trk = [];
+  for (let i = 0; i < N; i++) {
+    let keep = true;
+    for (const [a, b, c] of CUT) if (i >= a && i <= b) keep = false;
+    if (!keep) continue;
+    const v = i / (N - 1);
+    trk.push([...S(pts[i][0], pts[i][1]), Math.max(0, Math.round(trunkW * (1 - v) / 2))]);
+  }
+  const r = mulberry32(1234);
+  const bark = [], nB = Math.round(trk.length * 0.12);
+  for (let i = 0; i < nB; i++) {
+    const j = 3 + Math.floor(r() * Math.max(1, trk.length - 6));
+    const [x, y, w] = trk[j];
+    bark.push([x + Math.round((r() * 2 - 1) * w), y + Math.floor(r() * 3) - 1, r() < 0.5 ? 0 : 1]);
+  }
+
+  // branches + foliage pads, in trunk local coords (toward tip)
+  const ATT = [
+    { i: 10, ang: -60, len: 10, rx: 8, ry: 3,  alt: false },
+    { i: 14, ang:  55, len:  7, rx: 7, ry: 3,  alt: true  },
+    { i: 22, ang: -50, len: 10, rx: 9, ry: 3,  alt: true  },
+    { i: 28, ang:  50, len:  6, rx: 6, ry: 3,  alt: false },
+    { i: 34, ang: -55, len:  9, rx: 9, ry: 3,  alt: true  },
+    { i: 40, ang:  60, len:  5, rx: 5, ry: 2,  alt: false },
+    { i: 46, ang: -45, len:  6, rx: 7, ry: 3,  alt: true  },
+  ];
+  pads = [{ x: 0, y: 0, rx: 11, ry: 4, alt: false, t0: 0.0, top: 0 }]; // crown
+  const brn = [];
+  for (let bi = 0; bi < ATT.length; bi++) {
+    const a = ATT[bi], [bx0, by0] = pts[a.i];
+    const q = a.ang * Math.PI / 180;
+    const ex = bx0 + Math.sin(q) * a.len, ey = by0 - 0.45 * a.len;
+    const p0 = S(bx0, by0), p1 = S(ex, ey);
+    brn.push([p0[0], p0[1], (p0[0]+p1[0])/2 + (p1[0]-p0[0])*0.25, (p0[1]+p1[1])/2 + (p1[1]-p0[1])*0.25, p1[0], p1[1], Math.max(2, Math.round(4*u)), 1]);
+    pads.push({ x: ex, y: ey, rx: a.rx, ry: a.ry, alt: a.alt, t0: 0.6 + bi * 0.9, top: 1 });
+  }
+
+  // foliage tufts per pad (local coords)
+  const tf = [];
+  for (const p of pads) {
+    const n = 7 + Math.floor(r() * 5);
+    for (let i = 0; i < n; i++) {
+      const x = p.x + (r() * 2 - 1) * (p.rx * 0.72);
+      const y = p.y + (r() * 2 - 1) * (p.ry * 0.55) - p.ry * 0.3;
+      tf.push({ p, x, y, rr: 2 + Math.floor(r() * Math.max(1, p.rx * 0.38)) });
+    }
+  }
+  const tuftS = tf.map(o => { const [x, y] = S(o.x, o.y); return { p: o.p, sx: x, sy: y, rr: Math.max(1, Math.round(o.rr * u)) }; });
+  const padS = pads.map(p => { const [x, y] = S(p.x, p.y); return { ...p, sx: x, sy: y, rx: Math.max(3, Math.round(p.rx * u)), ry: Math.max(2, Math.round(p.ry * u)) }; });
+
+  // nebari (root flare) at the trunk base, drawn in the trunk pass
+  const rootS = [];
+  const [nbx, nby] = S(0, 70);
+  for (let i = 0; i < 6; i++) {
+    const rx0 = nbx + Math.round((i - 2.5) * Math.max(2, 3 * u));
+    rootS.push([rx0, nby - Math.round(3 * u), rx0 + Math.round((i - 2.5) * 2), nby]);
+  }
+
+  // stones beside the pot
+  stones = [];
+  const rs = mulberry32(7);
+  for (let i = 0; i < 4; i++) {
+    const side = i % 2 ? 1 : -1;
+    stones.push({ x: cx + side * (potHalfW + 4 + Math.round(rs() * 10) + i * 2), r: 1 + Math.floor(rs() * 2) });
+  }
+
+  // wind particles
+  const rl = mulberry32(99);
+  leaves = [];
+  for (let i = 0; i < 34; i++) {
+    const big = rl() < 0.4;
+    leaves.push({ x: rl() * W, y: rl() * H, vx: 10 + rl() * 22, ph: rl() * 6.28, amp: 4 + rl() * 9,
+      c: (rl() < 0.5 ? LEAF : LEAF_A)[2 + Math.floor(rl() * 2)], big });
+  }
+  streaks = [];
+  for (let i = 0; i < 22; i++) {
+    streaks.push({ x: rl() * W, y: rl() * H, vx: 24 + rl() * 30, len: 3 + Math.floor(rl() * 6),
+      a: rl() < 0.5 ? GRD[3] : GRD[4] });
+  }
+  const rst = mulberry32(5);
+  stars = [];
+  for (let i = 0; i < 26; i++) stars.push({ x: Math.floor(rst() * W), y: Math.floor(rst() * gY * 0.6), tw: rst() * 6.28 });
+
+  draw = () => render({ trk, bark, brn, padS, tuftS, rootS });
+}
+
+// ---- drawing ----
+function sway(p, t) {
+  const f = p.top === 0 ? 1 : 0.25 + 0.75 * (1 - Math.min(1, p.y / 70));
+  return Math.round(Math.sin(t * 1.1 + p.t0) * 1.8 * f * WIND);
+}
+
+function drawLeaf(x, y, c) { px(x, y, c); px(x + 1, y, c); px(x + 2, y - 1, c); px(x + 1, y + 1, c); }
+
+function render(s) {
+  const t = performance.now() / 1000;
+  const wx = 0.5 + 0.5 * Math.sin(t * 0.22); // gentle wind gust factor
+  ctx.fillStyle = SKY[0]; ctx.fillRect(0, 0, W, H);
+  for (let y = 0; y < gY; y++) {
+    const band = Math.min(SKY.length - 1, Math.floor(y / (gY / SKY.length)));
+    ctx.fillStyle = SKY[band]; ctx.fillRect(0, y, W, 1);
+  }
+  for (const st of stars) if (dither(st.x, Math.floor(t + st.tw))) px(st.x, st.y, SKY[4]);
+  disc(W - 18, 16, 6, MOON[0]);
+  disc(W - 18, 16, 5, MOON[1]);
+  disc(W - 20, 14, 2, "#f8fbff");
+  // far hills
+  const hr = mulberry32(8);
+  let hy = gY - Math.round(H * 0.13);
+  for (let x = 0; x < W; x++) {
+    if (x % 7 === 0) hy += Math.round((hr() - 0.5) * 3);
+    hy = Math.max(gY - Math.round(H * 0.2), Math.min(gY - 4, hy));
+    for (let y = hy; y < gY; y++) px(x, y, y > hy + 2 ? HILL[1] : HILL[0]);
+  }
+  // ground: calm dark bands, a few sparse tufts
+  const rg = mulberry32(31);
+  const spk = [];
+  for (let i = 0; i < 22; i++) spk.push([Math.floor(rg() * W), gY + 3 + Math.floor(rg() * (H - gY - 4)), rg() < 0.5 ? GRD[1] : GRD[4]]);
+  for (let y = gY; y < H; y++) {
+    const b = Math.min(2, Math.floor((y - gY) / Math.max(1, (H - gY) / 3)));
+    const c = b === 0 ? GRD[1] : b === 1 ? GRD[0] : GRD[2];
+    for (let x = 0; x < W; x++) px(x, y, c);
+    if (b === 0) for (let x = 0; x < W; x += 2) px(x, y, GRD[2]);
+  }
+  for (const [x, y, c] of spk) px(x, y, c);
+
+  // contact shadow
+  ellipse(cx, gY + 1, potHalfW + 2, 2, "#101827");
+
+  // stones
+  for (const st of stones) { disc(st.x, gY, st.r, STONE[1]); disc(st.x - 1, gY - 1, Math.max(0, st.r - 1), STONE[2]); }
+
+  // ground wind streaks
+  for (const st of streaks) {
+    if (st.y > gY - 2) for (let i = 0; i < st.len; i++) px(st.x - i, st.y, dither(st.x, st.y) ? st.a : GRD[1]);
+  }
+
+  // ---- shallow bonsai tray ----
+  const pTopW = potHalfW, pBotW = Math.round(pTopW * 0.8);
+  const footW = 3, feetY = gY - 2;
+  ellipse(cx, potTopY, pTopW, rimH, POT[1]);
+  ellipse(cx, potTopY, pTopW - 1, rimH - 1, POT[2]);
+  ellipse(cx, potTopY, pTopW - 4, Math.max(1, rimH - 2), POT[0]);
+  for (let y = potTopY + rimH; y < feetY; y++) {
+    const f = (y - potTopY - rimH) / Math.max(1, potH - rimH);
+    const hw = Math.round(pTopW + (pBotW - pTopW) * f);
+    for (let x = -hw; x <= hw; x++) {
+      let c = POT[2];
+      if (x > hw - 3) c = POT[0];
+      else if (x > hw - 5) c = POT[1];
+      else if (x < -hw + 3) c = POT[4];
+      else if (x < -hw + 6) c = POT[3];
+      px(cx + x, y, c);
+    }
+  }
+  for (const fx of [-pBotW + 2, pBotW - 2 - footW]) {
+    for (let y = feetY; y <= gY; y++) for (let x = 0; x < footW; x++) px(cx + fx + x, y, y === gY ? POT[0] : POT[1]);
+  }
+  // soil in the pot mouth
+  for (let x = -pTopW + 4; x <= pTopW - 4; x++) px(cx + x, potTopY - rimH + 1, (x & 1) ? POT[0] : "#33261c");
+
+  // ---- branches (behind trunk and pads) ----
+  for (const [x0, y0, cx0, cy0, x1, y1, w0, w1] of s.brn) {
+    taper(x0, y0, cx0, cy0, x1, y1, w0, w1, BARK[1]);
+    taper(x0 - 1, y0 - 1, cx0 - 1, cy0 - 1, x1, y1, Math.max(0, w0 - 2), Math.max(0, w1 - 1), BARK[3]);
+  }
+
+  // ---- trunk: silhouette, body, highlight, bark, nebari ----
+  for (const [x, y, w] of s.trk) disc(x + 1, y + 1, w, BARK[0]);
+  for (const [x, y, w] of s.trk) disc(x, y, w, BARK[2]);
+  for (const [x, y, w] of s.trk) if (w > 1) disc(x - Math.max(1, w - 1), y - 1, Math.max(0, w - 2), BARK[3]);
+  for (const [x, y, b] of s.bark) px(x, y, b ? BARK[1] : BARK[4]);
+  for (const [x0, y0, x1, y1] of s.rootS) {
+    taper(x0, y0, (x0 + x1) / 2, y0 + 1, x1, y1, Math.max(2, Math.round(4 * u)), 1, BARK[2]);
+    taper(x0 - 1, y0 - 1, (x0 + x1) / 2, y0 + 1, x1, y1, Math.max(1, Math.round(2 * u)), 1, BARK[3]);
+  }
+
+  // ---- foliage pads: shadow / body / mid / highlight + tufts + sparkle ----
+  for (const p of s.padS) {
+    const ox = sway(p, t) + (p.top === 0 ? Math.round(Math.sin(t * 0.22) * wx) : 0);
+    ellipse(p.sx + ox + 1, p.sy + 2, p.rx + 1, p.ry + 1, LEAF[0]);
+    ellipse(p.sx + ox, p.sy, p.rx, p.ry, LEAF[1]);
+    ellipse(p.sx + ox - 1, p.sy - 1, Math.max(2, p.rx - 2), Math.max(1, p.ry - 1), p.alt ? LEAF_A[2] : LEAF[2]);
+    ellipse(p.sx + ox - 2, p.sy - 2, Math.max(1, p.rx - 4), Math.max(1, p.ry - 2), p.alt ? LEAF_A[3] : LEAF[3]);
+  }
+  for (const tf of s.tuftS) {
+    const ox = sway(tf.p, t);
+    disc(tf.sx + ox, tf.sy, tf.rr, tf.p.alt ? LEAF_A[2] : LEAF[2]);
+    disc(tf.sx + ox - 1, tf.sy - 1, Math.max(0, tf.rr - 1), tf.p.alt ? LEAF_A[3] : LEAF[3]);
+  }
+  const rs2 = mulberry32(77);
+  for (let i = 0; i < 12; i++) {
+    const p = s.padS[Math.floor(rs2() * s.padS.length)];
+    const px2 = p.sx + Math.round((rs2() * 2 - 1) * p.rx) + sway(p, t);
+    const py2 = p.sy + Math.round((rs2() * 2 - 1) * p.ry) - 1;
+    if (dither(px2, py2 + Math.floor(t * 1.5))) px(px2, py2, p.alt ? LEAF_A[4] : LEAF[4]);
+  }
+
+  // ---- drifting leaves (in front) ----
+  for (const l of leaves) {
+    const y = l.y + Math.sin(t * 1.3 + l.ph) * l.amp;
+    if (l.big) drawLeaf(l.x, y, l.c); else px(l.x, y, l.c);
+  }
+  // air streaks
+  for (const st of streaks) {
+    if (st.y <= gY - 2) for (let i = 0; i < st.len; i++) px(st.x - i, st.y, dither(st.x + Math.floor(t * 4), i) ? st.a : SKY[4]);
+  }
+}
+
+let draw = () => {};
+addEventListener("resize", resize);
+
+function frame(ts) {
+  const t = ts / 1000;
+  const wx = 0.5 + 0.5 * Math.sin(t * 0.22);
+  const dt = 1 / 60;
+  for (const l of leaves) {
+    l.x += (l.vx * (0.5 + wx)) * WIND * dt;
+    if (l.x > W + 3) { l.x = -4 - Math.random() * 6; l.y = Math.random() * H; }
+  }
+  for (const st of streaks) {
+    st.x += st.vx * (0.4 + wx) * WIND * dt;
+    if (st.x > W + st.len + 2) { st.x = -st.len - 2; st.y = Math.random() * H; }
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

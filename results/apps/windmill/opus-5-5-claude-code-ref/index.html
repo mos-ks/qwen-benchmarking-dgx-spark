@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a0e2c">
+<title>Windmill at Sunset</title>
+<style>
+  :root {
+    --bg-top: #2d1640;
+    --bg-mid: #1a0e2c;
+    --bg-low: #0e0818;
+    --frame: #24122f;
+    --frame-edge: #4a2346;
+    --frame-glint: #6e3a5a;
+    --caption: #e9a27a;
+    --caption-dim: #9a6a8a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 38%, var(--bg-top) 0%, var(--bg-mid) 58%, var(--bg-low) 100%);
+    background-color: var(--bg-mid);
+    color: var(--caption);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  .frame {
+    padding: 6px;
+    background: var(--frame);
+    box-shadow:
+      0 0 0 2px var(--frame-edge),
+      0 0 0 4px var(--frame),
+      0 0 0 6px var(--frame-glint),
+      0 24px 70px rgba(0, 0, 0, .6),
+      0 0 140px rgba(255, 140, 80, .14);
+  }
+  canvas {
+    display: block;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    background: #1b1033;
+  }
+  .caption {
+    margin-top: 18px;
+    font-size: 11px;
+    letter-spacing: .32em;
+    text-transform: uppercase;
+    text-align: center;
+    color: var(--caption);
+    opacity: .9;
+    white-space: nowrap;
+  }
+  .caption span { color: var(--caption-dim); }
+  @media (max-width: 560px) {
+    .frame {
+      padding: 3px;
+      box-shadow:
+        0 0 0 2px var(--frame-edge),
+        0 0 0 3px var(--frame-glint),
+        0 18px 50px rgba(0, 0, 0, .6),
+        0 0 90px rgba(255, 140, 80, .14);
+    }
+    .caption { font-size: 10px; letter-spacing: .2em; margin-top: 16px; }
+  }
+  @media (max-height: 420px) {
+    .caption { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="frame"><canvas id="scene" width="192" height="144" aria-label="Animated pixel-art Dutch windmill in a tulip field at sunset" role="img"></canvas></div>
+  <p class="caption" id="caption">Molen <span>&middot;</span> Tulpenveld <span>&middot;</span> Zonsondergang</p>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---- Canvas & pixel buffer ---------------------------------------------
+  // The scene is authored for a 192x144 landscape frame. On portrait screens the
+  // same scene gets SKY_EXTRA rows of sky above and GROUND_EXTRA rows of field below.
+  const W = 192, BASE_H = 144;
+  const VPX = 100;       // vanishing point x
+  const K = 64;          // ground projection constant: screen depth d = K / z
+  const cv = document.getElementById('scene');
+  const ctx = cv.getContext('2d');
+  let OY = 0, H = BASE_H, HOR = 80;
+  let img, buf;
+
+  // Packed little-endian ABGR so the Uint32 view writes straight into ImageData.
+  const hex = s => {
+    const n = parseInt(s.slice(1), 16);
+    return (0xff000000 | ((n & 255) << 16) | (n & 0xff00) | (n >>> 16)) >>> 0;
+  };
+  const hexAll = arr => arr.map(hex);
+
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16);
+  const bayer = (x, y) => BAYER[((y & 3) << 2) | (x & 3)];
+
+  function hash(a, b) {
+    let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  function mulberry32(seed) {
+    return () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+  // Colour transforms are memoised so derived shades stay a closed, limited set.
+  function makeTransform(fr, fg, fb, ar, ag, ab) {
+    const cache = new Map();
+    return c => {
+      let out = cache.get(c);
+      if (out === undefined) {
+        const r = clamp(Math.round((c & 255) * fr + ar), 0, 255);
+        const g = clamp(Math.round(((c >>> 8) & 255) * fg + ag), 0, 255);
+        const b = clamp(Math.round(((c >>> 16) & 255) * fb + ab), 0, 255);
+        out = (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
+        cache.set(c, out);
+      }
+      return out;
+    };
+  }
+  // Atmospheric perspective: distant flowers drift toward the horizon haze (#a8486c).
+  const hazeNear = makeTransform(0.72, 0.72, 0.72, 0.28 * 168, 0.28 * 72, 0.28 * 108);
+  const hazeFar = makeTransform(0.5, 0.5, 0.5, 0.5 * 168, 0.5 * 72, 0.5 * 108);
+  const waterOf = makeTransform(0.7, 0.66, 0.8, 4, 6, 22);
+  const liftOf = makeTransform(0.7, 0.72, 0.72, 86, 70, 54);
+
+  function px(x, y, c) {
+    if (x >= 0 && x < W && y >= 0 && y < H) buf[y * W + x] = c;
+  }
+
+  // ---- Palette ------------------------------------------------------------
+  const SKY = hexAll(['#1b1033', '#271443', '#381a53', '#4f215f', '#6c2967', '#8d326b',
+    '#b03e6b', '#d24f66', '#ea6a5d', '#f78a56', '#fdae5c', '#ffd070', '#ffe58e']);
+  const SUN = hexAll(['#fff6d2', '#ffe69a', '#ffc865']);
+  const STAR = hexAll(['#ffeefa', '#a07cbc']);
+  const CLOUD_HIGH = hexAll(['#3a1c54', '#552562', '#77316b', '#a0446f', '#d87272']);
+  const CLOUD_MID = hexAll(['#552463', '#7a2f69', '#a3426c', '#cf5e6b', '#ff9e76']);
+  const CLOUD_LOW = hexAll(['#a33f69', '#cd5468', '#f07c62', '#ffb36e', '#ffd88e']);
+  const LAND = hexAll(['#2e1439', '#401b47', '#5c2552', '#7a3058']);
+  const GREEN = hexAll(['#172a24', '#22402d', '#2f5634', '#45713a', '#6a8f40', '#93a84a']);
+  const SOIL = hexAll(['#24151f', '#36202b', '#4c2b31']);
+  const PATH = hexAll(['#5a3634', '#80513d', '#a46d4a', '#c98d5d', '#e3ad74']);
+  const BANK = hexAll(['#2a1830', '#4a2c3a']);
+  const HAZE = hex('#a8486c');
+  const BIRD = hex('#1d0d22');
+  const TULIPS = [
+    { d: '#6c1024', m: '#bf2738', l: '#f45a4c' },  // red
+    { d: '#9c5c10', m: '#e5a523', l: '#ffe266' },  // yellow
+    { d: '#86295d', m: '#df5f9c', l: '#ffa6c8' },  // pink
+  ].map(p => ({ d: hex(p.d), m: hex(p.m), l: hex(p.l) }));
+  const STEM = hex('#3c6a36');
+  const LEAF_D = hex('#284a2f');
+  const LEAF_L = hex('#55843c');
+
+  // ---- Scene layout (base-frame coordinates; OY shifts everything above ground) --
+  const SUN_X = 104, SUN_R = 12;
+  const ROWW = 0.2;                       // tulip bed width in ground units
+  const PATH_L = -1.46, PATH_R = -1.25;   // towpath, left of the canal
+  const CANAL_L = -1.2, CANAL_R = -0.8;
+  const VERGE = 0.05;
+  const MX = 56;                          // windmill centre line
+  const MD = 24.5;                        // windmill base depth below the horizon
+  const ZMILL = K / MD;
+  const HUB_X = 56, SAIL_R = 31;
+  const MOUND_RX = 28, MOUND_RY = 5.5;
+  let SUN_Y, MBASE, HUB_Y;
+
+  const rowColor = ri => (((Math.floor(ri / 2) % 3) + 3) % 3);
+  const inMound = (x, y) => {
+    const ex = (x + 0.5 - MX) / MOUND_RX, ey = (y + 0.5 - MBASE) / MOUND_RY;
+    return ex * ex + ey * ey < 1;
+  };
+
+  // ---- Static sky ---------------------------------------------------------
+  let skyBase, horizon;
+  function buildSky() {
+    skyBase = new Uint32Array(W * HOR);
+    const n = SKY.length;
+    for (let y = 0; y < HOR; y++) {
+      // Extra portrait sky continues the gradient upward into deeper night.
+      const ty = (y - OY) / 79;
+      for (let x = 0; x < W; x++) {
+        const dx = (x + 0.5 - SUN_X) / 1.7, dy = y + 0.5 - SUN_Y;
+        const glow = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / 78);
+        const f = clamp(Math.sign(ty) * Math.pow(Math.abs(ty), 1.2) * 9.6 + glow * glow * 3.4, 0, n - 1.001);
+        const i = Math.floor(f);
+        let c = (f - i) > bayer(x, y) ? SKY[i + 1] : SKY[i];
+        const sd = Math.hypot(x + 0.5 - SUN_X, y + 0.5 - SUN_Y);
+        if (sd < SUN_R) c = sd < SUN_R - 5 ? SUN[0] : sd < SUN_R - 2.2 ? SUN[1] : SUN[2];
+        else if (sd < SUN_R + 1.6 && bayer(x, y) < 0.5) c = SUN[2];
+        skyBase[y * W + x] = c;
+      }
+    }
+  }
+
+  // Distant horizon: polder strip, tree clumps, a farm and a far-off mill tower.
+  function buildHorizon() {
+    horizon = new Uint32Array(W * HOR);
+    const set = (x, y, c) => { if (x >= 0 && x < W && y >= 0 && y < HOR) horizon[y * W + x] = c; };
+    for (let x = 0; x < W; x++) {
+      set(x, HOR - 1, LAND[1]);
+      if (bayer(x, HOR - 2) < 0.25) set(x, HOR - 2, LAND[1]);
+    }
+    const clumps = [
+      { x: 10, w: 24, h: 6 }, { x: 30, w: 12, h: 3 }, { x: 128, w: 14, h: 4 },
+      { x: 139, w: 7, h: 2 }, { x: 160, w: 9, h: 3 }, { x: 186, w: 22, h: 6 },
+    ];
+    for (const c of clumps) {
+      for (let x = Math.floor(c.x - c.w / 2); x <= Math.ceil(c.x + c.w / 2); x++) {
+        const q = (x + 0.5 - c.x) / (c.w / 2);
+        if (Math.abs(q) > 1) continue;
+        const hh = Math.round(c.h * Math.sqrt(1 - q * q) + (hash(x, 7) - 0.5) * 1.6);
+        for (let k = 1; k <= hh; k++) {
+          const top = k === hh;
+          set(x, HOR - 1 - k, top && q > -0.2 ? LAND[2] : (k > hh - 2 && q > 0.3) ? LAND[2] : LAND[0]);
+        }
+      }
+    }
+    // farm: house + barn with one lit window
+    for (let y = HOR - 5; y < HOR - 1; y++) for (let x = 166; x < 174; x++) set(x, y, LAND[0]);
+    for (let k = 0; k < 4; k++) for (let x = 165 + k; x < 175 - k; x++) set(x, HOR - 6 - k, k === 3 ? LAND[2] : LAND[0]);
+    for (let y = HOR - 4; y < HOR - 1; y++) for (let x = 174; x < 181; x++) set(x, y, LAND[1]);
+    for (let x = 174; x < 181; x++) set(x, HOR - 5, LAND[2]);
+    set(169, HOR - 3, hex('#ffc060'));
+    set(170, HOR - 3, hex('#ff9a3c'));
+    // far mill tower
+    for (let y = HOR - 10; y < HOR - 1; y++) {
+      const hw = 1 + (y - (HOR - 10)) / 6;
+      for (let x = Math.round(147 - hw); x <= Math.round(147 + hw) - 1; x++) set(x, y, LAND[0]);
+    }
+    set(146, HOR - 11, LAND[0]); set(147, HOR - 11, LAND[0]); set(146, HOR - 12, LAND[0]);
+  }
+
+  // ---- Clouds -------------------------------------------------------------
+  function makeCloud(seed, w, h, pal) {
+    const rnd = mulberry32(seed);
+    const mask = new Uint8Array(w * h);
+    const base = h - 1.5;
+    const addEllipse = (cx, cy, rx, ry) => {
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
+        if (dx * dx + dy * dy <= 1 && y + 0.5 <= base + 0.6) mask[y * w + x] = 1;
+      }
+    };
+    addEllipse(w / 2, base - h * 0.16, w * 0.47, h * 0.22);
+    const n = 3 + Math.floor(w / 12);
+    for (let i = 0; i < n; i++) {
+      const cx = w * (0.14 + 0.72 * (i + 0.15 + rnd() * 0.7) / n);
+      const centred = 1 - Math.abs(cx / w - 0.5) * 1.4;
+      const r = (h * 0.36 + rnd() * h * 0.24) * (0.55 + 0.6 * centred);
+      addEllipse(cx, base - r * 0.7, r * 1.25, r);
+    }
+    const m = (x, y) => x >= 0 && x < w && y >= 0 && y < h && mask[y * w + x] === 1;
+    const data = new Uint32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (!m(x, y)) continue;
+      const v = (y + 0.5) / h, hx = (x + 0.5) / w;
+      const L = v * 0.95 + hx * 0.3 - 0.2 + (bayer(x, y) - 0.5) * 0.32;
+      let c = pal[clamp(Math.floor(L * 4), 0, 3)];
+      if (!m(x, y + 1) && hx > 0.12) c = pal[4];
+      else if (!m(x, y - 1) && hx > 0.55 && v > 0.3) c = pal[3];
+      data[y * w + x] = c;
+    }
+    return { w, h, data };
+  }
+
+  function makeStreak(seed, w, pal) {
+    const h = 3, data = new Uint32Array(w * h);
+    for (let x = 0; x < w; x++) {
+      const q = x / w;
+      if (q > 0.03 && q < 0.97 && hash(seed, x >> 2) > 0.12) data[w + x] = bayer(x, 1) < 0.5 ? pal[1] : pal[2];
+      if (q > 0.18 && q < 0.68 && hash(seed + 1, x >> 3) > 0.3) data[x] = pal[0];
+      if (q > 0.1 && q < 0.86 && hash(seed + 2, x >> 2) > 0.35) data[2 * w + x] = q > 0.4 ? pal[4] : pal[3];
+    }
+    return { w, h, data };
+  }
+
+  // y is in base-frame rows; negative rows only exist in the taller portrait sky.
+  const clouds = [
+    { spr: makeCloud(5, 40, 13, CLOUD_HIGH), x: 140, y: -52, v: 0.8 },
+    { spr: makeCloud(19, 30, 11, CLOUD_HIGH), x: 30, y: -34, v: 0.8 },
+    { spr: makeCloud(29, 48, 14, CLOUD_HIGH), x: 200, y: -18, v: 0.9 },
+    { spr: makeCloud(11, 44, 14, CLOUD_HIGH), x: 4, y: 4, v: 1.0 },
+    { spr: makeCloud(23, 34, 12, CLOUD_HIGH), x: 122, y: 10, v: 1.0 },
+    { spr: makeCloud(97, 26, 10, CLOUD_HIGH), x: 220, y: 2, v: 1.0 },
+    { spr: makeCloud(37, 54, 17, CLOUD_MID), x: 96, y: 26, v: 1.8 },
+    { spr: makeCloud(41, 38, 13, CLOUD_MID), x: 10, y: 36, v: 1.8 },
+    { spr: makeCloud(53, 30, 11, CLOUD_MID), x: 186, y: 43, v: 1.8 },
+    { spr: makeStreak(61, 58, CLOUD_LOW), x: 106, y: 66, v: 0.7 },
+    { spr: makeStreak(67, 44, CLOUD_LOW), x: 160, y: 71, v: 0.7 },
+    { spr: makeStreak(71, 36, CLOUD_LOW), x: 30, y: 59, v: 0.7 },
+    { spr: makeStreak(83, 50, CLOUD_LOW), x: 240, y: 53, v: 0.7 },
+  ];
+
+  function blitSky(spr, sx, sy) {
+    for (let j = 0; j < spr.h; j++) {
+      const y = sy + j;
+      if (y < 0 || y >= HOR) continue;
+      for (let i = 0; i < spr.w; i++) {
+        const x = sx + i;
+        if (x < 0 || x >= W) continue;
+        const c = spr.data[j * spr.w + i];
+        if (c) buf[y * W + x] = c;
+      }
+    }
+  }
+
+  // ---- Windmill layer (static) -------------------------------------------
+  let mill, millBox;
+  function buildMill() {
+    mill = new Uint32Array(W * H);
+    millBox = { x0: W, y0: H, x1: 0, y1: 0 };
+    const P = (x, by, c) => {
+      const y = by + OY;
+      if (x < 0 || x >= W || y < 0 || y >= H) return;
+      mill[y * W + x] = c;
+      if (x < millBox.x0) millBox.x0 = x;
+      if (x > millBox.x1) millBox.x1 = x;
+      if (y < millBox.y0) millBox.y0 = y;
+      if (y > millBox.y1) millBox.y1 = y;
+    };
+    const bitmap = (rows, x0, y0, map) => {
+      rows.forEach((row, j) => {
+        for (let i = 0; i < row.length; i++) {
+          const ch = row[i];
+          if (ch !== '.') P(x0 + i, y0 + j, map[ch]);
+        }
+      });
+    };
+
+    // Tapered octagonal brick tower: four visible facets, lit from the sunny right.
+    const T = hexAll(['#1c0e1c', '#2c1626', '#4a2230', '#6c3034', '#8f4239', '#c0603f']);
+    const darker = new Map([[T[2], T[1]], [T[3], T[2]], [T[4], T[3]]]);
+    const TOP = 48, BOT = 100;
+    for (let y = TOP; y < BOT; y++) {
+      const hw = 7.5 + ((y - TOP) / (BOT - TOP)) * 5.5;
+      for (let x = Math.floor(MX - hw) - 1; x <= Math.ceil(MX + hw); x++) {
+        const rel = (x + 0.5 - MX) / hw;
+        if (Math.abs(rel) > 1) continue;
+        let c = rel < -0.86 ? T[0] : rel < -0.5 ? T[1] : rel < 0.04 ? T[2] : rel < 0.58 ? T[3] : rel < 0.86 ? T[4] : T[5];
+        if ((y - TOP) % 4 === 3 && darker.has(c)) c = darker.get(c);
+        P(x, y, c);
+      }
+    }
+    // Stone plinth
+    const S = hexAll(['#24161f', '#3e2a36', '#5a4049', '#7a585a', '#9a7468']);
+    for (let y = 97; y < 104; y++) {
+      const hw = 14;
+      for (let x = MX - hw; x < MX + hw; x++) {
+        const rel = (x + 0.5 - MX) / hw;
+        let c = rel < -0.85 ? S[0] : rel < -0.35 ? S[1] : rel < 0.3 ? S[2] : rel < 0.8 ? S[3] : S[4];
+        const course = (y - 97) % 3 === 2;
+        const joint = (x + ((Math.floor((y - 97) / 3) & 1) ? 3 : 0)) % 6 === 0;
+        if (course || joint) c = S[Math.max(0, S.indexOf(c) - 1)];
+        if (y === 97) c = rel > 0 ? S[4] : S[2];
+        P(x, y, c);
+      }
+    }
+
+    // Door (green, cream trim, brass knob) and two warmly lit windows.
+    bitmap([
+      '..ffff..',
+      '.fbbbcf.',
+      'Fabbbbcf',
+      'Fabbbbcf',
+      'Fabbabcf',
+      'Fabbakcf',
+      'Fabbabcf',
+      'Fabbabcf',
+      'Fabbabcf',
+      'Fabbabcf',
+      'ssssssss',
+    ], MX - 4, 93, {
+      f: hex('#e6cfa2'), F: hex('#a3826a'), a: hex('#112219'), b: hex('#1f4430'),
+      c: hex('#3a6a40'), k: hex('#f0c45a'), s: hex('#6a5056'),
+    });
+    const WIN = { f: hex('#e6cfa2'), F: hex('#a3826a'), g: hex('#ffd76e'), h: hex('#ff9a3c'), s: hex('#4a2a2e') };
+    bitmap([
+      'Fffffff',
+      'Fggfggf',
+      'Fggfggf',
+      'Fffffff',
+      'Fhhfhhf',
+      'Fhhfhhf',
+      'Fffffff',
+      'sssssss',
+    ], MX - 4, 61, WIN);
+    bitmap([
+      'Fff',
+      'Fgf',
+      'Fhf',
+      'Fff',
+    ], MX - 1, 51, WIN);
+
+    // Stage (gallery) with railing and struts.
+    const WD = hexAll(['#1e0f1a', '#4a2628', '#6a3a30', '#9a5a3c', '#c07a4a']);
+    const SL = MX - 20, SR = MX + 19;
+    for (let x = SL; x <= SR; x++) {
+      const lit = x >= MX;
+      P(x, 84, lit ? WD[4] : WD[3]);
+      P(x, 85, lit ? WD[2] : WD[1]);
+      P(x, 86, WD[0]);
+      P(x, 78, lit ? WD[3] : WD[2]);
+      if (x === SL || x === SR || (x - SL) % 4 === 0) {
+        for (let y = 79; y < 84; y++) P(x, y, lit ? WD[2] : WD[1]);
+      }
+      if ((x - SL) % 4 === 2) P(x, 81, lit ? WD[1] : WD[0]);
+    }
+    for (let k = 0; k <= 6; k++) {
+      P(SL + 1 + k, 87 + k, WD[1]);
+      P(SR - 1 - k, 87 + k, WD[2]);
+    }
+
+    // Boat-shaped thatched cap with a wooden rim.
+    const C = hexAll(['#22121e', '#3c202e', '#5c3238', '#824840', '#b06a4a', '#d48a58']);
+    for (let y = 34; y <= 50; y++) {
+      let hw;
+      if (y >= 48) hw = 12;
+      else {
+        const s = (48.5 - y) / 14.5;
+        hw = 11.6 * Math.sqrt(Math.max(0, 1 - s * s));
+      }
+      for (let x = Math.floor(MX - hw) - 1; x <= Math.ceil(MX + hw); x++) {
+        const rel = (x + 0.5 - MX) / hw;
+        if (Math.abs(rel) > 1) continue;
+        let c;
+        if (y >= 48) {
+          c = y === 48 ? (rel > 0 ? C[4] : C[2]) : y === 50 ? C[0] : (rel < -0.4 ? C[1] : rel < 0.5 ? C[2] : C[3]);
+        } else {
+          let idx = rel < -0.72 ? 0 : rel < -0.2 ? 1 : rel < 0.38 ? 2 : rel < 0.78 ? 3 : 4;
+          if (y < 39 && rel > -0.1) idx = Math.min(5, idx + 1);
+          if ((x + (y >> 1)) % 3 === 0 && idx > 0) idx -= 1;
+          c = C[idx];
+        }
+        P(x, y, c);
+      }
+    }
+    P(MX - 1, 33, C[1]); P(MX, 33, C[3]); P(MX, 32, C[2]);
+  }
+
+  // ---- Sails (rotating, rasterised by inverse mapping so lattice stays crisp) --
+  const SAIL = hexAll(['#2a1520', '#4a2a2a', '#6a3c30', '#8a5238', '#b67248']);
+  const HUB = hexAll(['#1a0d16', '#3a2228', '#6a3c30', '#c08050']);
+
+  function drawSails(theta, cx, cy, R, small) {
+    const x0 = Math.floor(cx - R - 2), x1 = Math.ceil(cx + R + 2);
+    const y0 = Math.floor(cy - R - 2), y1 = Math.ceil(cy + R + 2);
+    const arms = [];
+    for (let k = 0; k < 4; k++) {
+      const a = theta + k * Math.PI / 2;
+      arms.push([Math.cos(a), Math.sin(a)]);
+    }
+    const SW = small ? 2.2 : 7.2;
+    const L0 = small ? 1.5 : 5.5;
+    const BAR = 2.85;
+    for (let py = y0; py <= y1; py++) {
+      if (py < 0 || py >= H) continue;
+      for (let qx = x0; qx <= x1; qx++) {
+        if (qx < 0 || qx >= W) continue;
+        const dx = qx + 0.5 - cx, dy = py + 0.5 - cy;
+        if (dx * dx + dy * dy > (R + 1.2) * (R + 1.2)) continue;
+        let c = 0;
+        for (let k = 0; k < 4 && !c; k++) {
+          const ca = arms[k][0], sa = arms[k][1];
+          const along = dx * ca + dy * sa;
+          if (along < -0.6) continue;
+          const across = -dx * sa + dy * ca;
+          if (small) {
+            if (along <= R && Math.abs(across) < 0.6) c = LAND[0];
+            else if (along > L0 && along <= R && across > 0 && across < SW) c = LAND[0];
+            continue;
+          }
+          if (along <= R + 1 && Math.abs(across) < 1.0) {
+            c = across > 0.15 ? SAIL[1] : SAIL[3];          // stock: lit leading half
+          } else if (along > L0 && along <= R) {
+            if (across < -0.95 && across > -2.4) {
+              c = across < -1.9 ? SAIL[1] : SAIL[2];          // leading board
+            } else if (across > 0 && across < SW + 0.8) {
+              const edge = Math.abs(across - SW) < 0.8;
+              const mid = Math.abs(across - SW * 0.52) < 0.48;
+              const bar = Math.abs(((along - L0) % BAR) - BAR / 2) > BAR / 2 - 0.62;
+              if (edge) c = SAIL[3];
+              else if (bar) c = SAIL[2];
+              else if (mid) c = SAIL[1];
+            }
+            if (c && along > R - 0.9) c = SAIL[0];             // dark tip
+          }
+        }
+        if (c) buf[py * W + qx] = c;
+      }
+    }
+    if (small) return;
+    for (let py = cy - 4; py <= cy + 3; py++) for (let qx = cx - 4; qx <= cx + 3; qx++) {
+      const dx = qx + 0.5 - cx, dy = py + 0.5 - cy, r = Math.hypot(dx, dy);
+      if (r > 3.3) continue;
+      let c = r > 2.3 ? (dx + dy < -0.5 ? HUB[2] : HUB[1]) : HUB[0];
+      if (r > 2.3 && dx > 0.5 && dy < -0.5) c = HUB[3];
+      if (r < 1.2) c = HUB[2];
+      px(qx, py, c);
+    }
+  }
+
+  // ---- Tulips (static placement, animated sway) --------------------------
+  const BLOOMS = [
+    ['m'],
+    ['ml', 'dm'],
+    ['d.l', 'dml', '.m.'],
+    ['d.l', 'dml', 'dml', '.m.'],
+    ['d.m.l', 'dmmll', 'dmmml', 'ddmml', '.dmm.'],
+    ['d..m..l', 'dd.m.ll', 'ddmmmll', 'dmmmmll', 'dmmmmml', '.dmmml.', '..dmm..'],
+  ];
+  const STEM_H = [1, 2, 3, 4, 6, 8];
+  const AMP = [0.5, 0.8, 1.2, 1.6, 2.2, 2.8];
+  const tierFor = d => (d < 15 ? 0 : d < 24 ? 1 : d < 36 ? 2 : d < 52 ? 3 : d < 74 ? 4 : 5);
+  let tulips, millIndex;
+  function placeTulips() {
+    tulips = [];
+    const zFar = K / 11, zNear = K / (H - HOR + 16);
+    for (let z = zFar; z > zNear; z *= 0.945) {
+      const dRow = K / z;
+      const subs = dRow > 66 ? [0.22, 0.5, 0.78] : [0.32, 0.68];
+      const uMin = (-8 - VPX) / dRow, uMax = (W + 8 - VPX) / dRow;
+      for (let ri = Math.floor(uMin / ROWW); ri <= Math.ceil(uMax / ROWW); ri++) {
+        const bedL = ri * ROWW, bedR = bedL + ROWW;
+        if (bedR > PATH_L - 0.03 && bedL < CANAL_R + VERGE + 0.03) continue;
+        for (let s = 0; s < subs.length; s++) {
+          const zk = Math.round(z * 1000);
+          const zz = z * (1 + (hash(ri * 3 + s, zk) - 0.5) * 0.05);
+          const uu = (ri + subs[s] + (hash(ri * 3 + s + 99, zk) - 0.5) * 0.1) * ROWW;
+          const d = K / zz;
+          const x0 = Math.floor(VPX + uu * d);
+          const y0 = Math.round(HOR + d - 0.5);
+          const tier = tierFor(d);
+          if (x0 < -4 || x0 > W + 4) continue;
+          if (y0 - STEM_H[tier] - BLOOMS[tier].length >= H) continue;
+          const ex = (x0 + 0.5 - MX) / (MOUND_RX + 2), ey = (y0 + 0.5 - MBASE) / (MOUND_RY + 1.5);
+          if (ex * ex + ey * ey < 1) continue;
+          const base = TULIPS[rowColor(ri)];
+          const tone = c => (tier === 0 ? hazeNear(c) : c);
+          let bloom = BLOOMS[tier];
+          if (tier === 0 && hash(ri, zk + s) > 0.55) bloom = ['l'];
+          tulips.push({
+            x0, y0, z: zz, u: uu, tier, bloom,
+            d: tone(base.d), m: tone(base.m), l: tone(base.l),
+            stem: tone(STEM), leafD: tone(LEAF_D), leafL: tone(LEAF_L),
+          });
+        }
+      }
+    }
+    tulips.sort((a, b) => b.z - a.z);
+    millIndex = tulips.findIndex(tp => tp.z <= ZMILL);
+    if (millIndex < 0) millIndex = tulips.length;
+  }
+
+  function drawTulip(tp, t, gust) {
+    const wave = Math.sin(t * 1.9 - tp.z * 1.7 + tp.u * 0.6) * 0.75 + Math.sin(t * 3.4 + tp.u * 5.3 + tp.z * 2.9) * 0.25;
+    const s = Math.round(AMP[tp.tier] * gust * wave);
+    const sh = STEM_H[tp.tier];
+    const { x0, y0 } = tp;
+    if (tp.tier >= 2) {
+      px(x0 - 1, y0, tp.leafD); px(x0 + 1, y0, tp.leafL);
+      if (tp.tier >= 3) { px(x0 - 1, y0 - 1, tp.leafD); px(x0 + 1, y0 - 1, tp.leafL); }
+      if (tp.tier >= 4) {
+        px(x0 - 2, y0 - 2, tp.leafD); px(x0 - 1, y0 - 2, tp.leafD);
+        px(x0 + 2, y0 - 2, tp.leafL); px(x0 + 2, y0 - 3, tp.leafL);
+      }
+      if (tp.tier >= 5) {
+        px(x0 - 2, y0 - 1, tp.leafD); px(x0 - 3, y0 - 3, tp.leafD); px(x0 - 2, y0 - 3, tp.leafD);
+        px(x0 + 1, y0 - 2, tp.leafL); px(x0 + 3, y0 - 4, tp.leafL); px(x0 + 3, y0 - 5, tp.leafL);
+      }
+    }
+    for (let h = 0; h < sh; h++) {
+      const off = Math.round(s * Math.pow((h + 1) / (sh + 1), 1.5));
+      px(x0 + off, y0 - h, tp.stem);
+    }
+    const rows = tp.bloom, bh = rows.length, bw = rows[0].length;
+    const bx = x0 + s - (bw >> 1), by = y0 - sh - bh + 1;
+    for (let j = 0; j < bh; j++) {
+      const row = rows[j];
+      for (let i = 0; i < bw; i++) {
+        const ch = row.charCodeAt(i);
+        if (ch === 46) continue;                 // '.'
+        px(bx + i, by + j, ch === 100 ? tp.d : ch === 109 ? tp.m : tp.l);
+      }
+    }
+  }
+
+  // ---- Ground (per frame: far rows shimmer, canal reflects the live sky) --
+  function drawGround(t) {
+    for (let y = HOR; y < H; y++) {
+      const d = y - HOR + 0.5, z = K / d;
+      const rowOff = y * W;
+      const shimmer = Math.round(Math.sin(t * 1.8 + z * 0.9) * 0.7);
+      const rippleAmp = 0.35 + d / 42;
+      const ox = Math.round(Math.sin(y * 0.85 - t * 2.4) * rippleAmp + Math.sin(y * 0.31 + t * 1.1) * 0.45);
+      const my = Math.max(0, 2 * HOR - 1 - y);
+      for (let x = 0; x < W; x++) {
+        const u = (x + 0.5 - VPX) / d;
+        let c;
+        if (u > CANAL_L && u < CANAL_R) {
+          if ((u - CANAL_L) * d < 1) c = BANK[0];
+          else if ((CANAL_R - u) * d < 0.8) c = BANK[1];
+          else {
+            c = waterOf(buf[my * W + clamp(x + ox, 0, W - 1)]);
+            const v = Math.sin(x * 0.7 + y * 2.1 - t * 3.2) + Math.sin(x * 0.23 - y * 1.3 + t * 1.7);
+            if (v > 1.5) c = liftOf(c);
+          }
+        } else if (u < CANAL_L && inMound(x, y)) {
+          const ey = (y + 0.5 - MBASE) / MOUND_RY;
+          const ex = (x + 0.5 - MX) / MOUND_RX;
+          const rim = ex * ex + ey * ey > 0.72;
+          const k = hash(x, y * 3);
+          if (ey < 0) c = rim ? (ex > -0.2 ? GREEN[5] : GREEN[4]) : (k < 0.5 ? GREEN[3] : GREEN[4]);
+          else c = rim && ey > 0.5 ? GREEN[1] : (k < 0.5 ? GREEN[2] : GREEN[3]);
+        } else if (u >= PATH_L - VERGE && u <= CANAL_R + VERGE) {
+          if (u >= PATH_L && u <= PATH_R) {
+            const pu = (u - PATH_L) / (PATH_R - PATH_L);
+            const k = hash(Math.floor(u * 140), Math.floor(z * 26));
+            if (pu < 0.1 || pu > 0.9) c = k < 0.5 ? GREEN[3] : PATH[0];
+            else if (Math.abs(pu - 0.3) < 0.09 || Math.abs(pu - 0.7) < 0.09) c = PATH[1];
+            else c = k < 0.12 ? PATH[4] : k < 0.55 ? PATH[3] : PATH[2];
+          } else {
+            c = hash(x, y) < 0.5 ? GREEN[3] : GREEN[4];
+          }
+        } else {
+          const rf = u / ROWW, ri = Math.floor(rf), fr = rf - ri;
+          const col = TULIPS[rowColor(ri)];
+          const furrowW = d > 16 ? 0.15 : 0;
+          if (fr < furrowW || fr > 1 - furrowW) {
+            const edge = fr < 0.07 || fr > 0.93;
+            c = edge ? SOIL[hash(x, y) < 0.5 ? 0 : 1] : (d > 40 && hash(x, y) < 0.3 ? GREEN[1] : SOIL[2]);
+          } else if (d < 11) {
+            const lit = bayer(x + shimmer, y) < 0.24 ? col.l : col.m;
+            c = d < 6 ? hazeFar(lit) : hazeNear(lit);
+          } else {
+            const k = hash(ri * 5 + Math.floor(fr * 4), Math.floor(z * 22));
+            c = k < 0.35 ? GREEN[1] : k < 0.8 ? GREEN[2] : GREEN[3];
+          }
+        }
+        if (d < 4.2 && bayer(x, y) < (4.2 - d) / 4.2 * 0.8) c = HAZE;
+        buf[rowOff + x] = c;
+      }
+    }
+  }
+
+  // ---- Birds --------------------------------------------------------------
+  const BIG = [
+    ['x...x', '.x.x.', '..x..'],
+    ['.....', 'xx.xx', '..x..'],
+    ['.....', '.xxx.', 'x...x'],
+  ];
+  const SMALL = [['x.x', '.x.'], ['...', 'xxx'], ['.x.', 'x.x']];
+  const FLAP = [0, 1, 2, 1];
+  const flocks = [
+    { dir: -1, speed: 9, y: 30, phase: 40, birds: [[0, 0, 1], [7, -3, 1], [7, 4, 0], [14, -6, 0], [15, 8, 0]] },
+    { dir: 1, speed: 13, y: 19, phase: 150, birds: [[0, 0, 0], [-6, 3, 0]] },
+    { dir: -1, speed: 6, y: -26, phase: 90, birds: [[0, 0, 0], [6, -2, 0], [11, 2, 0]] },
+  ];
+  function drawBirds(t) {
+    const span = W + 70;
+    flocks.forEach((f, fi) => {
+      const travel = ((f.phase + t * f.speed) % span + span) % span;
+      const lx = f.dir < 0 ? W + 25 - travel : travel - 25;
+      f.birds.forEach(([ox, oy, big], bi) => {
+        const frames = big ? BIG : SMALL;
+        const fr = FLAP[Math.floor(t * 7 + bi * 1.7 + fi) % 4] % frames.length;
+        const spr = frames[fr];
+        const bx = Math.round(lx - f.dir * ox);
+        const by = Math.round(f.y + OY + oy + Math.sin(t * 1.4 + bi * 1.3) * 1.2);
+        spr.forEach((row, j) => {
+          for (let i = 0; i < row.length; i++) if (row[i] === 'x') px(bx + i, by + j, BIRD);
+        });
+      });
+    });
+  }
+
+  // ---- Stars --------------------------------------------------------------
+  let stars;
+  function placeStars() {
+    stars = [];
+    const count = 18 + Math.round(OY * 0.4);
+    for (let i = 0; i < count; i++) {
+      stars.push({ x: Math.floor(hash(i, 1) * W), y: Math.floor(hash(i, 2) * (22 + OY)), rate: 0.8 + hash(i, 3) * 2.2, ph: hash(i, 4) * 6.28 });
+    }
+  }
+
+  // ---- Layout -------------------------------------------------------------
+  function build(skyExtra, groundExtra) {
+    OY = skyExtra;
+    HOR = 80 + OY;
+    H = BASE_H + OY + groundExtra;
+    SUN_Y = 74 + OY;
+    MBASE = 104 + OY;
+    HUB_Y = 43 + OY;
+    cv.width = W;
+    cv.height = H;
+    img = ctx.createImageData(W, H);
+    buf = new Uint32Array(img.data.buffer);
+    buildSky();
+    buildHorizon();
+    buildMill();
+    placeTulips();
+    placeStars();
+  }
+
+  // ---- Frame --------------------------------------------------------------
+  function render(t) {
+    buf.set(skyBase);
+    for (const s of stars) {
+      const b = Math.sin(t * s.rate + s.ph);
+      if (b > 0.55) px(s.x, s.y, STAR[0]);
+      else if (b > -0.25) px(s.x, s.y, STAR[1]);
+    }
+    for (const c of clouds) {
+      const span = W + c.spr.w + 30;
+      const x = Math.round(((c.x + t * c.v) % span + span) % span - c.spr.w - 15);
+      blitSky(c.spr, x, c.y + OY);
+    }
+    for (let i = 0; i < horizon.length; i++) if (horizon[i]) buf[i] = horizon[i];
+    drawSails(-t * 0.55 + 0.4, 147.5, HOR - 11.5, 6, true);
+
+    drawGround(t);
+
+    const gust = 0.75 + 0.25 * Math.sin(t * 0.37) + 0.1 * Math.sin(t * 1.3);
+    for (let i = 0; i < millIndex; i++) drawTulip(tulips[i], t, gust);
+    for (let y = millBox.y0; y <= millBox.y1; y++) {
+      const o = y * W;
+      for (let x = millBox.x0; x <= millBox.x1; x++) {
+        const c = mill[o + x];
+        if (c) buf[o + x] = c;
+      }
+    }
+    // Dutch sails turn counter-clockwise seen from the front.
+    drawSails(-t * 0.85 + 0.35, HUB_X, HUB_Y, SAIL_R, false);
+    for (let i = millIndex; i < tulips.length; i++) drawTulip(tulips[i], t, gust);
+
+    drawBirds(t);
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // ---- Responsive scaling -------------------------------------------------
+  const frame = cv.parentElement;
+  const caption = document.getElementById('caption');
+  let mode = '';
+  function fit() {
+    const dpr = window.devicePixelRatio || 1;
+    const capStyle = getComputedStyle(caption);
+    const capH = capStyle.display === 'none' ? 0 : caption.offsetHeight + parseFloat(capStyle.marginTop);
+    const fs = getComputedStyle(frame);
+    const chrome = parseFloat(fs.paddingLeft) * 2 + 12;   // frame padding + ring shadows
+    const availW = Math.max(64, window.innerWidth - 32 - chrome);
+    const availH = Math.max(48, window.innerHeight - 32 - chrome - capH);
+
+    // Tall viewports get a taller scene (more sky and foreground) instead of letterboxing.
+    const want = availH / availW;
+    const nextMode = want > 1.15 ? 'tall' : want > 0.95 ? 'square' : 'wide';
+    if (nextMode !== mode) {
+      mode = nextMode;
+      if (mode === 'tall') build(64, 32);
+      else if (mode === 'square') build(28, 12);
+      else build(0, 0);
+    }
+
+    const maxCss = Math.min(availW, (availH * W) / H);
+    const s = Math.floor((maxCss * dpr) / W);
+    let cssW = s >= 1 ? (W * s) / dpr : maxCss;
+    // High-density screens hide uneven pixel widths, so fill the space rather than leave a gap.
+    if (dpr >= 2 && cssW < maxCss * 0.94) cssW = maxCss;
+    if (cssW < maxCss * 0.8) cssW = maxCss;
+    cv.style.width = cssW + 'px';
+    cv.style.height = (cssW * H) / W + 'px';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  const params = new URLSearchParams(location.search);
+  const fixedT = params.has('t') ? parseFloat(params.get('t')) : null;
+  const t0 = performance.now();
+  function loop(now) {
+    render(fixedT !== null ? fixedT : (now - t0) / 1000 + 3);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

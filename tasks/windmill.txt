@@ -1,0 +1,5 @@
+Build a single web page that shows an animated pixel-art windmill in a tulip field at sunset. Front end only: index.html (CSS and JS may be inline or in separate files), no backend, no build step, no external libraries, fonts or images. It must work by opening index.html in a browser.
+
+The scene must clearly read as a Dutch windmill in a tulip field, drawn as crisp pixel art (for example a small canvas scaled up with image-rendering: pixelated): a tapered windmill tower with a cap, a door and a small window, four lattice sails, rows of red, yellow and pink tulips running toward the horizon, a canal or path, and a sunset sky with clouds. Use a limited palette with shading; no blurry shapes or flat single-color blobs.
+
+Animation: the sails turn steadily, the tulips sway in the breeze, clouds drift, and a few birds fly across the sky. Make the whole scene look polished, centered, and good on desktop and on a phone-sized screen.

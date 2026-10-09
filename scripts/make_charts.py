@@ -26,6 +26,7 @@ MODEL_COLORS = {
     "Qwen3.6-35B-A3B": "#1baf7a",
     "Qwen3.8-Flash-Next": "#eda100",
 }
+BRIEFS = ["Bonsai", "Lighthouse", "Dashboard", "Windmill"]
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e6e5e0", "#fcfcfb"
 
 plt.rcParams.update(
@@ -99,15 +100,20 @@ def quality_vs_time() -> None:
 
 
 def best_per_brief() -> None:
-    briefs = ["Bonsai", "Lighthouse", "Dashboard"]
+    briefs = [b for b in BRIEFS if any(r["brief"] == b for r in runs)]
     order = list(MODEL_COLORS)
     best: dict[tuple[str, str, str], dict] = {}
     for r in runs:
         k = (r["brief"], r["model"], r["kit"])
         if k not in best or r["score"] > best[k]["score"]:
             best[k] = r
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.8), dpi=150, sharex=True)
-    for ax, brief in zip(axes, briefs, strict=True):
+    cols = 2
+    nrows = (len(briefs) + cols - 1) // cols
+    fig, axes = plt.subplots(nrows, cols, figsize=(13, 4.4 * nrows), dpi=150)
+    axes = list(axes.flat) if hasattr(axes, "flat") else [axes]
+    for ax in axes[len(briefs):]:
+        ax.set_visible(False)
+    for ax, brief in zip(axes, briefs, strict=False):
         rows = sorted(
             (v for k, v in best.items() if k[0] == brief),
             key=lambda r: (order.index(r["model"]), r["kit"]),

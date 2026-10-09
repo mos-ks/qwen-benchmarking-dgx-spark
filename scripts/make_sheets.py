@@ -26,7 +26,7 @@ def slug(run: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", run.split(" · ", 1)[1].lower()).strip("-")
 
 
-for brief in ("Bonsai", "Lighthouse", "Dashboard"):
+for brief in ("Bonsai", "Lighthouse", "Dashboard", "Windmill"):
     rows = [r for r in runs if r["brief"] == brief]
     rows.sort(key=lambda r: (r["model"] != "Opus 5.5", -r["score"], r["minutes"]))
     rows = [
