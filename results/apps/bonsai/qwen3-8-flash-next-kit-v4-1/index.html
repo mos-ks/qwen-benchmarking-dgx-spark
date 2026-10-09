@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #7fb2d9; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<script>
+(() => {
+'use strict';
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.imageSmoothingEnabled = false;
+
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TAU = Math.PI * 2;
+
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+let W = 0, H = 0, scale = 1;
+let horizonY = 0, potTopY = 0, cx = 0;
+let basePts = [], padDefs = [], bgHills = [], bgTrees = [], groundDots = [], potSpecs = [], trunkTopY = 0;
+let leaves = [], streaks = [];
+
+function layout() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  if (vw >= vh) { W = 176; H = 120; } else { W = 112; H = Math.max(160, Math.min(208, Math.round(W * vh / vw))); }
+  scale = Math.max(1, Math.min(Math.floor(vw / W), Math.floor(vh / H)));
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = W * scale + 'px';
+  canvas.style.height = H * scale + 'px';
+  ctx.imageSmoothingEnabled = false;
+  build();
+}
+
+const disc = (x, y, r, c) => {
+  ctx.fillStyle = c;
+  const r2 = r * r + r * 0.8;
+  for (let j = -r; j <= r; j++)
+    for (let i = -r; i <= r; i++)
+      if (i * i + j * j <= r2) ctx.fillRect(Math.round(x) + i, Math.round(y) + j, 1, 1);
+};
+
+function taper(x0, y0, cxq, cyq, x1, y1, w0, w1, c, ease) {
+  const steps = Math.max(4, Math.ceil(Math.hypot(x1 - x0, y1 - y0)) * 2);
+  ctx.fillStyle = c;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, u = 1 - t;
+    const x = u * u * x0 + 2 * u * t * cxq + t * t * x1;
+    const y = u * u * y0 + 2 * u * t * cyq + t * t * y1;
+    const wt = ease ? t * t * (3 - 2 * t) : t;
+    const r = Math.max(0, Math.round((w0 + (w1 - w0) * wt) / 2));
+    const r2 = r * r + r * 0.8;
+    for (let j = -r; j <= r; j++)
+      for (let i = -r; i <= r; i++)
+        if (i * i + j * j <= r2) ctx.fillRect(Math.round(x) + i, Math.round(y) + j, 1, 1);
+  }
+}
+
+function quadAt(p0, c, p1, t) {
+  const u = 1 - t;
+  return u * u * p0 + 2 * u * t * c + t * t * p1;
+}
+
+function build() {
+  cx = Math.floor(W / 2);
+  const tall = H > 140;
+  horizonY = Math.round(H * 0.8);
+  potTopY = horizonY - 3;
+
+  const potHalf = Math.max(16, Math.min(22, Math.round(W * 0.15)));
+  const potH = 10;
+  const rimH = 3;
+  const rimHalf = potHalf + 3;
+  potSpecs = [
+    { rimX0: cx - rimHalf, rimY0: potTopY - rimH, rimW: rimHalf * 2, rimH,
+      bodyX0: cx - potHalf, bodyY0: potTopY, bodyW: potHalf * 2, bodyH: potH,
+      half: potHalf, rimHalf }
+  ];
+
+  const potTop = potTopY - rimH;
+  const rootY = potTop + 1;
+  const treeH = tall ? 114 : 64;
+  trunkTopY = rootY - treeH;
+  basePts = [];
+  const lean = 12;
+  const seg1 = { x0: cx - 6, y0: rootY, cxq: cx - 20, cyq: rootY - treeH * 0.5, x1: cx + 2, y1: trunkTopY };
+  seg1.w0 = tall ? 16 : 13; seg1.w1 = 5;
+  seg1.taperEase = true;
+  basePts.push(seg1);
+  padDefs = [
+    { x0: cx + 2, y0: trunkTopY, cxq: cx + 14, cyq: trunkTopY - 8, x1: cx + 26, y1: trunkTopY - 14,
+      w0: 6, w1: 3, anchor: 0.82, phase: 0.6,
+      blobs: [[-8, -1, 8], [0, -6, 9], [9, -2, 8], [17, 0, 6], [2, 3, 8], [-4, 4, 6], [12, 4, 6], [4, -10, 6], [-13, 2, 6]] },
+    { x0: cx - 6, y0: trunkTopY + 20, cxq: cx - 16, cyq: trunkTopY + 18, x1: cx - 26, y1: trunkTopY + 12,
+      w0: 5, w1: 3, anchor: 0.8, phase: 2.3,
+      blobs: [[-6, 0, 7], [-1, -5, 8], [6, -1, 7], [-3, 4, 6], [1, 6, 5], [-12, 3, 5], [-7, -4, 6]] },
+    { x0: cx + 3, y0: trunkTopY + 40, cxq: cx + 12, cyq: trunkTopY + 39, x1: cx + 19, y1: trunkTopY + 35,
+      w0: 4, w1: 2, anchor: 0.78, phase: 4.0,
+      blobs: [[-6, 0, 7], [1, -4, 7], [7, 0, 6], [0, 3, 6], [-2, 2, 6], [4, -2, 5]] },
+    { x0: cx - 3, y0: potTop - 1, cxq: cx - 4, cyq: potTop - 8, x1: cx - 4, y1: potTop - 13,
+      w0: 3, w1: 2, anchor: 0.85, phase: 1.4,
+      blobs: [[-5, 0, 5], [0, -3, 5], [5, 0, 5], [0, 2, 5]] }
+  ];
+
+  const rng = mulberry32(1337);
+  bgHills = [];
+  const m1 = tall ? 34 : 22, m2 = tall ? 24 : 15;
+  for (let x = 0; x < W; x++) {
+    const v1 = Math.sin(x * 0.035 + 1.3) * 0.6 + Math.sin(x * 0.013 + 4.2) * 0.4;
+    const v2 = Math.sin(x * 0.055 + 0.4) * 0.5 + Math.sin(x * 0.019 + 2.1) * 0.5;
+    bgHills.push({
+      far: Math.round(horizonY - m1 - v1 * (tall ? 10 : 6)),
+      near: Math.round(horizonY - m2 - v2 * (tall ? 7 : 4))
+    });
+  }
+  bgTrees = [];
+  const treeCount = Math.round(W / 16);
+  for (let i = 0; i < treeCount; i++) {
+    bgTrees.push({
+      x: Math.round(5 + rng() * (W - 10)),
+      base: horizonY - 1,
+      h: 5 + Math.round(rng() * 5),
+      r: 2 + Math.round(rng() * 2)
+    });
+  }
+  groundDots = [];
+  for (let i = 0; i < 46; i++) {
+    groundDots.push({
+      x: rng() * W,
+      y: horizonY + 1 + rng() * (H - horizonY - 1),
+      c: rng() < 0.5 ? '#4a7a3e' : '#35602d'
+    });
+  }
+
+  leaves = [];
+  for (let i = 0; i < 22; i++) spawnLeaf(rng(), rng() * W);
+  streaks = [];
+  const sCount = Math.round(W / 9);
+  for (let i = 0; i < sCount; i++) {
+    streaks.push({
+      x: rng() * W, y: 6 + rng() * (horizonY - 12),
+      len: 7 + Math.round(rng() * 9), speed: 13 + rng() * 18,
+      row: rng() < 0.5 ? 0 : 1
+    });
+  }
+}
+
+function spawnLeaf(yFrac, x) {
+  const r = Math.random();
+  const shade = r < 0.4 ? '#4a8a3c' : (r < 0.75 ? '#78b84a' : '#b8e070');
+  leaves.push({
+    x: x !== undefined ? x : -4,
+    y: 4 + yFrac * (horizonY - 8),
+    vx: 16 + Math.random() * 18,
+    vy: 3 + Math.random() * 6,
+    phase: Math.random() * TAU,
+    wob: 0.5 + Math.random() * 1.2,
+    shade, hi: Math.random() < 0.5 ? '#d8f0a0' : '#9ad05e'
+  });
+}
+
+function wind(t) { return 0.75 + 0.25 * Math.sin(t * 0.33) * Math.sin(t * 0.11 + 2); }
+
+function step(dt, t) {
+  const w = wind(t);
+  for (const l of leaves) {
+    l.x += l.vx * w * dt;
+    l.y += (l.vy + Math.sin(t * 3 + l.phase) * l.wob) * dt;
+    if (l.x > W + 4 || l.y > horizonY - 2) {
+      const r = Math.random();
+      l.shade = r < 0.4 ? '#4a8a3c' : (r < 0.75 ? '#78b84a' : '#b8e070');
+      l.hi = Math.random() < 0.5 ? '#d8f0a0' : '#9ad05e';
+      l.x = -3 - Math.random() * 6;
+      l.y = 4 + Math.random() * (horizonY - 10);
+      l.vx = 16 + Math.random() * 18;
+      l.vy = 3 + Math.random() * 6;
+    }
+  }
+  for (const s of streaks) {
+    s.x += s.speed * w * dt;
+    if (s.x > W + s.len + 2) { s.x = -s.len - 2; s.y = 6 + Math.random() * (horizonY - 12); }
+  }
+}
+
+function sky() {
+  const bands = [
+    '#a9d3ef', '#a4cfeb', '#9fc9e7', '#9ac4e3', '#95bee0', '#90b8dd',
+    '#8bb1da', '#87abd7', '#84a6d4', '#83a3d2', '#84a1d1'
+  ];
+  const rows = horizonY;
+  for (let y = 0; y < rows; y++) {
+    const b = Math.min(bands.length - 1, Math.floor(y / rows * bands.length));
+    ctx.fillStyle = bands[b];
+    ctx.fillRect(0, y, W, 1);
+  }
+  ctx.fillStyle = '#eaf6fc';
+  const cr = 13;
+  const ccx = Math.round(W * 0.78), ccy = Math.round(H * 0.16);
+  for (let j = -cr; j <= cr; j++)
+    for (let i = -cr; i <= cr; i++)
+      if (i * i + j * j <= cr * cr && ((i + j) & 1) === 0) ctx.fillRect(ccx + i, ccy + j, 1, 1);
+  const r2 = 8 * 8 + 6;
+  for (let j = -8; j <= 8; j++)
+    for (let i = -8; i <= 8; i++)
+      if (i * i + j * j <= r2) ctx.fillRect(ccx + i, ccy + j, 1, 1);
+}
+
+function background() {
+  ctx.fillStyle = '#d5dfd9';
+  for (let x = 0; x < W; x++) {
+    const top = bgHills[x].far;
+    for (let y = top; y < horizonY; y++) ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.fillStyle = '#e6ede9';
+  for (let x = 0; x < W; x++) ctx.fillRect(x, bgHills[x].far, 1, 1);
+  ctx.fillStyle = '#c2d0c8';
+  for (let x = 0; x < W; x++) if ((x & 1) === 0) ctx.fillRect(x, bgHills[x].far + 3, 1, 1);
+
+  ctx.fillStyle = '#c2d6ce';
+  for (let x = 0; x < W; x++) {
+    const top = bgHills[x].near;
+    for (let y = top; y < horizonY; y++) ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.fillStyle = '#d9e6de';
+  for (let x = 0; x < W; x++) ctx.fillRect(x, bgHills[x].near, 1, 1);
+
+  for (const t of bgTrees) {
+    ctx.fillStyle = '#a3c0ae';
+    ctx.fillRect(t.x, t.base - t.h, 1, t.h);
+    disc(t.x, t.base - t.h - 1, t.r, '#a3c0ae');
+  }
+
+  ctx.fillStyle = '#5d9150';
+  ctx.fillRect(0, horizonY, W, H - horizonY);
+  for (let y = horizonY; y < H; y += 3) {
+    ctx.fillStyle = (Math.floor(y / 3) % 2 === 0) ? '#568a4a' : '#639855';
+    ctx.fillRect(0, y, W, 1);
+  }
+  ctx.fillStyle = '#4a7a3e';
+  ctx.fillRect(0, horizonY, W, 1);
+  for (const d of groundDots) {
+    ctx.fillStyle = d.c;
+    ctx.fillRect(Math.round(d.x), Math.round(d.y), 1, 1);
+  }
+}
+
+function drawBranchStub(x0, y0, x1, y1, w) {
+  taper(x0, y0, (x0 + x1) / 2, y0 - (y0 - y1) * 0.6 - 2, x1, y1, w + 1, Math.max(2, w - 1), '#2b1a14');
+  taper(x0, y0, (x0 + x1) / 2, y0 - (y0 - y1) * 0.6 - 2, x1, y1, w, Math.max(1, w - 2), '#6e4430');
+  const steps = Math.max(3, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = quadAt(x0, (x0 + x1) / 2, x1, t), y = quadAt(y0, y0 - (y0 - y1) * 0.6 - 2, y1, t);
+    ctx.fillStyle = '#9a6646';
+    ctx.fillRect(Math.round(x - w * 0.35), Math.round(y - 1), 1, 1);
+  }
+}
+
+function drawTrunkPiece(p) {
+  taper(p.x0, p.y0, p.cxq, p.cyq, p.x1, p.y1, p.w0 + 2, p.w1 + 2, '#2b1a14', p.taperEase);
+  taper(p.x0, p.y0, p.cxq, p.cyq, p.x1, p.y1, p.w0, p.w1, '#6e4430', p.taperEase);
+  const steps = Math.max(4, Math.ceil(Math.hypot(p.x1 - p.x0, p.y1 - p.y0)));
+  const rng = mulberry32(77);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = quadAt(p.x0, p.cxq, p.x1, t), y = quadAt(p.y0, p.cyq, p.y1, t);
+    const w = (p.w0 + (p.w1 - p.w0) * t) / 2;
+    const hx = Math.round(x - w * 0.75), hy = Math.round(y - w * 0.4);
+    const sx = Math.round(x + w * 0.65), sy = Math.round(y + w * 0.45);
+    ctx.fillStyle = '#9a6646';
+    ctx.fillRect(hx, hy, 1, 1);
+    if (w >= 2) { ctx.fillStyle = '#c79a6b'; ctx.fillRect(hx - 1, hy + 1, 1, 1); }
+    ctx.fillStyle = '#4a2c1f';
+    ctx.fillRect(sx, sy, 1, 1);
+    if (rng() < 0.08) { ctx.fillStyle = '#3a2218'; ctx.fillRect(Math.round(x), Math.round(y) + Math.max(1, w * 0.4), 1, 1); }
+    if (rng() < 0.14) {
+      ctx.fillStyle = '#4a2c1f';
+      const bx = Math.round(x), by = Math.round(y);
+      ctx.fillRect(bx, by, 1, 2);
+      if (rng() < 0.5) { ctx.fillStyle = '#5d3a28'; ctx.fillRect(bx + 1, by + 1, 1, 1); }
+    }
+    if (rng() < 0.03 && w >= 3) {
+      ctx.fillStyle = '#3a2218';
+      ctx.fillRect(Math.round(x) + 1, Math.round(y), 2, 2);
+      ctx.fillStyle = '#5d3a28';
+      ctx.fillRect(Math.round(x) + 1, Math.round(y), 1, 1);
+    }
+  }
+}
+
+function drawPad(pad, off) {
+  const ax = quadAt(pad.x0, pad.cxq, pad.x1, pad.anchor);
+  const ay = quadAt(pad.y0, pad.cyq, pad.y1, pad.anchor);
+  const dx = Math.round(off), dy = Math.round(off * 0.5);
+  const rngSep = mulberry32(Math.round(pad.x0 * 31 + pad.y0 * 17));
+  for (let i = 0; i < 14; i++) {
+    const a = rngSep() * TAU, rr = rngSep() * 4;
+    ctx.fillStyle = '#122019';
+    ctx.fillRect(Math.round(ax + dx + Math.cos(a) * rr * 1.6), Math.round(ay + dy + Math.sin(a) * rr * 0.8), 1, 1);
+  }
+  for (const b of pad.blobs) disc(ax + b[0] + dx, ay + b[1] + dy, b[2], '#122019');
+  for (const b of pad.blobs) disc(ax + b[0] + dx - 1, ay + b[1] + dy - 1, b[2] - 1, '#2f5d34');
+  for (const b of pad.blobs) disc(ax + b[0] + dx - 1, ay + b[1] + dy - 2, Math.max(1, b[2] - 2), '#4a8a3c');
+  for (const b of pad.blobs) disc(ax + b[0] + dx - 2, ay + b[1] + dy - 3, Math.max(1, b[2] - 4), '#8cc654');
+  const rng = mulberry32(Math.round(ax * 97 + ay * 31 + pad.phase * 10));
+  for (const b of pad.blobs) {
+    const bx = ax + b[0] + dx, by = ay + b[1] + dy;
+    for (let i = 0; i < b[2] * 2; i++) {
+      const a = rng() * TAU, rr = rng() * b[2] * 0.8;
+      const pxp = Math.round(bx + Math.cos(a) * rr) - 2, pyp = Math.round(by + Math.sin(a) * rr - Math.abs(Math.cos(a)) * rr * 0.6) - 3;
+      ctx.fillStyle = rng() < 0.6 ? '#a8da6a' : '#c8ec86';
+      ctx.fillRect(pxp, pyp, 1, 1);
+    }
+    const er = rng();
+    const ex = bx + Math.round(Math.cos(er * TAU) * (b[2] - 1));
+    const ey = by + Math.round(Math.sin(er * TAU) * (b[2] - 1)) - 2;
+    ctx.fillStyle = '#c8ec86';
+    ctx.fillRect(ex, ey, 1, 1);
+    ctx.fillStyle = '#2f5d34';
+    ctx.fillRect(ex + 1, ey + 1, 1, 1);
+  }
+  for (const b of pad.blobs) {
+    const bx = ax + b[0] + dx, by = ay + b[1] + dy + b[2] - 1;
+    for (let i = -b[2] + 1; i <= b[2] - 1; i++) {
+      if (((i + b[2]) & 1) === 0) {
+        ctx.fillStyle = '#122019';
+        ctx.fillRect(bx + i, by, 1, 1);
+        ctx.fillStyle = '#1d3b2a';
+        ctx.fillRect(bx + i, by - 1, 1, 1);
+      }
+    }
+  }
+}
+
+function drawPot(p) {
+  const { rimX0, rimY0, rimW, rimH, bodyX0, bodyY0, bodyW, bodyH, half, rimHalf } = p;
+  ctx.fillStyle = 'rgba(20,40,25,0.28)';
+  for (let i = -half - 2; i <= half + 2; i++)
+    if (((i + half) & 1) === 0) ctx.fillRect(cx + i, horizonY, 1, 1);
+  disc(cx - half + 3, potTopY + bodyH - 1, 3, '#33202c');
+  disc(cx + half - 3, potTopY + bodyH - 1, 3, '#33202c');
+
+  ctx.fillStyle = '#b08e7e';
+  ctx.fillRect(rimX0, rimY0, rimW, rimH);
+  ctx.fillRect(bodyX0, bodyY0, bodyW, bodyH);
+  ctx.fillStyle = '#c9a591';
+  ctx.fillRect(rimX0 + 1, rimY0 + 1, rimW - 2, rimH - 2);
+  for (let y = 0; y < bodyH; y++) {
+    const inset = Math.round(2.5 * (y / (bodyH - 1)));
+    ctx.fillRect(bodyX0 + 1 + inset, bodyY0 + y, bodyW - 2 - inset * 2, 1);
+  }
+  ctx.fillStyle = '#e0c3ae';
+  ctx.fillRect(rimX0, rimY0, rimW, 1);
+  ctx.fillRect(rimX0, rimY0, 1, rimH);
+  ctx.fillRect(rimX0 + rimW - 1, rimY0, 1, rimH);
+  ctx.fillStyle = '#d8b6a0';
+  ctx.fillRect(rimX0 + 2, rimY0 + 1, rimW - 4, 1);
+  ctx.fillStyle = '#8a5f50';
+  ctx.fillRect(rimX0, rimY0 + rimH, rimW, 1);
+  for (let y = 1; y < bodyH - 2; y++) {
+    const inset = Math.round(2.5 * (y / (bodyH - 1)));
+    ctx.fillRect(bodyX0 + 2 + inset, bodyY0 + y, 2, 1);
+    if ((y & 1) === 0) {
+      ctx.fillStyle = '#a3776a';
+      ctx.fillRect(bodyX0 + 5 + inset, bodyY0 + y, 1, 1);
+      ctx.fillRect(bodyX0 + bodyW - 7 - inset, bodyY0 + y, 1, 1);
+    }
+  }
+  ctx.fillStyle = '#5a3f38';
+  ctx.fillRect(rimX0, rimY0 + rimH - 1, rimW, 1);
+  for (let y = 0; y < bodyH; y++) {
+    const inset = Math.round(2.5 * (y / (bodyH - 1)));
+    ctx.fillRect(bodyX0 + bodyW - 2 - inset, bodyY0 + y, 1, 1);
+    ctx.fillRect(bodyX0 + bodyW - 3 - inset, bodyY0 + y, 1, 1);
+  }
+  ctx.fillStyle = '#4a7a3e';
+  ctx.fillRect(rimX0 + 2, rimY0 + 1, rimW - 4, 1);
+  ctx.fillStyle = '#2f5d34';
+  ctx.fillRect(rimX0 + 2, rimY0 + 2, rimW - 4, 1);
+}
+
+function render(t) {
+  sky();
+  background();
+
+  const w = wind(t);
+  const offs = padDefs.map((p, i) =>
+    Math.round(Math.sin(t * 1.05 + p.phase) * 1.9 * w + Math.sin(t * 2.3 + p.phase * 1.7) * 0.6 * w));
+
+  drawPot(potSpecs[0]);
+
+  for (const r of rootDefs()) {
+    drawTrunkPiece({ x0: cx, y0: r.y0, cxq: r.mx, cyq: r.my, x1: r.tx, y1: r.ty, w0: 8, w1: 2 });
+  }
+  drawTrunkPiece(basePts[0]);
+  const sway = offs[0] * 0.25;
+  drawTrunkPiece({
+    x0: basePts[0].x1, y0: basePts[0].y1,
+    cxq: padDefs[0].cxq + sway, cyq: padDefs[0].cyq,
+    x1: padDefs[0].x1 + offs[0], y1: padDefs[0].y1,
+    w0: 5, w1: padDefs[0].w1
+  });
+
+  const pad = padDefs[2];
+  const pax = quadAt(pad.x0, pad.cxq, pad.x1, pad.anchor);
+  const pay = quadAt(pad.y0, pad.cyq, pad.y1, pad.anchor);
+  drawBranchStub(cx + 2, trunkTopY + 28, pax + offs[2], pay + 3, 3);
+  drawPad(padDefs[2], offs[2]);
+  drawPad(padDefs[1], offs[1]);
+  drawPad(padDefs[3], offs[3]);
+  drawPad(padDefs[0], offs[0]);
+
+  for (const s of streaks) {
+    const sx = Math.round(s.x), sy = Math.round(s.y);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillRect(sx, sy, 3, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillRect(sx + 3, sy, 2, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(sx + 5, sy, 1, 1);
+    if (s.len > 7) { ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(sx + 6, sy, 1, 1); }
+    if (s.row) {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillRect(sx + 1, sy + 1, 3, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(sx + 4, sy + 1, 2, 1);
+    }
+  }
+
+  for (const l of leaves) {
+    const lx = Math.round(l.x), ly = Math.round(l.y);
+    ctx.fillStyle = l.shade;
+    ctx.fillRect(lx, ly, 2, 1);
+    ctx.fillStyle = l.hi;
+    ctx.fillRect(lx, ly, 1, 1);
+  }
+}
+
+function rootDefs() {
+  return [
+    { y0: potTopY - 4, mx: cx - 11, my: potTopY + 1, tx: cx - 17, ty: potTopY + 2 },
+    { y0: potTopY - 4, mx: cx - 4, my: potTopY + 1, tx: cx - 9, ty: potTopY + 3 },
+    { y0: potTopY - 4, mx: cx + 8, my: potTopY + 1, tx: cx + 15, ty: potTopY + 2 },
+    { y0: potTopY - 4, mx: cx + 2, my: potTopY + 2, tx: cx + 6, ty: potTopY + 3 }
+  ];
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const t = reduced ? 0 : now / 1000;
+  if (!reduced) step(dt, t);
+  render(t);
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize', layout);
+layout();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

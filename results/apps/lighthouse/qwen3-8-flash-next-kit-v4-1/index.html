@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lighthouse at Night</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #070a1a; overflow: hidden; }
+  canvas {
+    position: fixed; left: 0; top: 0;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<script>
+'use strict';
+const cv = document.getElementById('scene');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+let W = 160, H = 120, S = 1, HORIZON = 82, BG = '#070a1a';
+
+function mulberry32(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+// ---- palette (night ramps, dark -> light) ----
+const SKY  = ['#070a1a','#0e1330','#182049','#252e62'];
+const MOON = ['#7f8db2','#b8c3d9','#eef1f6'];
+const CLD  = ['#1b2142','#2b335c','#3d477a'];
+const SEA  = ['#0a1930','#10294a','#183e68','#26618f','#4794bb'];
+const FOAM = '#cfe6f2';
+const ROCK = ['#14131e','#242232','#38364a','#4e4c63'];
+const WIN  = '#ffce73';
+const TWR  = ['#6a6f88','#9aa0b6','#d4d9e8'];
+const RED  = ['#7c2c33','#b5423f','#d97059'];
+const TRIM = '#232838';
+const STAR = '#c9d4f0';
+
+// ---- static geometry (seeded, identical every frame) ----
+let R = mulberry32(1337);
+const STARS = Array.from({length: 52}, () => ({
+  x: R(), y: R()*0.4, tw: 1 + (R()*2|0), p: R()*6.28,
+  c: R() < 0.75 ? STAR : MOON[1]
+}));
+const SKY_SPK = Array.from({length: 120}, () => ({ x: R(), y: R()*0.45, c: R() < 0.5 ? SKY[2] : SKY[1] }));
+const SEA_SPK = Array.from({length: 80}, () => ({ x: R(), y: 0.6 + R()*0.32, c: R() < 0.5 ? SEA[3] : SEA[1] }));
+
+// jagged outcrop in front of the cliff foot (fixed profile)
+
+
+// ---- pixel helpers ----
+const px = (x, y, c) => { ctx.fillStyle = c; ctx.fillRect(x|0, y|0, 1, 1); };
+const rect = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x|0, y|0, w|0, h|0); };
+function disc(cx, cy, r, c){ for (let y=-r; y<=r; y++) for (let x=-r; x<=r; x++) if (x*x+y*y <= r*r + r*0.8) px(cx+x, cy+y, c); }
+const dith = (x, y) => ((x|0) + (y|0)) % 2 === 0;
+
+// ---- subject placement (recomputed on resize) ----
+let CX, PLATEAU, CLIFFL, CLIFFR, TOWER_TOP, HOUSE_TOP, HX, HW, HH, ROOF_H;
+let BASE, TOWER_H, SHIP_Y, SEA_TOP;
+function layout(){
+  const sky = Math.max(30, Math.round(H * 0.7));   // sky band
+  const scale = Math.max(0.7, Math.min(1.15, H / 150));
+  TOWER_H = Math.round(58 * scale);                // finial to base
+  HH = Math.max(9, Math.round(12 * scale));        // house wall height
+  HW = 21; ROOF_H = 5;
+  SEA_TOP = Math.min(sky + 2, Math.max(6, sky - 4 - TOWER_H));   // highest finial pixel
+  BASE = H - 6 - HH - ROOF_H;                      // plateau: tallest objects fit above the sea
+  BASE = Math.max(SEA_TOP + 8, Math.min(BASE, sky - 10, Math.round(H * 0.62)));
+  HORIZON = Math.max(BASE + 2, Math.min(H - 3, BASE + Math.round((H - BASE) * 0.45)));
+  SHIP_Y = BASE - 2;
+  const groupW = 30 + 12 + HW + 6 + Math.max(10, Math.round(H * 0.14));
+  const cxIdeal = Math.round(W/2 - (groupW - 58) / 2);
+  CX = Math.max(30, Math.min(cxIdeal, Math.max(30, W - groupW + 24)));
+  HX = CX + 7;                                     // house left edge, abuts tower
+  PLATEAU = HX + HW + 6;                           // flat top ends here
+  CLIFFL = Math.max(6, CX - 30);
+  CLIFFR = Math.min(W - 2, PLATEAU + Math.max(10, Math.round((H - BASE) * 0.5)) + 4);
+  TOWER_TOP = BASE - TOWER_H + 8;                  // lantern room top
+  HOUSE_TOP = BASE - HH;                           // house wall top
+  buildProfile();
+}
+
+// jagged rock top edge, deterministic per layout
+let PROF;
+function buildProfile(){
+  const rr = mulberry32(24);
+  const p = [];
+  for (let x = 0; x <= W + 2; x++) p.push(H + 4);
+  // jagged ascent built from irregular stepped blocks: run of 2-5 px, then drop/rise 1-4 px
+  const jagged = (x0, x1, y0, y1) => {
+    let x = x0, y = y0;
+    while (x <= x1) {
+      const run = 2 + (rr()*4|0);
+      for (let k = 0; k <= run && x <= x1; k++, x++) p[x] = y;
+      const target = y + (rr() < 0.12 ? 2 : -(1 + (rr()*3|0)));
+      while (y !== target && x <= x1) { p[x++] = y; y += target > y ? 1 : -1; }
+    }
+    for (let x2 = x0; x2 <= x1; x2++) {                    // no sheer 2px cliffs
+      if (p[x2] !== undefined && p[x2+1] !== undefined && p[x2] - p[x2+1] >= 3) p[x2+1] = p[x2] - 2;
+    }
+  };
+  // left shoulder: stepped jagged ridge up from the waterline to the saddle
+  jagged(CLIFFL, CX - 9, Math.min(HORIZON + 3, BASE + 12), BASE + 3);
+  // saddle dip into the plateau
+  jagged(CX - 8, HX, BASE + 4, BASE);
+  // plateau (flat, under tower + house)
+  for (let x = HX + 1; x <= PLATEAU; x++) p[x] = BASE;
+  // right flank: stepped jagged descent into the sea
+  let y = BASE;
+  for (let x = PLATEAU + 1; x <= CLIFFR; x++) {
+    y += rr() < 0.62 ? 1 : rr() < 0.85 ? 2 : 0;
+    if (rr() < 0.18) y -= 1;                     // notch
+    p[x] = Math.min(y, H + 4);
+  }
+  for (let x = CLIFFR + 1; x <= W + 2; x++) p[x] = H + 4;
+  PROF = p;
+}
+const rockTop = x => PROF[x];
+
+
+// ---- drawing ----
+function drawSky(t){
+  const hz = HORIZON;
+  for (let y = 0; y < hz; y++) rect(0, y, W, 1, SKY[Math.min(3, (y/(hz/3.6))|0)]);
+  for (const s of SKY_SPK) px(s.x*W, s.y*hz, s.c);
+  for (const s of STARS) {
+    if (((t*1.4 + s.p*3)|0) % (s.tw + 4) === 0) continue;
+    px(s.x*W, s.y*hz, s.c);
+  }
+}
+
+function drawShip(t){
+  const x = ((t * 0.6) % (W + 60)) - 30;
+  const y = SHIP_Y + ((t % 2) === 0 ? 0 : 0) + Math.round(Math.sin(t*1.4)*0.8);
+  rect(x, y + 1, 9, 2, '#0d1122');
+  px(x + 1, y, '#0d1122'); px(x + 2, y, '#0d1122');
+  px(x + 4, y - 1, '#0d1122'); px(x + 4, y - 2, '#0d1122');
+  px(x + 6, y, '#0d1122'); px(x + 7, y, '#0d1122');
+  px(x + 8, y + 1, '#f2a33a');   // stern light
+}
+
+function drawMoon(t){
+  const mx = (W*0.7)|0, my = (HORIZON*0.28)|0;
+  disc(mx, my, 8, MOON[0]);
+  disc(mx-1, my-1, 7, MOON[1]);
+  disc(mx-2, my-2, 5, MOON[2]);
+  px(mx+3, my+3, MOON[0]); px(mx-4, my+4, MOON[1]); px(mx+2, my-5, MOON[0]);
+}
+
+function cloudBlob(cx, cy, s, drift, span){
+  const x = cx + Math.round(drift % span) - span/2;
+  const puffs = [[0,0,5],[-6,1,4],[6,1,4],[-11,2,3],[10,3,3],[-3,-2,4],[4,-2,3]];
+  for (const [ox, oy, r] of puffs) disc(x+ox, cy+oy, Math.max(1, r+s-2), CLD[0]);
+  for (const [ox, oy, r] of puffs) disc(x+ox, cy+oy-1, Math.max(1, r+s-3), CLD[1]);
+  for (const [ox, oy, r] of puffs) if (r >= 3) disc(x+ox, cy+oy-2, Math.max(1, r+s-4), CLD[2]);
+}
+
+function drawClouds(t){
+  // moon-hugging cloud: oscillates so it laps at the moon's lower edge
+  const mx = (W*0.7)|0, my = (HORIZON*0.28)|0;
+  cloudBlob(mx + Math.round(Math.sin(t*0.12)*6), my + 6, 1, 0, 1);
+  cloudBlob(W*0.15, HORIZON*0.15, 0, t*1.4, Math.max(220, W*1.6));
+  cloudBlob(W*0.5, HORIZON*0.4, 2, t*2.6 + 160, Math.max(240, W*1.7));
+}
+
+function drawBeam(t, ox, oy){
+  const len = Math.hypot(Math.max(0, ox - 2), Math.max(0, oy - 2), Math.max(0, oy - HORIZON)) * 1.02;
+  const a = Math.sin(t * 0.28) * 0.75 + 0.18;
+  const dx = Math.cos(a), dy = Math.sin(a);
+  const nx = -dy, ny = dx;
+  const RINGS = [[1.0, '#fff3c4'], [2.2, '#ffe08a'], [3.6, '#e8ca7e'], [5.4, '#9a8a58'], [7.4, '#5e5a44'], [9.5, '#3d477a']];
+  for (let d = 6; d < len; d++) {
+    const x0 = ox + dx*d, y0 = oy + dy*d;
+    const maxw = RINGS[RINGS.length-1][0] + d * 0.045;
+    for (let w = -maxw; w <= maxw; w += 0.4) {
+      const x = Math.round(x0 + nx*w), y = Math.round(y0 + ny*w);
+      if (x < 0 || x >= W || y < 0 || y >= HORIZON) continue;
+      const aw = Math.abs(w);
+      let c = null, k = 0;
+      for (; k < RINGS.length; k++) {
+        if (aw <= RINGS[k][0] + d * 0.045) { c = RINGS[k][1]; break; }
+      }
+      if (!c) continue;
+      // outer rings thin out with checker dithering -> soft pixel falloff
+      if (k <= 1 || d < 18 || dith(x + k, y + k) || dith(x - k, y)) px(x, y, c);
+    }
+  }
+  // faint halo around the lantern room
+  const HR = [['rgba(255,216,120,0.28)', 7], ['rgba(255,216,120,0.14)', 10]];
+  for (const [c, r] of HR) for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+    if (x*x + y*y <= r*r && ((x + y) & 1) === 0) px(ox + x, oy + y, c);
+  }
+  disc(ox, oy, 3, '#ffe08a');
+}
+
+function drawSea(t){
+  const hz = HORIZON;
+  rect(0, hz, W, 3, SEA[1]);
+  rect(0, hz + 3, W, 4, SEA[2]);
+  rect(0, hz + 7, W, H, SEA[3]);
+  rect(0, hz + 7 + Math.max(2, ((H - hz) * 0.35)|0), W, H, SEA[4]);
+  rect(0, H - Math.max(4, (H*0.07)|0), W, H, SEA[0]);
+  // moon glitter
+  const gx = (W*0.7)|0;
+  for (let y = hz + 1; y < hz + 18 && y < H; y += 2) {
+    px(gx + ((y*7 + (t*3|0)) % 5) - 2, y, SEA[4]);
+    px(gx + ((y*11 + (t*5|0)) % 7) - 3, y+1, SEA[3]);
+  }
+  for (const s of SEA_SPK) if ((s.y*H + (t|0)) % 3) px(s.x*W, s.y*H, s.c);
+  // three rolling wave layers drifting horizontally at parallax speeds
+  const shelf = CLIFFL - 14;
+  const L = Math.min(shelf, W);
+  for (const [by, amp, ph, spd] of [[hz + 3, 1, 0, 9], [hz + 8, 1.5, 2.1, 15], [hz + 13, 2, 4.2, 23]]) {
+    if (by > H - 4) continue;
+    const dark = by > hz + 10 ? SEA[3] : SEA[2];
+    for (let x = 0; x < L; x++) {
+      const y = Math.round(by + Math.sin(x*0.11 - t*(spd*0.12) + ph)*amp + Math.sin(x*0.05 + t*0.9 + ph)*1);
+      rect(x, y, 1, by + 3 - y, dark);
+      px(x, y, SEA[4]); px(x, y - 1, SEA[3]);
+      if (((x + (t*spd*0.45|0)) % 13) < 2) { px(x, y - 1, FOAM); px(x + 1, y - 1, FOAM); px(x, y - 2, FOAM); }
+    }
+  }
+  // breakers: crests build up, curl over and collapse into foam patches
+  const nHz = Math.max(3, (H - hz) * 0.05);
+  for (const [by, ph, spd] of [[H - 14, 1.3, 26], [H - 7, 3.9, 33]]) {
+    if (by < hz + 10) continue;
+    for (let x = 0; x < L; x++) {
+      const crest = Math.sin(x*0.16 - t*(spd*0.1) + ph);
+      if (crest > 0.45) {
+        const hgt = Math.round(1 + (crest - 0.45) * 9);
+        const y = Math.round(by + Math.sin(x*0.07 + t*0.8)*1.5);
+        rect(x, y - hgt, 1, hgt + 4, SEA[4]);
+        px(x, y - hgt - 1, FOAM);
+        if (crest > 0.8) {                          // collapsing crest: foam cap + flying spray
+          px(x, y - hgt - 2, FOAM); px(x + 1, y - hgt - 1, FOAM); px(x - 1, y - hgt - 2, FOAM);
+          if (((x + (t*spd*0.4|0)) % 5) < 2) { px(x + 2, y - hgt - 3, FOAM); px(x - 2, y - hgt - 4, FOAM); }
+        }
+      }
+    }
+  }
+}
+
+function drawCliff(t){
+  // body
+  for (let x = CLIFFL; x <= CLIFFR; x++) {
+    const top = rockTop(x);
+    rect(x, top, 1, H - top, ROCK[1]);
+  }
+  // facets: left-lit blocky ledges, right flank in shadow
+  for (let x = CLIFFL; x <= CLIFFR; x++) {
+    const top = rockTop(x);
+    if (x <= PLATEAU) {
+      if (top < rockTop(Math.max(CLIFFL, x - 1))) {           // riser: catchlight on its left edge
+        for (let y = rockTop(Math.max(CLIFFL, x - 1)); y < top; y++) px(x, y, ROCK[3]);
+      }
+      px(x, top, ROCK[3]); px(x, top + 1, ROCK[2]);          // lit ledge top
+      if (x > PLATEAU - 8) { px(x, top, ROCK[2]); }
+    } else {
+      px(x, top, ROCK[2]);
+      for (let y = top; y < H; y++) px(x, y, ROCK[0]);
+      if ((x + top) % 5 === 0) px(x, top + 1, ROCK[1]);
+    }
+    // strata speckles, cooler near the top, darker with depth
+    for (let y = top + 2; y < H; y++) {
+      const d = y - top;
+      if ((x + d) % 6 === 0) px(x, y, ROCK[2]);
+      else if ((x*2 + d) % 19 === 0) px(x, y, ROCK[3]);
+      else if (d > 10 && (x * 3 + d) % 11 === 0) px(x, y, ROCK[0]);
+      if (x > PLATEAU - 4 && (x + d) % 9 === 0) px(x, y, ROCK[0]);
+    }
+  }
+  // vertical cracks
+  const rc = mulberry32(7);
+  for (let i = 0; i < 12; i++) {
+    const x = CLIFFL + 4 + ((rc() * (CLIFFR - CLIFFL - 8))|0);
+    let y = rockTop(x) + 3 + (rc()*6|0);
+    const len = 5 + (rc()*9|0);
+    for (let k = 0; k < len; k++) px(x + (k%3===2?1:0), y + k, ROCK[0]);
+  }
+  // foam surging against the cliff base, rising and receding with the swell
+  const wet = Math.round(Math.sin(t * 1.15) * 2.2);
+  for (let x = Math.max(0, CLIFFL - 10); x <= CLIFFR + 10 && x < W; x++) {
+    if (x >= CLIFFL && x <= CLIFFR && rockTop(x) > HORIZON) continue;
+    if (x < CLIFFL && x > CLIFFL - 2 && rockTop(x) <= HORIZON) continue;
+    if (Math.sin(t*1.8 + x*0.7) > 0.25 || (x >= CLIFFL && x <= CLIFFR)) {
+      const base = H - 1;
+      px(x, base - (x % 2), FOAM);
+      if (Math.sin(t*2.2 + x*0.9) > 0.1) px(x, base - 2 - wet, FOAM);
+      if (Math.sin(t*1.5 + x*1.3) > 0.6) { px(x + 1, base - 3 - wet, FOAM); px(x - 1, base - 2 - wet, FOAM); }
+    }
+  }
+  rect(CLIFFL - 1, H - 5, CLIFFR - CLIFFL + 2, 5, ROCK[0]);
+}
+
+function drawOutcrop(t){
+  // jagged foreground rock stumps standing in the breaker line
+  const rocks = [[CLIFFL - 16, 15, 12], [CLIFFL - 32, 11, 9]];
+  for (const [rx, rh, rw] of rocks) {
+    for (let i = 0; i < rw; i++) {
+      const x = rx + i;
+      if (x < 0 || x >= CLIFFL) continue;
+      const top = H + 1 - Math.max(2, rh - Math.abs(i - (rw >> 1)));
+      rect(x, top, 1, H - top, ROCK[1]);
+      px(x, top, ROCK[3]); px(x, top + 1, ROCK[2]);
+      if ((i + (top >> 1)) % 4 === 0) px(x, top + 3, ROCK[0]);
+      rect(x, H - 2, 1, 2, ROCK[0]);
+    }
+  }
+  // foam bursts where waves hit the foreground rocks
+  for (const [rx, rh, rw] of rocks) {
+    for (let i = 0; i < rw; i += 1) {
+      const x = rx + i;
+      if (x < 0 || x >= CLIFFL) continue;
+      const by = H + 1 - Math.max(2, rh - Math.abs(i - (rw >> 1)));
+      if (Math.sin(t*1.8 + i*0.8 + rx) > 0.3) {
+        px(x, by - 1, FOAM); px(x + 1, by - 2, FOAM); px(x - 1, by, FOAM); px(x + 2, by - 1, FOAM);
+      }
+    }
+  }
+}
+
+function shaded(x, y, w, h, ramp){
+  rect(x, y, w, h, ramp[1]);
+  rect(x, y, 2, h, ramp[2]);
+  rect(x + w - 2, y, 2, h, ramp[0]);
+}
+
+function drawHouse(t){
+  const hx = HX, hy = HOUSE_TOP, w = HW, h = HH;
+  shaded(hx, hy, w, h, TWR);
+  // low-pitch gable roof with eaves
+  for (let r = 0; r < ROOF_H; r++) rect(hx - 1 + r, hy - ROOF_H + r, 23 - 2*r, 1, r < 2 ? '#2c2440' : '#1b1529');
+  rect(hx - 1, hy - 1, 23, 1, '#2c2440');
+  px(hx + 10, hy - ROOF_H - 1, '#3d3358'); // ridge cap
+  // chimney with a wisp of smoke
+  rect(hx + 3, hy - ROOF_H - 4, 3, 5, '#241d33'); px(hx + 3, hy - ROOF_H - 4, '#38364a');
+  const sp = (t * 1.2) % 6;
+  px(hx + 4, hy - ROOF_H - 6 - (sp|0), '#3d477a'); px(hx + 5, hy - ROOF_H - 8 - (sp|0), '#2b335c');
+  // door + lit windows
+  rect(hx + 9, hy + h - 7, 4, 7, TRIM); px(hx + 12, hy + h - 4, '#c9a04a');
+  rect(hx + 3, hy + 3, 3, 3, WIN); px(hx + 4, hy + 4, '#f8a83a');
+  rect(hx + 16, hy + 3, 3, 3, WIN); px(hx + 17, hy + 4, '#f8a83a');
+}
+
+function drawTower(t){
+  const cx = CX, by = BASE + 1;
+  const bodyTop = TOWER_TOP + 12, bodyH = by - bodyTop;
+  for (let y = bodyTop; y < by; y++) {
+    const row = y - bodyTop;
+    const w = 13 - (row / bodyH) * 3.2;
+    const x0 = Math.round(cx - w/2), wR = Math.max(2, Math.round(w));
+    const ramp = ((row / 5.5)|0) % 2 === 1 ? RED : TWR;
+    for (let i = 0; i < wR; i++) {
+      const c = i < 2 ? ramp[2] : i >= wR - 3 ? ramp[0] : ramp[1];
+      px(x0 + i, y, c);
+    }
+    px(x0 + wR - 3, y, ramp[0]);
+  }
+  // windows up the shaft
+  rect(cx - 1, bodyTop + 8, 3, 4, '#1a1e30'); px(cx - 1, bodyTop + 8, WIN);
+  rect(cx - 1, bodyTop + 22, 3, 4, '#1a1e30');
+  // gallery deck + railing (lit posts + top rail)
+  rect(cx - 8, TOWER_TOP + 9, 16, 3, TRIM); rect(cx - 8, TOWER_TOP + 9, 16, 1, ROCK[2]);
+  for (let x = cx - 7; x <= cx + 7; x++) {
+    px(x, TOWER_TOP + 7, (x - cx) % 2 === 0 ? '#8b90a6' : TRIM);
+    px(x, TOWER_TOP + 8, TRIM);
+  }
+  rect(cx - 8, TOWER_TOP + 5, 16, 1, '#8b90a6');
+  // lantern room
+  const ly = TOWER_TOP;
+  rect(cx - 5, ly, 10, 9, TRIM);
+  rect(cx - 4, ly + 1, 8, 7, '#ffd97a');
+  px(cx - 4, ly + 1, '#fff3c4'); px(cx - 3, ly + 2, '#fff3c4');
+  px(cx + 3, ly + 6, '#c4612a'); px(cx + 2, ly + 7, '#f2a33a');
+  for (let y = ly + 1; y < ly + 8; y += 2) px(cx, y, TRIM);
+  px(cx + 1, ly + 1, TRIM); px(cx + 1, ly + 7, TRIM);
+  // dome + finial
+  for (let r = 0; r < 3; r++) rect(cx - 6 + r, ly - 3 + r, 12 - 2*r, 1, '#31384f');
+  rect(cx - 1, ly - 5, 2, 2, TRIM);
+  px(cx, ly - 6, ROCK[2]);
+}
+
+const RAIN = [];
+for (let i = 0; i < 90; i++) RAIN.push({ x: Math.random(), y: Math.random(), v: 0.85 + Math.random()*0.55 });
+
+function drawRain(){
+  for (const d of RAIN) {
+    const x = d.x * W, y = d.y * H;
+    if (x > -3 && x < W + 2) {
+      px(x, y, '#9cc2ea');
+      px(x - 1, y - 2, '#9cc2ea'); px(x - 1, y - 3, '#6f9bd0');
+      px(x - 2, y - 5, '#9cc2ea'); px(x - 2, y - 6, '#4f77b0');
+      px(x - 3, y - 8, '#6f9bd0');
+    }
+  }
+}
+function stepRain(dt){
+  for (const d of RAIN) {
+    d.y += d.v * dt; d.x -= d.v * dt * 0.38;
+    if (d.y > 1.08) { d.y = -0.05 - Math.random()*0.1; d.x = Math.random()*1.15 - 0.1; }
+  }
+}
+
+function fit(){
+  const A_W = Math.max(140, Math.ceil(innerWidth / 8));
+  const A_H = Math.max(105, Math.ceil(innerHeight / 8));
+  const aspect = innerWidth / innerHeight;
+  let best = [1e9, 1, Math.ceil(innerWidth), Math.ceil(innerHeight)];
+  for (let s = 1; s <= 20; s++) {
+    const w = Math.ceil(innerWidth / s);
+    const h = Math.ceil(innerHeight / s);
+    if (w < 100 || h < 72) break;
+    if (w > 340 || h > 260) continue;
+    let pen = Math.abs(w / h - aspect) * 3 + Math.max(0, 1.25 - w / A_W) * 2 + Math.max(0, A_W / w - 1.6) * 1.2 + Math.max(0, A_H / h - 1.6) * 1.2;
+    if (h > 210) pen += (h - 210) * 0.02;
+    if (pen < best[0]) best = [pen, s, w, h];
+  }
+  S = best[1]; W = best[2]; H = best[3];
+  HORIZON = Math.round(H * 0.7);
+  cv.width = W; cv.height = H;
+  cv.style.width = W * S + 'px';
+  cv.style.height = H * S + 'px';
+  cv.style.left = Math.round((innerWidth - W * S) / 2) + 'px';
+  cv.style.top = Math.round((innerHeight - H * S) / 2) + 'px';
+  ctx.imageSmoothingEnabled = false;
+  layout();
+  BG = H > HORIZON ? '#0a1930' : '#070a1a';
+  document.body.style.background = BG;
+}
+addEventListener('resize', fit);
+
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let last = 0;
+let simT = 0;
+function frame(ms){
+  const t = ms / 1000;
+  let dt = Math.min(0.05, t - last); last = t;
+  if (reduced) dt *= 0.1;
+  simT += dt;
+  ctx.clearRect(0, 0, W, H);
+  drawSky(simT);
+  drawMoon(simT);
+  drawShip(simT);
+  drawBeam(simT, CX - 1, TOWER_TOP + 4);
+  drawClouds(simT);
+  drawSea(simT);
+  drawCliff(simT);
+  drawHouse(simT);
+  drawTower(simT);
+  drawOutcrop(simT);
+  if (!reduced) stepRain(dt);
+  drawRain();
+  requestAnimationFrame(frame);
+}
+fit();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
