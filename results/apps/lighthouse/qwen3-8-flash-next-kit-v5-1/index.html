@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lighthouse at Night — pixel art</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #06071a; overflow: hidden; }
+  #c { position: fixed; left: 0; top: 0; image-rendering: pixelated; image-rendering: crisp-edges; }
+  figcaption {
+    position: fixed; right: 10px; bottom: 8px; z-index: 2;
+    font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #6b7090; letter-spacing: 0.14em; text-transform: uppercase;
+    text-shadow: 0 1px 0 #06071a; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<figcaption>Lighthouse at Night</figcaption>
+<script>
+(function () {
+  "use strict";
+  /* ---- pixel-kit core (self-contained: works even if an external script fails to load) ---- */
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const bayer = (x, y) => (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+  function rng(seed) {
+    let a = seed | 0;
+    return () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61, t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  let ctx = null;
+  const light = { x: -1, y: -1 };
+
+  function px(x, y, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), 1, 1); }
+  function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+  function disc(cx, cy, r, c) {
+    cx = Math.round(cx); cy = Math.round(cy); r = Math.max(0, Math.round(r));
+    ctx.fillStyle = c;
+    for (let y = -r; y <= r; y++) {
+      const dx = Math.floor(Math.sqrt(Math.max(0, r * r + r * 0.8 - y * y)));
+      ctx.fillRect(cx - dx, cy + y, dx * 2 + 1, 1);
+    }
+  }
+  function sprite(rows, palette, x, y) {
+    rows.forEach((row, j) => {
+      for (let i = 0; i < row.length; i++) { const c = palette[row[i]]; if (c) px(x + i, y + j, c); }
+    });
+  }
+  function gradient(x0, y0, x1, y1, colors) {
+    const n = colors.length - 1;
+    for (let y = Math.round(y0); y < y1; y++) {
+      const f = ((y - y0) / Math.max(1, y1 - y0 - 1)) * n;
+      const i = Math.min(n - 1, Math.floor(f));
+      const frac = f - i;
+      if (frac < 0.07 || frac > 0.93 || n === 0) { rect(x0, y, x1 - x0, 1, colors[frac > 0.93 ? i + 1 : i]); continue; }
+      for (let x = Math.round(x0); x < x1; x++) px(x, y, bayer(x, y) < frac ? colors[i + 1] : colors[i]);
+    }
+  }
+  function glow(cx, cy, r, c, strength = 0.6) {
+    for (let y = -r; y <= r; y++)
+      for (let x = -r; x <= r; x++) {
+        const d = Math.sqrt(x * x + y * y) / r;
+        if (d < 1 && bayer(cx + x, cy + y) < (1 - d) * strength) px(cx + x, cy + y, c);
+      }
+  }
+  function beam(x, y, angle, len, spread, colors, alpha = 0.55) {
+    const ca = Math.cos(angle), sa = Math.sin(angle), reach = Math.ceil(len);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    for (let j = -reach; j <= reach; j++)
+      for (let i = -reach; i <= reach; i++) {
+        const along = i * ca + j * sa;
+        if (along <= 0 || along > len) continue;
+        const across = Math.abs(-i * sa + j * ca);
+        const half = along * Math.tan(spread) + 1;
+        if (across > half) continue;
+        const k = (1 - across / half) ** 0.6 * (1 - (along / len) ** 1.5);
+        if (bayer(x + i, y + j) >= k * 1.4) continue;
+        px(x + i, y + j, colors[Math.min(colors.length - 1, Math.floor(k * colors.length * 1.2))]);
+      }
+    ctx.restore();
+  }
+  function rock(x, baseY, w, h, ramp, opts = {}) {
+    const rnd = rng(opts.seed || 3);
+    const rough = opts.rough == null ? Math.max(2, Math.round(h * 0.15)) : opts.rough;
+    const shape =
+      typeof opts.profile === "function" ? opts.profile
+        : opts.profile === "cliff" ? (u) => Math.min(1, u / 0.18, (1 - u) / 0.12)
+        : (u) => Math.sin(Math.PI * u) ** 0.7;
+    x = Math.round(x); w = Math.round(w); baseY = Math.round(baseY);
+    const lo = -Math.ceil(rough * 0.5);
+    const tops = new Array(w);
+    let jitter = 0;
+    for (let i = 0; i < w; ) {
+      const run = 2 + Math.floor(rnd() * 4);
+      const r = rnd();
+      const jump = Math.ceil(rough * 0.6);
+      if (r < 0.12) jitter = Math.min(rough, jitter + jump);
+      else if (r < 0.2) jitter = Math.max(lo, jitter - jump);
+      else jitter = Math.max(lo, Math.min(rough, jitter + Math.round((rnd() * 2 - 1) * Math.max(1, rough / 3))));
+      for (let k = 0; k < run && i < w; k++, i++)
+        tops[i] = Math.min(baseY, Math.round(baseY - h * shape(i / (w - 1)) + jitter));
+    }
+    const top = (i) => tops[Math.max(0, Math.min(w - 1, i))];
+    const facets = [];
+    for (let i = 0; i < w; ) {
+      const run = 6 + Math.floor(rnd() * 12);
+      facets.push({ from: i, to: Math.min(w, i + run), dark: rnd() < 0.4 });
+      i += run;
+    }
+    for (const f of facets) {
+      for (let i = f.from; i < f.to; i++) {
+        const t0 = tops[i];
+        if (t0 >= baseY) continue;
+        const u = i / Math.max(1, w - 1);
+        const side = light.x < 0 ? u : 1 - u;
+        let body = side < 0.3 ? 2 : side < 0.7 ? (f.dark ? 1 : 2) : f.dark ? 0 : 1;
+        const lit = (top(i + 1) - top(i - 1)) * -light.x <= 0;
+        const face = 2 + (rnd() < 0.5 ? 1 : 0);
+        for (let y = t0; y < baseY; y++) {
+          let c;
+          if (y === t0) c = lit ? ramp[4] : ramp[0];
+          else if (y - t0 < face) c = lit ? ramp[3] : ramp[2];
+          else if (y < top(i - 1) && light.x < 0) c = ramp[3];
+          else if (y < top(i + 1) && light.x < 0) c = ramp[0];
+          else if (baseY - y <= Math.max(2, h * 0.12) && bayer(x + i, y) < 0.6) c = ramp[Math.max(0, body - 1)];
+          else c = ramp[body];
+          if (y - t0 >= face && rnd() < 0.05) c = ramp[Math.max(0, body - 1)];
+          px(x + i, y, c);
+        }
+      }
+      if (f.from > 0 && rnd() < 0.5) {
+        const slope = (rnd() * 2 - 1) * 0.35;
+        const y0 = tops[f.from] + 3;
+        const len = (0.2 + 0.35 * rnd()) * (baseY - y0);
+        for (let s = 0; s < len; s++) {
+          const ci = f.from + Math.round(s * slope);
+          const cy = y0 + s;
+          if (ci <= 0 || ci >= w - 1 || cy <= top(ci) + 1 || cy >= baseY - 1) continue;
+          if (rnd() < 0.85) px(x + ci, cy, ramp[0]);
+          if (rnd() < 0.5 && cy > top(ci + light.x) + 1) px(x + ci + light.x, cy, ramp[3]);
+        }
+      }
+    }
+    const ledges = opts.ledges == null ? Math.round(h / 16) : opts.ledges;
+    for (let k = 0; k < ledges; k++) {
+      let y = baseY - Math.round(h * (0.15 + 0.65 * rnd()));
+      const i0 = Math.floor(rnd() * w * 0.8);
+      const i1 = Math.min(w, i0 + Math.round(w * (0.12 + 0.3 * rnd())));
+      for (let i = i0; i < i1; i++) {
+        if (rnd() < 0.2) y += rnd() < 0.5 ? -1 : 1;
+        if (tops[i] >= y - 2 || y >= baseY - 2) continue;
+        px(x + i, y, (light.x < 0 ? i / w : 1 - i / w) < 0.6 ? ramp[3] : ramp[2]);
+        px(x + i, y + 1, ramp[0]);
+      }
+    }
+    const cracks = opts.cracks == null ? Math.round(w / 24) : opts.cracks;
+    for (let k = 0; k < cracks; k++) {
+      let ci = Math.floor(rnd() * w);
+      let cy = tops[ci] + 3;
+      const len = 3 + Math.floor(rnd() * (h * 0.3));
+      for (let s = 0; s < len && cy < baseY - 2 && ci >= 0 && ci < w; s++) {
+        if (cy > tops[ci] + 1) px(x + ci, cy, ramp[0]);
+        cy += 1;
+        if (rnd() < 0.4) ci += rnd() < 0.5 ? -1 : 1;
+      }
+    }
+    return { top: (gx) => top(Math.round(gx) - x), x, w, baseY };
+  }
+  function sea(x0, y0, x1, y1, t, ramp, seed = 5) {
+    const rnd = rng(seed);
+    const bands = [3, 2, 2, 1, 1, 0];
+    for (let y = y0; y < y1; y++) {
+      const b = bands[Math.min(bands.length - 1, Math.floor(((y - y0) / (y1 - y0)) * bands.length))];
+      rect(x0, y, x1 - x0, 1, ramp[b]);
+    }
+    const rows = Math.max(2, Math.floor((y1 - y0) / 5));
+    for (let k = 0; k < rows; k++) {
+      const depth = (k + 1) / rows;
+      const yy = y0 + 2 + k * ((y1 - y0 - 3) / rows);
+      const period = 10 + depth * 18 + rnd() * 6;
+      const amp = 0.6 + depth * 1.6;
+      const speed = 3 + depth * 10 + rnd() * 4;
+      const phase = rnd() * 100;
+      for (let x = x0; x < x1; x++) {
+        const s = Math.sin(((x + t * speed + phase) / period) * Math.PI * 2);
+        if (s < 0.55) continue;
+        const y = Math.round(yy - amp * s);
+        px(x, y, s > 0.9 ? ramp[4] : ramp[3]);
+        if (s > 0.9 && depth > 0.5) px(x, y + 1, ramp[2]);
+      }
+    }
+  }
+  function foam(x0, x1, y, t, colors = ["#cfe8f2", "#ffffff"], seed = 9) {
+    const rnd = rng(seed);
+    for (let x = Math.round(x0); x < x1; x++) {
+      const ph = rnd() * 6.28;
+      const surge = Math.sin(t * 2.2 + x * 0.35 + ph) * 0.5 + 0.5;
+      const hgt = Math.round(1 + surge * 3);
+      for (let k = 0; k < hgt; k++) px(x, y - k, k === hgt - 1 ? colors[1] : colors[0]);
+      if (surge > 0.85 && rnd() < 0.5) px(x + Math.round(rnd() * 2 - 1), y - hgt - 1 - Math.floor(rnd() * 3), colors[1]);
+    }
+  }
+  function stars(x0, y0, x1, y1, n, t, colors = ["#8a90c0", "#ffffff"], seed = 11) {
+    const rnd = rng(seed);
+    for (let i = 0; i < n; i++) {
+      const x = x0 + Math.floor(rnd() * (x1 - x0));
+      const y = y0 + Math.floor(rnd() * (y1 - y0));
+      const tw = Math.sin(t * (0.8 + rnd() * 2) + rnd() * 6.28);
+      px(x, y, tw > 0.6 ? colors[1] : colors[0]);
+      if (tw > 0.95 && i % 5 === 0) {
+        px(x - 1, y, colors[0]); px(x + 1, y, colors[0]);
+        px(x, y - 1, colors[0]); px(x, y + 1, colors[0]);
+      }
+    }
+  }
+  function drift(spec) {
+    const rnd = rng(spec.seed || 13);
+    const [ax0, ay0, ax1, ay1] = spec.area;
+    const pick = (r) => r[0] + rnd() * (r[1] - r[0]);
+    const ps = Array.from({ length: spec.n }, () => ({
+      x: ax0 + rnd() * (ax1 - ax0), y: ay0 + rnd() * (ay1 - ay0),
+      vx: pick(spec.vx || [0, 0]), vy: pick(spec.vy || [0, 0]),
+      len: Math.round(pick(spec.len || [1, 1])), k: rnd(),
+    }));
+    return {
+      particles: ps, area: spec.area,
+      setArea(a) {
+        const [ox0, oy0, ox1, oy1] = this.area;
+        for (const p of ps) {
+          p.x = a[0] + ((p.x - ox0) / (ox1 - ox0 || 1)) * (a[2] - a[0]);
+          p.y = a[1] + ((p.y - oy0) / (oy1 - oy0 || 1)) * (a[3] - a[1]);
+        }
+        this.area = a;
+      },
+      step(dt) {
+        const [x0, y0, x1, y1] = this.area;
+        for (const p of ps) {
+          p.x += p.vx * dt; p.y += p.vy * dt;
+          if (p.x < x0) p.x += x1 - x0;
+          if (p.x >= x1) p.x -= x1 - x0;
+          if (p.y < y0) p.y += y1 - y0;
+          if (p.y >= y1) p.y -= y1 - y0;
+        }
+      },
+      streaks(colors) {
+        for (const p of ps) {
+          const sp = Math.hypot(p.vx, p.vy) || 1;
+          for (let s = 0; s < p.len; s++) px(p.x - (p.vx / sp) * s, p.y - (p.vy / sp) * s, s === 0 ? colors[1] : colors[0]);
+        }
+      },
+    };
+  }
+
+  /* ---- scene ---- */
+  const nightWater = ["#070d20", "#0e1a3a", "#17305a", "#2a5080", "#6a9cc8"];
+  const sky = ["#04050f", "#070a1c", "#0c1130", "#141a44", "#1e2658", "#2c3772"];
+  const stone = ["#0a0a14", "#15162a", "#242640", "#393d5c", "#565d84"];
+  const boulder = ["#0c0d19", "#191b30", "#2b2e4a", "#434866", "#61688c"];
+  const rockWarm = ["#0d0c17", "#1b1930", "#2d2a46", "#45405f", "#635e7f"];
+  const red = ["#2e0f16", "#4c171f", "#77232a", "#a3413a", "#c96a52"];
+  const redShade = ["#240b11", "#3c1219", "#5f1c23", "#823430", "#a35443"];
+  const cream = ["#383950", "#5c5e7a", "#8b8fa8", "#c3c7d4", "#f2f0e4"];
+  const creamShade = ["#2c2d42", "#4a4c64", "#70738c", "#9b9fb6", "#c9ccda"];
+  const metal = ["#10121f", "#1d2034", "#2d3148", "#454b68", "#666e90"];
+  const slate = ["#0c0e1a", "#161a2c", "#232840", "#343b5c", "#4d5678"];
+  const wood = ["#191320", "#2a2032", "#3e2f44", "#584360", "#74597a"];
+  const glass = ["#3a2c10", "#7a5a16", "#c4922a", "#f2c85a", "#fff2b8"];
+  const cloud = ["#0d1128", "#161b3a", "#222852", "#333b6e", "#48518a"];
+  const far = ["#0a0c1e", "#0d1026", "#111634", "#161c42", "#1c2352"];
+
+  const view = { W: 0, H: 0 };
+  const MOON = { cx: 0, cy: 0, r: 9 };
+  const geo = { waterY: 0, baseY: 0, cx: 0, half: 0, ly: 0 };
+  const surfRocks = [];
+  let bg = null;
+  const clouds = [];
+  const rain = drift({ n: 85, area: [0, 0, 1, 1], vx: [-17, -10], vy: [66, 98], len: [3, 5], seed: 21 });
+
+  function towerH() { return Math.max(30, Math.min(44, Math.round(view.H * 0.24))); }
+
+  function cloudRow(rnd, w, r, bandH) {
+    const row = new Array(w).fill(null);
+    const n = Math.max(3, Math.round(w / (r * 1.6)));
+    for (let k = 0; k < n; k++) {
+      const cx = rnd() * w;
+      const cy = (rnd() * 2 - 1) * r * 0.5;
+      const rr = Math.max(1.5, r * (0.7 + rnd() * 0.5));
+      for (let x = Math.floor(cx - rr); x <= cx + rr; x++) {
+        const dx = x - cx;
+        const h = Math.floor(Math.sqrt(Math.max(0, rr * rr - dx * dx)));
+        for (let y = Math.round(cy - h); y <= cy + h; y++) {
+          const xi = ((x % w) + w) % w;
+          if (y >= 0 && y < bandH) {
+            const d = Math.hypot(dx, y - cy) / rr;
+            const v = d < 0.45 ? 2 : d < 0.8 ? 1 : 0;
+            const cur = row[y];
+            row[y] = cur === null || v > cur ? (v === 2 ? cloud[4] : v === 1 ? cloud[3] : cloud[2]) : cur;
+          }
+        }
+      }
+    }
+    return row;
+  }
+
+  function buildClouds(W, H) {
+    clouds.length = 0;
+    const spec = [
+      [0.06, 0.09, 15, 4.5, 0.8], [0.42, 0.06, 20, 5.5, 0.55], [0.72, 0.12, 16, 4.5, 1.1],
+      [0.18, 0.24, 22, 6, 0.7], [0.55, 0.21, 26, 7, 0.42], [0.85, 0.29, 18, 5, 0.95],
+      [0.30, 0.36, 30, 7.5, 0.6],
+    ];
+    for (const [fx, fy, w, r, sp] of spec) {
+      const rnd = rng(Math.round(fx * 977 + fy * 131) + 7);
+      const bandH = Math.max(1, Math.ceil(r * 1.6));
+      clouds.push({
+        x: fx * W, y: Math.round(H * fy), w, spd: sp * (0.8 + rnd() * 0.5),
+        rows: [cloudRow(rnd, w, r * 0.7, bandH), cloudRow(rnd, w, r, bandH), cloudRow(rnd, w, r * 0.7, bandH)],
+      });
+    }
+  }
+
+  function drawClouds(t) {
+    const span = view.W + 80;
+    for (const cl of clouds) {
+      const off = Math.round((((cl.x + t * cl.spd) % span) + span) % span) - 40;
+      for (let r = 0; r < cl.rows.length; r++) {
+        const row = cl.rows[r];
+        for (let x = 0; x < cl.w; x++) {
+          const c = row[x];
+          if (c) px(off + x, cl.y + (r - 1) * 2, c);
+        }
+      }
+    }
+  }
+
+  function drawMoon() {
+    const { cx, cy, r } = MOON;
+    glow(cx, cy, r * 2.6, "#5a67a8", 0.32);
+    glow(cx, cy, r * 1.6, "#8d9dd2", 0.5);
+    disc(cx, cy, r, "#8b95bd");
+    disc(cx - 2, cy - 2, r - 3, "#c6cee8");
+    disc(cx - 3, cy - 3, Math.max(1, r - 6), "#eef1fa");
+    for (const [dx, dy, dr, c] of [[4, 3, 2, "#9aa4c8"], [-4, 4, 1, "#9aa4c8"], [2, -5, 1, "#b6bfd8"]]) {
+      disc(cx + dx, cy + dy, dr, c);
+    }
+    for (let x = cx - r - 2; x <= cx + r + 2; x++) px(x, cy - r - 2, "#0b0f26");
+  }
+
+  const PALETTE = {
+    ".": null, O: metal[0], M: metal[2], H: metal[3], L: metal[4],
+    g: glass[0], G: glass[2], Y: glass[3], k: glass[4],
+    D: wood[2], d: wood[3],
+    B: slate[3], n: slate[4], b: slate[1],
+    C: stone[3],
+  };
+  const SPR_ROOF = ["..O...", ".OMH..", "OMHOL.", "MHOLLL"];
+  const SPR_CAP = ["..O...", ".OHOL.", ".OMHM.", "OMMMMO", "OHMHMLO"];
+  const SPR_VENT = ["..O..", ".OHO.", "OHMHO"];
+  const SPR_RAIL = ["LOLLOLOLLOLLO", "M.M.M.M.M.M.M"];
+  const SPR_GLASS = [
+    "OgGGGGGGGGgO",
+    "ogYYkYYkYYyo",
+    "ogGYkYkYGOOo",
+    "ogYYkYYkYYyo",
+    "OgGGGGGGGGgO",
+  ];
+  const SPR_GBASE = ["OOOOOOOOOOOO", "OMHHHHHHHHMO", "OMMMMMMMMMMO"];
+  const SPR_FIN = ["O", "H", "L"];
+  const SPR_DOOR = [".DDDD.", "DdDdDD", "DdDdDD", "DdDdDD", "DdDdDD"];
+  const SPR_WIN = ["YkY", "YkY"];
+  const SPR_CHIM = ["BBBB", "BnBb", "BnBb", "BnBb", "BBBB"];
+  const SPR_FENCE = ["M.M.M.M.M", "MMMMMMM.M"];
+  const SPR_PATH = ["C..C", "..C.", "C...", "..C."];
+
+  function drawLanternRoom(x0, topY) {
+    const railW = 13;
+    const rx = x0 - (railW >> 1);
+    rect(rx, topY - 1, railW, 1, metal[2]);
+    px(rx, topY - 1, metal[4]);
+    px(rx + railW - 1, topY - 1, metal[0]);
+    sprite(SPR_RAIL, PALETTE, x0 - 6, topY - 3);
+    sprite(SPR_GBASE, PALETTE, x0 - 6, topY + 2);
+    sprite(SPR_GLASS, PALETTE, x0 - 6, topY + 5);
+    sprite(SPR_ROOF, PALETTE, x0 - 3, topY + 10);
+    sprite(SPR_CAP, PALETTE, x0 - 3, topY + 7);
+    sprite(SPR_VENT, PALETTE, x0 - 2, topY + 4);
+    sprite(SPR_FIN, PALETTE, x0 - 1, topY + 1);
+    px(x0, topY, metal[4]);
+  }
+
+  function drawTower(x0, yBase, rnd) {
+    const hTop = towerH();
+    const hb = 13, ht = 9;
+    const topY = yBase - hTop;
+    for (let r = 0; r < hTop; r++) {
+      const y = yBase - 1 - r;
+      const w = hb + Math.round(((ht - hb) * r) / (hTop - 1));
+      const x = x0 - (w >> 1);
+      const band = Math.floor(r / 5) % 2 === 0;
+      const ramp = band ? red : cream;
+      const shade = band ? redShade : creamShade;
+      rect(x, y, w, 1, ramp[1]);
+      rect(x, y, 2, 1, ramp[2]);
+      rect(x + w - 2, y, 2, 1, shade[1]);
+      px(x, y, ramp[3]);
+      for (let i = 0; i < w; i++) if (rnd() < 0.07) px(x + i, y, rnd() < 0.7 ? ramp[0] : ramp[2]);
+      px(x + w - 1, y, shade[0]);
+    }
+    const dw = 5;
+    sprite(SPR_DOOR, PALETTE, x0 - (dw >> 1), yBase - 6);
+    rect(x0 - 3, yBase - 7, 7, 1, stone[2]);
+    sprite(SPR_WIN, PALETTE, x0 - 4, topY + 14);
+    sprite(SPR_WIN, PALETTE, x0 + 2, topY + 8);
+    for (let i = -8; i <= 8; i++) {
+      const y = yBase - 1 + (rnd() < 0.3 ? -1 : 0);
+      px(x0 + i, y, rnd() < 0.5 ? stone[2] : stone[1]);
+      if (rnd() < 0.3) px(x0 + i, y - 1, stone[3]);
+    }
+    drawLanternRoom(x0, topY);
+    return topY;
+  }
+
+  function drawHouse(hx, yBase, rnd) {
+    const w = 21, wallH = 9, wallTop = yBase - wallH;
+    rect(hx, wallTop, w, wallH, cream[1]);
+    rect(hx, wallTop, w, 1, cream[2]);
+    for (let y = wallTop; y < yBase; y++) {
+      px(hx, y, cream[2]);
+      px(hx + w - 1, y, creamShade[0]);
+      for (let x = hx + 1; x < hx + w - 1; x++) if (rnd() < 0.05) px(x, y, rnd() < 0.6 ? creamShade[1] : cream[1]);
+    }
+    rect(hx - 1, yBase, w + 2, 1, stone[0]); // contact shadow on the ground
+    const half = Math.ceil(w / 2);
+    for (let r = 0; r < half; r++) {
+      const rowW = w + 2 - 2 * r;
+      const x = hx - 1 + r;
+      const y = wallTop - 1 - r;
+      rect(x, y, rowW, 1, slate[2]);
+      px(x, y, slate[4]);
+      px(x + rowW - 1, y, slate[1]);
+      if (r > 2 && r < half - 2 && rnd() < 0.3) px(x + 2 + Math.floor(rnd() * (rowW - 4)), y, slate[3]);
+      if (r > 0) { px(x, y + 1, slate[0]); px(x + rowW - 1, y + 1, slate[0]); }
+    }
+    rect(hx + half - 1, wallTop - half, 3, 1, slate[4]);
+    sprite(SPR_CHIM, PALETTE, hx + w - 7, wallTop - 7);
+    sprite(SPR_DOOR, PALETTE, hx + 3, yBase - 6);
+    rect(hx + 2, yBase - 7, 7, 1, cream[0]);
+    sprite(SPR_WIN, PALETTE, hx + 13, wallTop + 4);
+    sprite(SPR_WIN, PALETTE, hx + 17, wallTop + 4);
+    rect(hx + 13, wallTop + 3, 3, 1, slate[1]);
+    rect(hx + 17, wallTop + 3, 3, 1, slate[1]);
+    return wallTop;
+  }
+
+  function cliffTopAt(gx, cx, half, baseY, H) {
+    const u = (gx - (cx - half)) / (half * 2 - 1);
+    const shape = Math.min(1, u / 0.18, (1 - u) / 0.12);
+    return baseY - Math.round(Math.round(H * 0.145) * Math.max(0, shape));
+  }
+
+  function drawScene() {
+    const W = view.W, H = view.H;
+    const rnd = rng(99);
+    gradient(0, 0, W, H, sky);
+    stars(0, 0, W, Math.round(H * 0.55), Math.round(W * H / 260), 0.7, ["#7d84b8", "#ffffff"], 12);
+    drawMoon();
+    drawClouds(0);
+
+    const waterY = Math.round(H * 0.58);
+    const baseY = Math.round(H * 0.8);
+    const cx = Math.round(W / 2);
+    const half = Math.min(Math.round(W * 0.33), 86);
+
+    sea(0, waterY + 2, W, baseY + 4, 0, nightWater, 5);
+
+    rock(0, waterY + 3, Math.round(W * 0.34), Math.max(8, Math.round(H * 0.055)), far, { profile: "cliff", seed: 88, rough: 2 });
+    rock(Math.round(W * 0.68), waterY + 3, Math.round(W * 0.33), Math.max(8, Math.round(H * 0.06)), far, { profile: "cliff", seed: 71, rough: 2 });
+
+    for (let k = 0; k < 14; k++) {
+      const gy = waterY + 3 + k;
+      if (gy >= baseY) break;
+      const g = Math.max(0, 4 - Math.round(k * 0.3));
+      const ph = Math.round(Math.sin(k * 2.1) * 2);
+      for (let x = cx + 18 - g + ph; x <= cx + 18 + g + ph; x++) {
+        if (bayer(x, gy) < 0.5) px(x, gy, k < 5 ? "#3d6394" : "#2c4a76");
+      }
+    }
+
+    rock(cx - half, baseY, half * 2, Math.round(H * 0.145), stone, { profile: "cliff", seed: 42, rough: 5 });
+    const footing = rock(cx - 18, baseY + 1, 37, 4, rockWarm, { profile: "mound", seed: 27, rough: 1 });
+    const py = footing.top(18) - 1;
+
+    const side = half > 56 ? -1 : 1;
+    const hx = cx + side * Math.round(half * 0.52);
+    const houseY = cliffTopAt(hx, cx, half, baseY, H) - 1;
+    drawHouse(hx, houseY, rnd);
+    sprite(SPR_FENCE, PALETTE, hx - side * 16 - (side < 0 ? 9 : 0), houseY - 2);
+
+    const topY = drawTower(cx, py, rnd);
+
+    for (let k = 0; k < 6; k++) {
+      const pxx = hx + side * 8 - Math.round(side * k * 2.4);
+      const yy = houseY + 1 + Math.round(k * (py - houseY) / 6);
+      if (yy < baseY - 1) sprite(SPR_PATH, PALETTE, pxx, yy);
+    }
+
+    surfRocks.length = 0;
+    const spots = [
+      [cx - half - 6, 18, 12], [cx - half + 14, 13, 9], [cx - 30, 11, 7],
+      [cx + 26, 12, 8], [cx + half - 12, 17, 11], [cx + half + 4, 14, 9],
+    ];
+    for (const [rx, w, h] of spots) {
+      rock(rx, baseY + 4, w, h, boulder, { profile: "mound", seed: (rx | 0) * 7 + 3, rough: 3 });
+      foam(rx, rx + w, baseY + 4, 0, ["#8fb6d4", "#cfe4f4"], (rx | 0) + 1);
+      surfRocks.push({ x0: rx, x1: rx + w });
+    }
+
+    geo.waterY = waterY; geo.baseY = baseY; geo.cx = cx; geo.half = half; geo.ly = topY + 7;
+  }
+
+  function drawBeams(t) {
+    const lx = geo.cx, ly = geo.ly;
+    const sweep = Math.sin(t * 0.22);
+    const a = sweep * 1.22 - Math.PI / 2;
+    const len = Math.max(view.W, view.H) * 0.95;
+    const cols = ["#4a5a92", "#8fa2d8", "#d9e6f8"];
+    glow(lx, ly, 8, "#ffd98a", 0.4 + 0.08 * Math.sin(t * 3));
+    beam(lx, ly, a, len, 0.1, cols, 0.34);
+    beam(lx, ly, a + Math.PI, len * 0.85, 0.09, cols, 0.2);
+    beam(lx, ly, sweep >= 0 ? Math.PI : 0, len * 0.7, 0.13, ["#4a5288", "#7f90c4", "#c8d6f0"], 0.15);
+    disc(lx, ly, 1, "#fff8dc");
+  }
+
+  function drawSurf(t) {
+    const { cx, half, baseY } = geo;
+    foam(cx - half + 2, cx + half - 2, baseY + 1, t, ["#7fa4c4", "#cfe4f4"], 42);
+    for (const r of surfRocks) foam(r.x0, r.x1, baseY + 4, t, ["#8fb6d4", "#cfe4f4"], r.x0 + 1);
+  }
+
+  const canvas = document.getElementById("c");
+  function fit() {
+    const dpr = window.devicePixelRatio || 1;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const scale = Math.max(1, Math.floor((Math.min(vw, vh) * dpr) / 140));
+    view.W = Math.ceil((vw * dpr) / scale);
+    view.H = Math.ceil((vh * dpr) / scale);
+    canvas.width = view.W;
+    canvas.height = view.H;
+    Object.assign(canvas.style, {
+      position: "fixed", left: "0", top: "0",
+      width: (view.W * scale) / dpr + "px",
+      height: (view.H * scale) / dpr + "px",
+      imageRendering: "pixelated",
+    });
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.margin = "0";
+    ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    MOON.cx = Math.round(view.W * (view.H > view.W ? 0.76 : 0.72));
+    MOON.cy = Math.round(view.H * 0.17);
+    buildClouds(view.W, view.H);
+    const buf = document.createElement("canvas");
+    buf.width = view.W; buf.height = view.H;
+    const bctx = buf.getContext("2d");
+    bctx.imageSmoothingEnabled = false;
+    const main = ctx;
+    ctx = bctx;
+    drawScene();
+    ctx = main;
+    bg = buf;
+    rain.setArea([0, -8, view.W, view.H + 8]);
+  }
+  window.addEventListener("resize", fit);
+  fit();
+
+  const slow = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0.25 : 1;
+  let last = performance.now(), t = 0;
+  function tick(now) {
+    const dt = Math.min(0.05, (now - last) / 1000) * slow;
+    last = now;
+    t += dt;
+    if (bg) {
+      ctx.globalAlpha = 1;
+      ctx.drawImage(bg, 0, 0);
+      drawClouds(t);
+      drawBeams(t);
+      drawSurf(t);
+      rain.step(dt);
+      rain.streaks(["#2c3a68", "#93a9d8"]);
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

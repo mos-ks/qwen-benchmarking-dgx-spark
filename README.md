@@ -84,6 +84,7 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 | best of 3 | three kit v3 sessions in parallel, [`pick`](harness/tools/pick) chooses the winner with the vision model |
 | kit v4 | score-driven supervision: the critic first lists the brief's requirements, scores 1 to 10 and names the unmet ones; the plugin keeps sending fixes until 8/10, 4 rounds or 25 minutes. The `pixel-art` skill gains a fill-the-screen rule |
 | kit v4 + ponytail | kit v4 with the [ponytail](https://github.com/DietrichGebert/ponytail) "smallest change that works" skill as always-on instructions |
+| kit v5 | the `pixel-art` skill ships [`pixel-kit.js`](harness/skills/pixel-art/pixel-kit.js), a tested drawing library the agent copies into the project (full-screen integer scaling, shaded trunks and foliage pads, jagged faceted rocks, rolling sea and foam, beams, glows, particles, text-grid sprites, 16 colour ramps); the agent may read, never edit, the skills folder |
 
 Third-party skills used (not redistributed here; install from their repos):
 [obra/superpowers](https://github.com/obra/superpowers) (TDD, debugging, verification, plans),
@@ -145,7 +146,9 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 - Qwen3.8-Flash-Next with kit v3: bonsai 7.5 (10.9 and 21.7 min), lighthouse 7.0 (hit the 45 min cap), dashboard 8.5 (37.3 min, over its 23 min budget). Best quality so far, but slower than the budget on the larger briefs.
 - Qwen3.8-Flash-Next with kit v4: bonsai 7.0 (15.8 min), lighthouse 7.0 (27.7 min, down from the 45 min cap with kit v3). The 25-minute supervision budget stopped the overrun; quality did not move (one run each, so within noise).
 - Kit v4 plus the [ponytail](https://github.com/DietrichGebert/ponytail) skill (loaded as always-on instructions) on Flash-Next: bonsai 6.0 (30.1 min), lighthouse 6.5 (27.3 min). Lower on both briefs and no faster, so it stays out of the kit.
-- In progress: kit v4 on the dashboard and the new windmill brief, then kit v5 (the agent gets a tested pixel-art drawing library instead of writing its own shapes) on bonsai, lighthouse and windmill.
+- Kit v4 on the new windmill brief: 5.0 (25.5 min). On the dashboard it wrote its own Playwright check script and verified for the whole 45 minutes, so the supervisor never got a turn: 7.0, timeout.
+- Kit v5 (drawing library): bonsai 7.5 in 11.9 min, lighthouse 7.5 in 25.9 min, the best lighthouse and the fastest good bonsai so far. The critic scored both 8 or more on its first look, so no supervisor rounds ran.
+- In progress: kit v5 on the windmill brief (held out from every kit change), then kit v5.1 (tool results carry a wrap-up note after 20 minutes) on the dashboard, twice.
 - This repository is updated as runs finish.
 
 ## Reproduce
