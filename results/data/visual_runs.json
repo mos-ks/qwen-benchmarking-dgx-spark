@@ -207,5 +207,16 @@
   "score": 7.5,
   "outcome": "done",
   "note": "KPI cards, donut, bars, transactions"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v3 \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v3",
+  "attempt": "#1",
+  "minutes": 10.9,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "curved barked trunk, layered shaded pads, terracotta pot, grass, mountains, clouds, drifting leaves; canvas boxed small, pads uniform"
  }
 ]

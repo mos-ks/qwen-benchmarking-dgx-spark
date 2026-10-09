@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0d1524; }
+  body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+"use strict";
+const W = 160, H = 120, GROUND = 104;
+
+function mulberry32(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rand = mulberry32(1337);
+const clamp = v => v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
+function hex2rgb(h){ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+function mix(c1, c2, t){ const a = hex2rgb(c1), b = hex2rgb(c2); return `rgb(${clamp(a[0]+(b[0]-a[0])*t)},${clamp(a[1]+(b[1]-a[1])*t)},${clamp(a[2]+(b[2]-a[2])*t)})`; }
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+canvas.width = W; canvas.height = H;
+ctx.imageSmoothingEnabled = false;
+
+function fit(){
+  const availW = Math.min(window.innerWidth, 900), availH = Math.min(window.innerHeight, 760);
+  let s = Math.min(availW / W, availH / H);
+  if(s >= 3) s = Math.floor(s);
+  canvas.style.width = (W * s) + "px";
+  canvas.style.height = (H * s) + "px";
+}
+window.addEventListener("resize", fit);
+fit();
+
+const px = (x, y, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), 1, 1); };
+const fillRow = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+function disc(cx, cy, r, c){ for(let y=-r;y<=r;y++) for(let x=-r;x<=r;x++) if(x*x+y*y <= r*r+r*0.8) px(cx+x, cy+y, c); }
+function ellipse(cx, cy, rx, ry, c){ for(let y=-ry;y<=ry;y++) for(let x=-rx;x<=rx;x++) if((x*x)/(rx*rx)+(y*y)/(ry*ry) <= 1.0) px(cx+x, cy+y, c); }
+function taper(x0,y0,cx,cy,x1,y1,w0,w1,c){
+  const steps = Math.ceil(Math.hypot(x1-x0, y1-y0)) * 2;
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, u=1-t;
+    const x=u*u*x0+2*u*t*cx+t*t*x1, y=u*u*y0+2*u*t*cy+t*t*y1;
+    disc(x, y, Math.max(0, Math.round((w0+(w1-w0)*t)/2)), c);
+  }
+}
+
+// ---- palettes (dark -> light) ----
+const SKY = ["#1d3050","#2b4a72","#3f6a97","#5f8eb8","#8ab6d6"];
+const CLOUD = ["#b7cfe4","#d8e7f2"];
+const HILL = ["#3d5a74","#4e718c","#6a8fa6"];
+const FOLIAGE = ["#1d3b2a","#2f5d34","#4a8a3c","#78b84a","#b8e070"];
+const LEAF = ["#2f5d34","#4a8a3c","#78b84a","#b8e070"];
+const BARK = ["#2b1a14","#4a2c1f","#6e4430","#9a6646","#c79a6b"];
+const POT = ["#3a1e16","#5c2d20","#8a3a26","#b4532f","#d97e4a"];
+const SOIL = ["#241812","#3a281e"];
+const GND = ["#2c4630","#3b5c3e","#527a4a"];
+const STONE = ["#3d3d52","#5e6178","#8b90a6"];
+const STREAK = "#cfe3f0";
+
+// ---- sky ----
+const skyRow = [];
+for(let y=0;y<GROUND;y++){
+  const t = y/(GROUND-1);
+  skyRow.push(mix(SKY[0], SKY[4], t));
+}
+
+// ---- clouds ----
+const clouds = [];
+for(let i=0;i<5;i++){
+  const puffs = [];
+  const n = 3 + Math.floor(rand()*3);
+  for(let j=0;j<n;j++) puffs.push({dx: j*5 - n*2 + Math.floor(rand()*4), dy: Math.floor(rand()*4)-2, r: 3+Math.floor(rand()*4)});
+  clouds.push({x: rand()*W, y: 8 + rand()*30, sp: 0.7 + rand()*0.9, puffs});
+}
+
+// ---- hills ----
+const farPts = (()=>{const r=mulberry32(7);const p=[];for(let i=0;i<=W/8;i++)p.push(78 - Math.floor(r()*10));return p;})();
+const nearPts = (()=>{const r=mulberry32(21);const p=[];for(let i=0;i<=W/8;i++)p.push(90 - Math.floor(r()*8));return p;})();
+
+// ---- ground ----
+const grass = [];
+{
+  const r = mulberry32(99);
+  for(let i=0;i<260;i++) grass.push({x: Math.floor(r()*W), y: GROUND + Math.floor(r()*(H-GROUND)), c: r()});
+}
+
+// ---- bonsai geometry ----
+const BASE_X = 80, BASE_Y = 96;
+const TRUNK = {x0: BASE_X, y0: BASE_Y, cx: 65, cy: 82, x1: 77, y1: 51};
+
+function bez(t){
+  const u = 1-t;
+  return {x: u*u*TRUNK.x0 + 2*u*t*TRUNK.cx + t*t*TRUNK.x1,
+          y: u*u*TRUNK.y0 + 2*u*t*TRUNK.cy + t*t*TRUNK.y1};
+}
+
+const branches = [
+  {p0: 0.22, cx: 59, cy: 85, x1: 45, y1: 79, w0: 4.5, w1: 2},
+  {p0: 0.50, cx: 88, cy: 73, x1: 99, y1: 70, w0: 4,   w1: 1.5},
+  {p0: 0.72, cx: 63, cy: 62, x1: 54, y1: 58, w0: 3,   w1: 1.2},
+];
+
+const pads = [
+  {x: 43, y: 75, rx: 13, ry: 6,  hFac: 0.35, ph: 0.0},
+  {x: 101, y: 68, rx: 11, ry: 5,  hFac: 0.55, ph: 1.7},
+  {x: 52, y: 55, rx: 9,  ry: 4,  hFac: 0.72, ph: 3.1},
+  {x: 79, y: 44, rx: 15, ry: 6,  hFac: 1.0,  ph: 4.4},
+];
+pads.forEach(p => {
+  const r = mulberry32(Math.round(p.x*131 + p.y*17));
+  p.blobs = [];
+  const n = 7 + Math.floor(r()*4);
+  for(let i=0;i<n;i++){
+    p.blobs.push({
+      dx: Math.round((r()*2-1) * p.rx * 0.8),
+      dy: Math.round((r()*2-1) * p.ry * 0.6) - 1,
+      r: 3 + Math.floor(r()*3)
+    });
+  }
+  p.specks = [];
+  const m = 6 + Math.floor(r()*5);
+  for(let i=0;i<m;i++) p.specks.push({dx: Math.round((r()*2-1)*p.rx*0.9), dy: Math.round((r()*2-1)*p.ry*0.7), c: r()});
+});
+
+// ---- drifting particles ----
+const leaves = [], streaks = [];
+for(let i=0;i<30;i++) leaves.push({
+  x: rand()*W, y: rand()*GROUND, sp: 6 + rand()*16, amp: 3 + rand()*7,
+  ph: rand()*6.28, size: 1 + Math.floor(rand()*2), c: LEAF[Math.floor(rand()*LEAF.length)]
+});
+for(let i=0;i<12;i++) streaks.push({
+  x: rand()*W, y: 12 + rand()*(GROUND-24), sp: 24 + rand()*34,
+  len: 8 + Math.floor(rand()*10), al: 0.22 + rand()*0.14
+});
+
+// ---- drawing ----
+let sway = 0;
+
+function drawSky(){
+  for(let y=0;y<GROUND;y++){ ctx.fillStyle = skyRow[y]; ctx.fillRect(0, y, W, 1); }
+}
+
+function drawClouds(t){
+  for(const c of clouds){
+    let x = (c.x + t*c.sp) % (W+40) - 20;
+    for(const p of c.puffs){
+      ellipse(x+p.dx, c.y+p.dy, p.r+1, Math.max(1, p.r-2), CLOUD[0]);
+      ellipse(x+p.dx, c.y+p.dy-1, p.r-1, Math.max(1, p.r-3), CLOUD[1]);
+    }
+  }
+}
+
+function hillBand(pts, colTop, colFace, base){
+  for(let x=0;x<W;x++){
+    const i = Math.floor(x/8), f = (x%8)/8;
+    const y = Math.round(pts[i]*(1-f) + pts[Math.min(i+1, pts.length-1)]*f);
+    fillRow(x, y, 1, base-y, colFace);
+    px(x, y, colTop);
+  }
+}
+
+function drawHills(){
+  hillBand(farPts, HILL[2], HILL[1], GROUND);
+  hillBand(nearPts, HILL[1], HILL[0], GROUND);
+}
+
+function drawGround(){
+  fillRow(0, GROUND, W, H-GROUND, GND[1]);
+  fillRow(0, GROUND, W, 1, GND[2]);
+  fillRow(0, H-3, W, 3, GND[0]);
+  for(const g of grass) px(g.x, g.y, g.c < 0.5 ? GND[0] : (g.c < 0.85 ? GND[2] : "#6f9657"));
+  disc(24, 110, 3, STONE[1]); disc(24, 109, 2, STONE[2]); px(23, 108, STONE[2]);
+  disc(136, 112, 2, STONE[1]); px(135, 111, STONE[2]);
+  const r = mulberry32(5);
+  for(let i=0;i<40;i++) px(Math.floor(r()*W), GROUND + 1 + Math.floor(r()*(H-GROUND-2)), GND[0]);
+}
+
+function drawPot(){
+  // shallow ceramic body with feet
+  ellipse(BASE_X, BASE_Y+7, 16, 3, POT[2]);
+  fillRow(BASE_X-15, BASE_Y+6, 30, 6, POT[2]);
+  for(let y=BASE_Y+7;y<BASE_Y+12;y++) for(let x=BASE_X+3;x<BASE_X+15;x++)
+    if(!((x+y)&1)) px(x, y, POT[1]);
+  for(let x=BASE_X-15;x<BASE_X-9;x++) px(x, BASE_Y+9, POT[1]);
+  fillRow(BASE_X-15, BASE_Y+11, 30, 1, POT[1]);
+  fillRow(BASE_X-13, BASE_Y+12, 5, 2, POT[1]);
+  px(BASE_X-13, BASE_Y+12, POT[2]);
+  fillRow(BASE_X+8, BASE_Y+12, 5, 2, POT[1]);
+  px(BASE_X+8, BASE_Y+12, POT[2]);
+  // protruding rim
+  fillRow(BASE_X-18, BASE_Y+2, 36, 4, POT[2]);
+  fillRow(BASE_X-18, BASE_Y+2, 36, 1, POT[4]);
+  fillRow(BASE_X-17, BASE_Y+3, 20, 1, POT[3]);
+  fillRow(BASE_X-18, BASE_Y+5, 36, 1, POT[1]);
+  px(BASE_X-18, BASE_Y+2, POT[4]); px(BASE_X+17, BASE_Y+2, POT[4]);
+  // soil
+  ellipse(BASE_X, BASE_Y+2, 15, 2, SOIL[1]);
+  for(let i=0;i<12;i++) px(BASE_X-14+Math.floor(rand()*28), BASE_Y+1+Math.floor(rand()*2), SOIL[0]);
+  const rx = mulberry32(3);
+  for(let i=0;i<16;i++){
+    const x = BASE_X-14 + Math.floor(rx()*28), y = BASE_Y+7 + Math.floor(rx()*5);
+    if(rx() < 0.5) px(x, y, POT[3]);
+  }
+  ellipse(BASE_X, BASE_Y+14, 14, 1, "#1f3325");
+}
+
+function drawTrunk(){
+  const WB = 9, WT = 3;
+  taper(TRUNK.x0, TRUNK.y0, TRUNK.cx, TRUNK.cy, TRUNK.x1, TRUNK.y1, WB, WT, BARK[1]);
+  for(const b of branches){
+    const p = bez(b.p0);
+    taper(p.x, p.y, b.cx, b.cy, b.x1, b.y1, b.w0, b.w1, BARK[1]);
+  }
+  taper(BASE_X-3, BASE_Y+1, BASE_X-8, BASE_Y+3, BASE_X-12, BASE_Y+5, 4, 1, BARK[1]);
+  taper(BASE_X+3, BASE_Y+1, BASE_X+8, BASE_Y+3, BASE_X+12, BASE_Y+5, 4, 1, BARK[1]);
+  taper(BASE_X, BASE_Y-3, BASE_X-5, BASE_Y-1, BASE_X-8, BASE_Y+2, 6, 1, BARK[1]);
+  taper(BASE_X, BASE_Y-3, BASE_X+6, BASE_Y-1, BASE_X+9, BASE_Y+2, 5, 1, BARK[1]);
+
+  // light side (left/top) and dark side (right)
+  const steps = 80;
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, p=bez(t), w=Math.max(0, Math.round((WB+(WT-WB)*t)/2));
+    for(let k=-w;k<=w;k++) px(p.x+k-1, p.y, BARK[2]);
+    for(let k=w-1;k<=w;k++) px(p.x+k, p.y, BARK[0]);
+    px(p.x-w, p.y, BARK[1]);
+    if(i%6===0) px(p.x-Math.round(w*0.5), p.y, BARK[3]);
+    if(i%10===0) px(p.x+1, p.y+1, BARK[0]);
+  }
+  for(const b of branches){
+    const p = bez(b.p0), steps2 = 24;
+    for(let i=0;i<=steps2;i++){
+      const t=i/steps2, u=1-t;
+      const x=u*u*p.x+2*u*t*b.cx+t*t*b.x1, y=u*u*p.y+2*u*t*b.cy+t*t*b.y1;
+      const w=Math.max(0, Math.round((b.w0+(b.w1-b.w0)*t)/2));
+      if(t<0.5) px(x, y-w, BARK[3]);
+      px(x, y+w, BARK[0]);
+    }
+  }
+}
+
+function drawPad(p){
+  const ox = Math.round(Math.sin(sway*1.3 + p.ph) * 2.2 * p.hFac);
+  const oy = Math.round(Math.sin(sway*0.9 + p.ph*1.3) * 0.8 * p.hFac);
+  const cx = p.x + ox, cy = p.y + oy;
+
+  for(const b of p.blobs) disc(cx+b.dx, cy+b.dy, b.r+1, FOLIAGE[0]);
+  for(const b of p.blobs) disc(cx+b.dx-1, cy+b.dy-1, b.r, FOLIAGE[1]);
+  for(const b of p.blobs) disc(cx+b.dx-2, cy+b.dy-2, b.r-1, FOLIAGE[2]);
+  for(const b of p.blobs) disc(cx+b.dx-3, cy+b.dy-3, Math.max(0,b.r-2), FOLIAGE[3]);
+
+  // interior depth: dark speckles clustered in the lower-right body
+  for(const s of p.specks){
+    px(cx+s.dx, cy+s.dy, s.c > 0.6 ? FOLIAGE[3] : FOLIAGE[1]);
+  }
+  const r = mulberry32(Math.round(p.x*71 + p.y*29));
+  for(let i=0;i<10;i++){
+    const dx = Math.round(r()*p.rx*0.9) - 1;
+    const dy = Math.round(r()*p.ry*0.7) + 1;
+    if(r() < 0.7) px(cx+dx, cy+dy, FOLIAGE[0]);
+  }
+  // lit crown rim along the top edge, speckled for a leafy edge
+  for(let x=-p.rx;x<=p.rx;x++){
+    const d = 1 - (x*x)/(p.rx*p.rx);
+    if(d <= 0.25) continue;
+    const yt = cy - Math.round(p.ry*Math.sqrt(d)) - 1;
+    if(r() < 0.55) px(cx+x, yt, x < 0 ? FOLIAGE[4] : FOLIAGE[3]);
+  }
+}
+
+function drawStreaks(){
+  for(const s of streaks){
+    const len = s.len + (sway > 0 ? Math.round(sway*3) : 0);
+    ctx.globalAlpha = Math.min(0.6, s.al + Math.max(0, sway)*0.12);
+    fillRow(s.x, s.y, len, 1, "#cfe3f0");
+    fillRow(s.x, s.y+1, Math.max(2, Math.round(len*0.5)), 1, "#9cbdd6");
+    if(len > 8) fillRow(s.x+2, s.y-1, Math.round(len*0.6), 1, "#eaf4fb");
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawLeaves(t){
+  for(const l of leaves){
+    const x = Math.round(l.x), y = Math.round(l.y + Math.sin(t*3 + l.ph) * l.amp);
+    const wob = Math.round(Math.sin(t*6 + l.ph)*1.5);
+    px(x, y, l.c);
+    if(l.size > 1) px(x+1, y+wob>0?y:y-1, mix(l.c, "#ffffff", 0.25));
+    if(l.size > 1) px(x-1, y+1, mix(l.c, "#000000", 0.25));
+  }
+}
+
+function update(dt, t){
+  const gust = 0.55 + 0.45*Math.sin(t*0.35) * Math.sin(t*0.13 + 2);
+  sway = Math.sin(t*1.1) + gust*0.6*Math.sin(t*2.3);
+  const wind = 12 + 10*gust;
+  for(const l of leaves){
+    l.x += (l.sp + wind) * dt;
+    if(l.x > W + 2){ l.x = -2 - rand()*6; l.y = rand()*GROUND; l.sp = 6 + rand()*16; }
+  }
+  for(const s of streaks){
+    s.x += (s.sp + wind*1.6) * dt;
+    if(s.x > W + 12){ s.x = -s.len - 4 - rand()*10; s.y = 12 + rand()*(GROUND-24); }
+  }
+}
+
+const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let last = performance.now();
+function frame(now){
+  const dt = reduce ? 0 : Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const t = now / 1000;
+  update(dt, t);
+
+  drawSky();
+  drawClouds(t);
+  drawHills();
+  drawGround();
+  drawPot();
+  drawTrunk();
+  for(const p of pads) drawPad(p);
+  drawStreaks();
+  drawLeaves(t);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

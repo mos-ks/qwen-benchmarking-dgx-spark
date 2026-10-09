@@ -3,10 +3,11 @@
 Can a local model on one NVIDIA DGX Spark, wrapped in the right agent harness, build front-end work
 at the quality of Claude Opus 5.5, in at most twice Opus's time?
 
-**Not yet, but the gap is narrowing.** The best local setup so far, Qwen3.6-35B-A3B (NVFP4, 134.8
-tok/s, vision-capable) inside OpenCode with a harness-driven look-and-fix loop, finishes every brief
-inside the time budget and scores 6.5 to 7.5 against Opus's 9.0 to 9.5. Qwen3.8-Flash-Next, the
-strongest model that fits on one Spark, is being added (see [Status](#status)).
+**Not yet, but the gap is narrowing.** With a harness-driven look-and-fix loop in OpenCode, local
+models now finish every brief inside the time budget. Qwen3.6-35B-A3B (134.8 tok/s) scores 6.5 to 7.5
+against Opus's 9.0 to 9.5; the first Qwen3.8-Flash-Next result (the strongest model that fits on one
+Spark) reaches 7.5 on the bonsai brief in 10.9 minutes. Its other runs are in progress (see
+[Status](#status)).
 
 ![Bonsai brief: quality against time](results/charts/bonsai_quality_vs_time.png)
 
@@ -16,7 +17,7 @@ strongest model that fits on one Spark, is being added (see [Status](#status)).
 
 | Brief | Opus 5.5 (reference) | Best local run | Gap |
 |---|---|---|---|
-| Pixel-art bonsai with wind | 9.0 in 14 min | 6.5 in 13.4 min (Qwen3.6-35B-A3B + kit v3) | -2.5 |
+| Pixel-art bonsai with wind | 9.0 in 14 min | 7.5 in 10.9 min (Qwen3.8-Flash-Next + kit v3) | -1.5 |
 | Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.0 in 18.7 min (Qwen3.6-35B-A3B + kit v3) | -2.0 |
 | Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3) | -2.0 |
 
@@ -131,7 +132,7 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 ## Status
 
 - Done: Qwen3-Coder-Next, Qwen3.8-27B, Qwen3.6-35B-A3B on all briefs and harness versions above.
-- In progress: Qwen3.8-Flash-Next through the same supervised briefs.
+- Qwen3.8-Flash-Next: bonsai done (7.5 in 10.9 min); lighthouse, a second bonsai attempt and the dashboard in progress.
 - This repository is updated as runs finish.
 
 ## Reproduce
