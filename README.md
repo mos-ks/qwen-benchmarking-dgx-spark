@@ -24,7 +24,15 @@ Every run of the bonsai brief, one frame each (Opus first):
 
 ![Every bonsai run](results/screenshots/sheet-bonsai-oneshot-all.png)
 
-The generated pages are in [`results/apps/`](results/apps/) and open directly in a browser; the
+Open the pages live (they animate):
+
+| Brief | Opus 5.5 | Best local (Qwen3.6-35B-A3B + kit v3) |
+|---|---|---|
+| Bonsai | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/qwen3-6-35b-a3b-kit-v3-1/) |
+| Lighthouse | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/qwen3-6-35b-a3b-kit-v3-1/) |
+| Dashboard | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/qwen3-6-35b-a3b-kit-v3-1/) |
+
+All generated pages are in [`results/apps/`](results/apps/) and open directly in a browser; the
 frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 [`results/data/`](results/data/).
 
