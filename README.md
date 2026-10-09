@@ -3,11 +3,11 @@
 Can a local model on one NVIDIA DGX Spark, wrapped in the right agent harness, build front-end work
 at the quality of Claude Opus 5.5, in at most twice Opus's time?
 
-**Not yet, but the gap is narrowing.** With a harness-driven look-and-fix loop in OpenCode, local
-models now finish every brief inside the time budget. Qwen3.6-35B-A3B (134.8 tok/s) scores 6.5 to 7.5
-against Opus's 9.0 to 9.5; the first Qwen3.8-Flash-Next result (the strongest model that fits on one
-Spark) reaches 7.5 on the bonsai brief in 10.9 minutes. Its other runs are in progress (see
-[Status](#status)).
+**Not yet.** The best local setup is Qwen3.8-Flash-Next (the strongest model that fits on one
+Spark) in OpenCode, with a harness that screenshots the page, critiques it and hands the agent a
+tested pixel-art drawing library. It scores 7.5 on the bonsai and lighthouse briefs inside the time
+budget, against Opus's 9.0, and 6.5 on the windmill brief that no harness change was tuned on. The
+dashboard brief still overruns its budget (see [Status](#status)).
 
 ![Bonsai brief: quality against time](results/charts/bonsai_quality_vs_time.png)
 
@@ -18,7 +18,8 @@ Spark) reaches 7.5 on the bonsai brief in 10.9 minutes. Its other runs are in pr
 | Brief | Opus 5.5 (reference) | Best local run | Gap |
 |---|---|---|---|
 | Pixel-art bonsai with wind | 9.0 in 14 min | 7.5 in 10.9 min (Qwen3.8-Flash-Next + kit v3) | -1.5 |
-| Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.0 in 18.7 min (Qwen3.6-35B-A3B + kit v3) | -2.0 |
+| Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.5 in 25.9 min (Qwen3.8-Flash-Next + kit v5) | -1.5 |
+| Pixel-art windmill in a tulip field (held out from every kit change) | 9.0 in 17.7 min | 6.5 in 30.9 min (Qwen3.8-Flash-Next + kit v5) | -2.5 |
 | Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3); 8.5 but in 37.3 min, over budget (Qwen3.8-Flash-Next + kit v3) | -2.0 in budget |
 
 **[Open the results viewer](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/)**: Opus's page
@@ -27,15 +28,17 @@ on the left, every local run on a slider on the right, per brief.
 Static comparison sheets (Opus first, then runs by score):
 [bonsai](results/screenshots/sheet-bonsai.png) ·
 [lighthouse](results/screenshots/sheet-lighthouse.png) ·
-[dashboard](results/screenshots/sheet-dashboard.png)
+[dashboard](results/screenshots/sheet-dashboard.png) ·
+[windmill](results/screenshots/sheet-windmill.png)
 
 Open the pages live (they animate):
 
-| Brief | Opus 5.5 | Best local (Qwen3.6-35B-A3B + kit v3) |
+| Brief | Opus 5.5 | Best local run |
 |---|---|---|
-| Bonsai | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/qwen3-6-35b-a3b-kit-v3-1/) |
-| Lighthouse | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/qwen3-6-35b-a3b-kit-v3-1/) |
-| Dashboard | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/qwen3-6-35b-a3b-kit-v3-1/) |
+| Bonsai | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/bonsai/qwen3-8-flash-next-kit-v3-1/) (Flash-Next + kit v3) |
+| Lighthouse | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/lighthouse/qwen3-8-flash-next-kit-v5-1/) (Flash-Next + kit v5) |
+| Windmill | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/windmill/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/windmill/qwen3-8-flash-next-kit-v5-1/) (Flash-Next + kit v5) |
+| Dashboard | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/opus-5-5-claude-code-ref/) | [open](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/results/apps/dashboard/qwen3-6-35b-a3b-kit-v3-1/) (Qwen3.6-35B-A3B + kit v3) |
 
 All generated pages are in [`results/apps/`](results/apps/) and open directly in a browser; the
 frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
@@ -148,7 +151,8 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 - Kit v4 plus the [ponytail](https://github.com/DietrichGebert/ponytail) skill (loaded as always-on instructions) on Flash-Next: bonsai 6.0 (30.1 min), lighthouse 6.5 (27.3 min). Lower on both briefs and no faster, so it stays out of the kit.
 - Kit v4 on the new windmill brief: 5.0 (25.5 min). On the dashboard it wrote its own Playwright check script and verified for the whole 45 minutes, so the supervisor never got a turn: 7.0, timeout.
 - Kit v5 (drawing library): bonsai 7.5 in 11.9 min, lighthouse 7.5 in 25.9 min, the best lighthouse and the fastest good bonsai so far. The critic scored both 8 or more on its first look, so no supervisor rounds ran.
-- In progress: kit v5 on the windmill brief (held out from every kit change), then kit v5.1 (tool results carry a wrap-up note after 20 minutes) on the dashboard, twice.
+- Kit v5 on the windmill brief: 6.5 in 30.9 min, up from kit v4's 5.0. The drawing library carried over to a scene it was not built for.
+- In progress: kit v5.1 (tool results carry a wrap-up note after 20 minutes) on the dashboard, twice.
 - This repository is updated as runs finish.
 
 ## Reproduce

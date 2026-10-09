@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<title>Dutch Windmill at Sunset — pixel art</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #2a1e40; }
+  #scene { position: fixed; inset: 0; display: block; }
+  #caption {
+    position: fixed; right: 10px; bottom: 8px; z-index: 2;
+    margin: 0; font: 500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: #ffe9cf; text-shadow: 0 1px 2px rgba(43, 22, 43, .9);
+    opacity: .78; pointer-events: none; user-select: none;
+  }
+  @media (prefers-reduced-motion: reduce) { #caption { opacity: .45; } }
+</style>
+</head>
+<body>
+<canvas id="scene" role="img" aria-label="Pixel-art scene of a Dutch windmill standing in a tulip field beside a canal at sunset. The sails turn, tulips sway in the breeze, clouds drift and birds fly by."></canvas>
+<p id="caption">Windmill &middot; tulip field &middot; sunset</p>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const PK = window.PK;
+  const R = PK.ramps;
+  const canvas = document.getElementById("scene");
+
+  // ---- limited palette, hue-shifted (cool shadows, warm highlights) --------------------------
+  const SKY   = ["#2a1e40", "#3b2559", "#5a2e66", "#8a3c63", "#c25a54", "#e8844f", "#f6ab5b", "#ffd98f"];
+  const CLOUD = ["#513a6e", "#71508a", "#9a6c96", "#d090a2", "#ffc4a6", "#ffe8d2"];
+  const SUN   = ["#ffdf9e", "#ffd07e", "#ffb45f"];
+  const GRASS = ["#182b19", "#22401f", "#2f572a", "#416f33", "#578a3f"];
+  const FIELD = ["#232238", "#302d49", "#3f3957", "#544868"];
+  const CANAL = ["#141a3a", "#232b55", "#3d3a6e", "#6d4b70", "#b06a66", "#e09a72", "#f4cf9a"];
+  const BRICK = ["#471f24", "#692b2b", "#8f4237", "#b96247", "#dd8f61"];
+  const CAP   = ["#22283c", "#37405a", "#515c7c", "#74809e", "#9dabc4"];
+  const WOOD  = ["#2b1e16", "#453020", "#66482d", "#8c6540", "#b8895a"];
+  const SAIL  = ["#3a261a", "#5e3d26", "#8a5a37", "#b8824d", "#e3b478"];
+  const LATT  = ["#5e3d26", "#8a5a37", "#b8824d", "#e3b478"];
+  const DOOR  = ["#241713", "#3a241b", "#543524", "#744d31"];
+  const STONE = R.stone;
+  const BUSH  = ["#101f14", "#1a3019", "#274722", "#375f2c", "#4d7d3a"];
+  const BIRD  = ["#2b2140", "#1c1530"];
+  const BIRD_HI = ["#3a2e55", "#2a2046"];
+
+  const TULIPS = {
+    red:    { petal: ["#5d1020", "#99202f", "#cf3b41", "#f0705f", "#ffc0a4"],
+              stem: ["#16301b", "#234420", "#2f5a2a"], leaf: ["#1c3a20", "#2c5428"] },
+    yellow: { petal: ["#7a440f", "#bd7718", "#e8a726", "#fbd35a", "#fff0a8"],
+              stem: ["#183119", "#26471f", "#335c27"], leaf: ["#1e3d1e", "#2e5326"] },
+    pink:   { petal: ["#691341", "#a72a67", "#d84c88", "#f47fb0", "#ffc4da"],
+              stem: ["#17311c", "#254621", "#315a29"], leaf: ["#1d3c21", "#2d5329"] },
+  };
+  const TULIP_KEYS = ["red", "yellow", "pink"];
+
+  // ---- deterministic scene data (seeded, stable across resizes) ------------------------------
+  const CLOUD_DEFS = [
+    { u: 0.14, h: 0.12, w: 26, spd: 1.5, pal: [0, 1, 2, 3, 4] },
+    { u: 0.40, h: 0.07, w: 34, spd: 1.0, pal: [0, 1, 2, 3, 4, 5] },
+    { u: 0.67, h: 0.15, w: 22, spd: 2.0, pal: [0, 1, 2, 3] },
+    { u: 0.86, h: 0.06, w: 30, spd: 0.8, pal: [0, 1, 2, 3, 4, 5] },
+    { u: 0.28, h: 0.22, w: 18, spd: 2.4, pal: [1, 2, 3] },
+  ];
+  const cloudShapes = CLOUD_DEFS.map((c) => {
+    const rnd = PK.rng((c.u * 100000) | 0);
+    const h = Math.max(3, Math.round(c.w * 0.28));
+    const n = Math.max(4, Math.round(c.w / 4));
+    const puffs = [];
+    for (let i = 0; i < n; i++) {
+      puffs.push({ x: Math.round(rnd() * (c.w - 4)) + 2, y: h - 2 - Math.round(rnd() * (h * 0.45)), r: 1 + Math.floor(rnd() * 3) });
+    }
+    return { def: c, puffs, h };
+  });
+
+  const BIRD_DEFS = [
+    { y: 0.10, vx: 9,  flap: 9.0, amp: 1.8, ph: 0.0, flip: false },
+    { y: 0.17, vx: 7,  flap: 7.5, amp: 2.3, ph: 2.1, flip: false },
+    { y: 0.06, vx: 11, flap: 11,  amp: 1.5, ph: 4.0, flip: false },
+    { y: 0.22, vx: 8,  flap: 8.5, amp: 2.0, ph: 1.1, flip: true },
+  ];
+  const BIRD_SEEDS = [3, 5, 7, 11];
+
+  // tulip rows: quadratic depth, per-row uniform block color, dense jittered plants
+  const ROW_COUNT = 34;
+  const ROWS = [];
+  (function buildRows() {
+    const rnd = PK.rng(777);
+    for (let g = 0; g < ROW_COUNT; g++) {
+      const v = (g + 0.75) / (ROW_COUNT + 0.4);
+      const p = 0.035 + 0.965 * v * v;
+      const scale = 0.34 + 1.42 * v;
+      const step = Math.max(3, Math.round(3.2 + 8.8 * v));
+      const bandColor = g < 12 ? (rnd() < 0.5 ? 0 : 1) : (rnd() < 0.4 ? 2 : rnd() < 0.5 ? 0 : 1);
+      const row = { p, scale, step, tilt: 2 + v * 4, bandColor, plants: [] };
+      const n = Math.max(6, Math.round(116 / step));
+      for (let k = 0; k < n; k++) {
+        const u = (k + 0.5) / n + (rnd() - 0.5) * (0.85 / n);
+        row.plants.push({ u, ph: rnd() * 6.28, sp: 0.8 + rnd() * 0.5, alt: rnd() < 0.16 ? (bandColor + 1 + Math.floor(rnd() * 2)) % 3 : bandColor, seed: (rnd() * 1e9) | 0 });
+      }
+      ROWS.push(row);
+    }
+  })();
+
+  const ROWS_BACK = ROWS.slice(0, ROWS.length - 4);
+  const ROWS_FRONT = ROWS.slice(ROWS.length - 4);
+  // ---- layout computed each resize -------------------------------------------------------------
+  let view = null, bg = null;
+  let W = 0, H = 0, hy = 0, gTop = 0, gBot = 0, mh = 0, capCy = 0, sailLen = 0;
+  let millX = 0, doorBaseY = 0, sunX = 0;
+  let birds = [], motes = null;
+
+  function computeLayout(v) {
+    W = v.W; H = v.H;
+    hy = Math.round(H * 0.58);
+    gTop = hy + 1;
+    gBot = Math.round(H * 0.97);
+    const millCenterU = v.portrait ? 0.63 : 0.585;
+    millX = Math.round(W * millCenterU);
+    mh = Math.round(Math.min(H * 0.30, W * (v.portrait ? 0.44 : 0.34)));
+    capCy = Math.round(hy - mh * 0.92 - 4);
+    sailLen = Math.round(mh * 0.46);
+    doorBaseY = gTop + Math.round(mh * 0.03) - 2;
+    sunX = Math.round(W * 0.26);
+  }
+
+  // ---- drawing ------------------------------------------------------------------------------
+
+  function drawCloud(cx, baseY, shape) {
+    const { def, puffs, h } = shape;
+    const pal = def.pal;
+    const half = def.w >> 1;
+    const x0 = Math.round(cx - half);
+    for (const p of puffs) PK.disc(x0 + p.x, baseY - p.y, p.r, CLOUD[pal[0]]);
+    for (const p of puffs) PK.disc(x0 + p.x, baseY - p.y, Math.max(1, p.r - 1), CLOUD[pal[Math.min(1, pal.length - 1)]]);
+    for (const p of puffs) if (p.r >= 2) PK.disc(x0 + p.x - 1, baseY - p.y - 1, Math.max(1, p.r - 2), CLOUD[pal[Math.min(2, pal.length - 1)]]);
+    for (const p of puffs) {
+      if (p.r < 2 || pal.length < 4) continue;
+      PK.px(x0 + p.x - 2, baseY - p.y - 2, CLOUD[pal[3]]);
+      if (p.r >= 3 && pal.length > 4) PK.px(x0 + p.x - 2, baseY - p.y - 3, CLOUD[pal[4]]);
+    }
+    for (let x = x0; x < x0 + def.w; x++) if (((x + Math.round(cx)) & 3) === 0) PK.px(x, baseY, CLOUD[pal[pal.length - 1]]);
+  }
+
+  function drawBird(x, y, flap, flip, hi) {
+    const up = Math.round(flap * 2);
+    const c = hi ? BIRD_HI[1] : BIRD[1];
+    const cd = hi ? BIRD_HI[0] : BIRD[0];
+    const put = (dx, dy, col) => PK.px(x + (flip ? -dx : dx), y + dy, col);
+    put(0, 0, cd);
+    put(1, -up, c); put(2, -up, c);
+    put(1, -up - 1, c); put(2, -up - 1, cd);
+    if (up >= 2) { put(3, -up, c); put(1, -up - 2, cd); }
+    put(-1, 0, cd);
+    put(0, 1, cd);
+  }
+
+  function drawWindmill() {
+    const s = mh / 84;
+    const baseY = doorBaseY;
+    PK.disc(millX, baseY - 1, Math.max(9, Math.round(17 * s)), "rgba(15,17,38,0.45)");
+
+    const wB = Math.round(30 * s), wT = Math.round(17 * s), h = mh - Math.round(12 * s);
+    for (let i = 0; i < h; i++) {
+      const f = i / h;
+      const w = wB + (wT - wB) * f;
+      const x0 = Math.round(millX - w / 2), x1 = Math.round(millX + w / 2);
+      const y = baseY - 1 - i;
+      if (x1 - x0 >= 5) {
+        for (let x = x0; x < x1; x++) {
+          let c;
+          if (x < x0 + 3) c = BRICK[3];
+          else if (x >= x1 - 3) c = BRICK[1];
+          else c = BRICK[2];
+          if ((i % 3 === 0) && ((x + i) % 3 === 0)) c = BRICK[1];
+          else if ((i % 7 === 0) && (x % 4 === 1)) c = BRICK[4];
+          PK.px(x, y, c);
+        }
+        PK.px(x0, y, BRICK[1]);
+        PK.px(x1 - 1, y, BRICK[0]);
+      } else {
+        for (let x = x0; x < x1; x++) PK.px(x, y, BRICK[2]);
+      }
+    }
+
+    const gy = baseY - Math.round(26 * s);
+    PK.line(Math.round(millX - wB / 2) - 1, gy, Math.round(millX + wB / 2) + 1, gy, STONE[1]);
+    for (let x = Math.round(millX - wB / 2); x <= Math.round(millX + wB / 2); x++) {
+      PK.px(x, gy, STONE[2]);
+      PK.px(x, gy - 1, (x & 1) ? STONE[3] : STONE[2]);
+    }
+
+    const dw = Math.max(7, Math.round(10 * s)), dh = Math.max(12, Math.round(17 * s));
+    const dx0 = Math.round(millX - dw / 2), dy0 = baseY - dh;
+    PK.rect(dx0 - 1, dy0 - 1, dw + 2, dh + 2, DOOR[0]);
+    for (let y = dy0; y < baseY; y++) {
+      const inset = (y - dy0 < 2) ? 1 : 0;
+      for (let x = dx0 + inset; x < dx0 + dw - inset; x++) {
+        let c = DOOR[2];
+        if (x === dx0 || x >= dx0 + dw - 2) c = DOOR[1];
+        if ((x + y) % 5 === 0) c = DOOR[1];
+        PK.px(x, y, c);
+      }
+    }
+    PK.px(dx0 + dw - 2, dy0 + Math.round(dh * 0.55), DOOR[0]);
+    PK.px(dx0 + dw - 2, dy0 + Math.round(dh * 0.55) + 1, DOOR[0]);
+    PK.px(dx0 - 1, baseY - 1, STONE[3]); PK.px(dx0 + dw, baseY - 1, STONE[3]);
+
+    const wiy = baseY - Math.round(48 * s), ww = Math.max(5, Math.round(7 * s)), wh = Math.max(5, Math.round(8 * s));
+    const wix0 = Math.round(millX - ww / 2);
+    PK.rect(wix0 - 1, wiy - 1, ww + 2, wh + 2, WOOD[0]);
+    PK.rect(wix0, wiy, ww, wh, R.warmLight[2]);
+    PK.rect(wix0 + 1, wiy + 1, Math.max(1, ww - 3), Math.max(1, wh - 3), R.warmLight[3]);
+    PK.rect(wix0, wiy + Math.floor(wh / 2), ww, 1, WOOD[2]);
+    PK.rect(wix0 + Math.floor(ww / 2), wiy, 1, wh, WOOD[2]);
+    PK.px(wix0, wiy, R.warmLight[4]); PK.px(wix0 + ww - 1, wiy + wh - 1, R.warmLight[1]);
+    PK.glow(millX, wiy + wh / 2, Math.round(9 * s), R.warmLight[3], 0.4);
+
+    const capY = baseY - mh, capW = Math.round(23 * s), capH = Math.round(12 * s);
+    for (let k = 0; k < Math.max(2, Math.round(3 * s)); k++) PK.rect(Math.round(millX - capW / 2) - 1, capY + k, capW + 2, 1, CAP[0]);
+    for (let i = 0; i < capH; i++) {
+      const f = i / Math.max(1, capH - 1);
+      const w = Math.round((capW * (1 - f * f * 0.92)) / 2) * 2 + 1;
+      const y = capY + i, x0 = Math.round(millX - w / 2);
+      for (let x = x0; x < x0 + w; x++) {
+        let c = CAP[2];
+        if (x <= x0 + 1) c = CAP[3];
+        else if (x >= x0 + w - 2) c = CAP[1];
+        if (i === 0) c = CAP[3];
+        if (i >= capH - 2) c = CAP[1];
+        if (i === 1 && (x & 1)) c = CAP[3];
+        PK.px(x, y, c);
+      }
+    }
+    PK.px(millX, capY - 1, CAP[1]); PK.px(millX, capY - 2, CAP[2]);
+    PK.px(millX - 1, capY - 3, CAP[3]); PK.px(millX, capY - 3, CAP[4]); PK.px(millX + 1, capY - 3, CAP[3]);
+    PK.rect(millX + 2, capY + Math.round(6 * s), Math.max(3, Math.round(4 * s)), Math.max(3, Math.round(4 * s)), DOOR[1]);
+    PK.rect(millX + 3, capY + Math.round(6 * s) + 1, Math.max(1, Math.round(2 * s)), Math.max(1, Math.round(2 * s)), R.warmLight[2]);
+  }
+
+  function drawSail(x, y, angle) {
+    const c = Math.cos(angle), sn = Math.sin(angle), L = sailLen;
+    const n = Math.max(6, Math.ceil(L) * 2);
+    const pts = [];
+    for (let k = 0; k <= n; k++) {
+      const r = (k / n) * L;
+      pts.push({ x: x + c * r, y: y + sn * r, r: 0.4 + (r / L) * 1.6, rr: r });
+    }
+    for (const p of pts) PK.disc(p.x, p.y, p.r + 0.6, SAIL[0]);
+    for (const p of pts) PK.disc(p.x, p.y, Math.max(0.4, p.r - 0.6), SAIL[1]);
+    for (const p of pts) if (p.r >= 1.5) PK.disc(p.x - 0.5, p.y - 0.5, Math.max(0.4, p.r - 1.4), SAIL[2]);
+    for (const p of pts) if (p.r >= 2.3) PK.disc(p.x - 1, p.y - 1, Math.max(0.4, p.r - 2.2), SAIL[3]);
+
+    const nx = -sn, ny = c;
+    const rBase = L * 0.30, rTip = L * 0.99;
+    for (const p of pts) {
+      if (p.rr < rBase || p.rr > rTip) continue;
+      const w = 2.2 + ((p.rr - rBase) / (rTip - rBase)) * 1.6;
+      const rail = Math.round(p.rr) % 6 < 2;
+      for (const sgn of [-1, 1]) {
+        for (let d = 1.2; d <= w; d += 0.7) {
+          const qx = p.x + nx * sgn * d, qy = p.y + ny * sgn * d;
+          let col = null;
+          const frac = d / w;
+          if (frac > 0.72) col = LATT[2];
+          else if ((((Math.round(qx) + Math.round(qy)) & 1) === 0) ^ (frac > 0.5)) col = LATT[1];
+          if (rail) col = LATT[0];
+          if (col) PK.px(qx, qy, col);
+        }
+      }
+    }
+    for (let d = -2; d <= 2; d++) PK.px(x + c * d, y + sn * d, SAIL[1]);
+    PK.disc(x, y, 1.6, SAIL[3]);
+    PK.px(x - 1, y - 1, SAIL[4]);
+  }
+
+  function drawTulip(x, baseY, scale, colorKey, phase, speed, t) {
+    const pal = TULIPS[colorKey];
+    const sway = Math.round(Math.sin(t * speed + phase) * 1.4 * scale);
+    const dark = scale < 0.85;
+    PK.sprite([".P.", "PCP", "PTP", ".S.", "LSC", ".S."], {
+      P: dark ? pal.petal[0] : pal.petal[1],
+      C: dark ? pal.petal[1] : pal.petal[2],
+      T: dark ? pal.petal[2] : pal.petal[3],
+      S: dark ? pal.stem[0] : pal.stem[1],
+      L: pal.leaf[0],
+    }, x - 1 + sway, baseY - 6 * scale, false);
+    if (scale >= 1) PK.px(x + sway - 1, baseY - 6 * scale + 1, pal.petal[4]);
+  }
+
+  function drawStatic(v) {
+    computeLayout(v);
+
+    PK.gradient(0, 0, W, hy + 2, SKY);
+
+    const sunY = hy - Math.round(H * 0.03);
+    PK.glow(sunX, sunY, Math.round(H * 0.16), SUN[2], 0.4);
+    PK.glow(sunX, sunY, Math.round(H * 0.09), SUN[1], 0.6);
+    PK.glow(sunX, sunY, Math.round(H * 0.05), SUN[0], 0.9);
+    PK.disc(sunX, sunY, Math.max(4, Math.round(H * 0.028)), SUN[0]);
+    for (let y = sunY + 2; y <= hy; y++) {
+      if (((y - sunY) & 1) === 0) {
+        const half = Math.max(1, Math.round((y - sunY) * 0.45));
+        for (let x = sunX - half; x <= sunX + half; x++) if (PK.bayer(x, y) < 0.5) PK.px(x, y, SUN[2]);
+      }
+    }
+
+    for (const shp of cloudShapes) {
+      const cx = shp.def.u * W, baseY = shp.def.h * hy + 2;
+      drawCloud(cx, baseY, shp);
+      if (baseY > hy - 10 && baseY < hy + 6) {
+        for (let x = Math.round(cx - shp.def.w / 2); x < Math.round(cx + shp.def.w / 2); x++)
+          if (PK.bayer(x, baseY + 1) < 0.35) PK.px(x, baseY + 1, CLOUD[5]);
+      }
+    }
+
+    // distant tree line breaks the horizon: a soft, desaturated silhouette with varied height
+    const rndT = PK.rng(9091);
+    const treePal = ["#232b4e", "#333a5c", "#46466a", "#5a5474"];
+    const bumps = [];
+    for (let x = -2; x <= W + 2; x += 4 + Math.round(rndT() * 5)) bumps.push({ x, r: 3 + Math.round(rndT() * 5) });
+    const tlY = hy - 1;
+    for (const b of bumps) {
+      PK.disc(b.x, tlY - 1, b.r, treePal[0]);
+      PK.disc(b.x - 1, tlY - 2, Math.max(1, b.r - 1), treePal[1]);
+      if (b.r >= 5) PK.px(b.x - 2, tlY - 3, treePal[2]);
+    }
+    for (let x = 0; x < W; x++) PK.px(x, hy, treePal[0]);
+    for (const b of bumps) for (let dx = -b.r; dx <= b.r; dx++) if (PK.bayer(b.x + dx, tlY - 1) < 0.4) PK.px(b.x + dx, hy + 1, treePal[1]);
+
+    // dirt path from the windmill door to the bottom of the frame (drawn under the tulips)
+    const pathTopW = Math.max(6, Math.round(11 * mh / 84)), pathBotW = Math.round(W * 0.16);
+    const pathC = ["#4a3222", "#6b452c", "#8a5c38", "#a87648", "#c2925c"];
+    const fOf = (y) => (y - gTop) / (gBot - gTop);
+    const canalRight = (f) => W * (0.11 + 0.20 * f);
+    const pathSpan = (f) => {
+      const cxp = millX + (W * 0.48 - millX) * f * f;
+      const half = (pathTopW + (pathBotW - pathTopW) * f) / 2;
+      return [cxp - half, cxp + half];
+    };
+    for (let y = gTop; y <= gBot; y++) {
+      const f = fOf(y);
+      const [a, b] = pathSpan(f);
+      const xl = Math.round(a), xr = Math.round(b);
+      for (let x = xl; x <= xr; x++) {
+        let c = f < 0.45 ? pathC[2] : pathC[3];
+        if ((x + (y >> 1) * 2) % 9 === 0) c = pathC[1];
+        if (x === xl || x === xr) c = pathC[0];
+        if (PK.bayer(x, y) < 0.12) c = pathC[1];
+        if (PK.bayer(x + 4, y + 3) < 0.06) c = pathC[4];
+        PK.px(x, y, c);
+      }
+    }
+
+    const rndG2 = PK.rng(4242);
+    for (let y = gTop; y <= gBot; y++) {
+      const f = fOf(y);
+      const x0 = Math.round(canalRight(f));
+      const [pa, pb] = pathSpan(f);
+      const pxl = Math.round(pa), pxr = Math.round(pb);
+      for (let x = 0; x < W; x++) {
+        if (x <= x0) continue;
+        if (x >= pxl && x <= pxr) continue;
+        let c = GRASS[1];
+        if (PK.bayer(x, y) < 0.22) c = GRASS[2];
+        if (f > 0.55 && PK.bayer(x + 1, y + 2) < 0.10) c = GRASS[3];
+        if (PK.bayer(x + 5, y + 7) < 0.07) c = GRASS[0];
+        PK.px(x, y, c);
+      }
+    }
+
+    for (let y = gTop; y <= gBot; y++) {
+      const f = fOf(y);
+      const xl = 0, xr = Math.round(canalRight(f));
+      if (xr > 1) {
+        const band = Math.min(CANAL.length - 1, Math.floor(f * CANAL.length * 1.15));
+        PK.rect(xl, y, xr - xl + 1, 1, CANAL[band]);
+        for (let x = xl; x <= xr; x++) if (PK.bayer(x, y) < 0.3) PK.px(x, y, CANAL[Math.min(CANAL.length - 1, band + 1)]);
+        PK.px(xr, y, CANAL[1]);
+        if (Math.abs(sunX - xr / 2) < 34) {
+          for (let x = Math.max(0, sunX - 14); x <= Math.min(xr, sunX + 14); x++) {
+            if (PK.bayer(x, y) < 0.5) PK.px(x, y, f < 0.45 ? CANAL[5] : (PK.bayer(x, y + 3) < 0.5 ? CANAL[6] : CANAL[5]));
+          }
+        }
+      }
+    }
+
+    const millHalf = Math.max(8, Math.round(16 * mh / 84));
+    const mx0 = millX - millHalf, mx1 = millX + millHalf;
+    for (let y = gTop; y <= gBot; y++) {
+      const f = (y - gTop) / (gBot - gTop);
+      const xl = 0;
+      const xr = Math.round(canalRight(f));
+      const a = Math.max(xl + 1, mx0), b = Math.min(xr - 1, mx1);
+      if (f > 0.06 && b > a) {
+        for (let x = a; x <= b; x++) {
+          if (PK.bayer(x, y) < 0.30) PK.px(x, y, BRICK[0]);
+          else if (PK.bayer(x + 3, y) < 0.12) PK.px(x, y, BRICK[1]);
+        }
+        PK.px(a, y, "rgba(15,17,38,0.5)"); PK.px(b, y, "rgba(15,17,38,0.5)");
+      }
+    }
+
+    for (const row of ROWS_BACK) {
+      const baseY = gTop + (gBot - gTop) * row.p;
+      const tilt = Math.round(W * row.tilt * (1 - row.p));
+      const pal = TULIPS[TULIP_KEYS[row.bandColor]];
+      const dark = row.scale < 0.85;
+      if (row.scale < 0.62) {
+        for (const pl of row.plants) {
+          const x = Math.round(pl.u * W + tilt);
+          PK.px(x, baseY - 2, dark ? pal.petal[1] : pal.petal[2]);
+          PK.px(x, baseY - 1, pal.petal[3]);
+          PK.px(x, baseY, pal.stem[1]);
+        }
+      }
+    }
+
+    const rndB = PK.rng(31337);
+    const bushes = [
+      { x: millX - Math.round(mh * 0.42), y: doorBaseY - 1, r: Math.max(2, Math.round(mh * 0.05)) },
+      { x: millX + Math.round(mh * 0.40), y: doorBaseY - 1, r: Math.max(3, Math.round(mh * 0.06)) },
+      { x: Math.round(W * (view.portrait ? 0.96 : 0.97)), y: gTop + 3, r: 3 },
+    ];
+    for (const b of bushes) {
+      for (let i = 0; i < 3; i++) {
+        const ox = Math.round((rndB() * 2 - 1) * b.r), oy = Math.round((rndB() - 0.5) * b.r * 0.6);
+        PK.pad(b.x + ox, b.y + oy, b.r + 1, b.r, BUSH, { seed: (rndB() * 1e9) | 0, r: Math.max(2, b.r - 1) });
+      }
+    }
+  }
+
+  PK.fit(canvas, 140, (v) => {
+    view = v;
+    bg = PK.layer(v.W, v.H, () => drawStatic(v));
+    birds = BIRD_DEFS.map((b, i) => ({
+      def: b,
+      x: PK.rng(BIRD_SEEDS[i])() * (v.W + 40) - 20,
+      baseY: 2 + b.y * hy,
+      hi: i % 2 === 0,
+    }));
+    motes = PK.drift({ n: 24, seed: 88, area: [0, gTop - 18, W, gBot], vx: [-7, -3], vy: [-0.5, 0.5], len: [1, 1] });
+  });
+
+  PK.loop((t, dt) => {
+    if (!view || !bg) return;
+    PK.blit(bg);
+
+    for (const shp of cloudShapes) {
+      const span = W + shp.def.w * 2;
+      let cx = shp.def.u * W + t * shp.def.spd;
+      cx = ((cx + shp.def.w) % span + span) % span - shp.def.w;
+      drawCloud(cx, shp.def.h * hy + 2, shp);
+    }
+
+    for (const bird of birds) {
+      const span = W + 40;
+      let bx = bird.x + t * bird.def.vx;
+      bx = ((bx + 20) % span + span) % span - 20;
+      const by = bird.baseY + Math.sin(t * 0.6 + bird.def.ph) * bird.def.amp;
+      const flap = Math.sin(t * bird.def.flap + bird.def.ph);
+      drawBird(bx, by, (flap + 1) / 2, bird.def.flip, bird.hi);
+    }
+
+    drawWindmill();
+    const spin = t * 0.7;
+    for (let k = 0; k < 4; k++) drawSail(millX, capCy, spin + k * Math.PI / 2);
+
+    for (let ri = 0; ri < ROW_COUNT; ri++) {
+      const row = ROWS[ri];
+      const f = row.p;
+      const baseY = gTop + (gBot - gTop) * f;
+      const xl = Math.round(view.W * 0.05 * (0.15 + 0.85 * f)) + 1, xr = Math.round(view.W * (0.40 + 0.42 * f)) - 1;
+      if (xr <= xl) continue;
+      const pal = TULIPS[TULIP_KEYS[row.bandColor]];
+      const altPal = TULIPS[TULIP_KEYS[(row.bandColor + 2) % 3]];
+      const dark = row.scale < 0.7;
+      const n = Math.max(1, Math.round((xr - xl) / row.step));
+      for (let k = 0; k < n; k++) {
+        const jitter = Math.round((PK.bayer(xl + k, ri * 3) - 0.5) * 2.4 * row.step);
+        const x = Math.max(xl, Math.min(xr, xl + k * row.step + jitter));
+        const gust = Math.round(Math.sin(t * 1.7 + ri * 0.9 + x * 0.05) * (0.4 + f * 1.3));
+        let p = pal;
+        if (PK.bayer(x, ri * 7) < 0.16) p = altPal;
+        else if (PK.bayer(x + 3, ri * 11) < 0.14) p = altPal;
+        PK.sprite([".P.", "PCP", "PTP", ".S.", "LSC", ".S."], {
+          P: dark ? p.petal[0] : p.petal[1],
+          C: dark ? p.petal[1] : p.petal[2],
+          T: dark ? p.petal[2] : p.petal[3],
+          S: dark ? p.stem[0] : p.stem[1],
+          L: p.leaf[0],
+        }, x - 1 + gust, Math.round(baseY - 6 * row.scale), false);
+      }
+    }
+
+    motes.step(dt);
+    motes.dots([SUN[1], SUN[0]]);
+  });
+})();
+</script>
+</body>
+</html>

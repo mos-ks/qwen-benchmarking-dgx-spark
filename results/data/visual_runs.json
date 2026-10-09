@@ -350,5 +350,16 @@
   "score": 7.5,
   "outcome": "done",
   "note": "jagged rock island with foam all round, keeper's house, striped tower, dithered beam, moon halo, rain, rolling sea; tower small, no clouds over the moon"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 kit v5 \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v5",
+  "attempt": "#1",
+  "minutes": 30.9,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "tapered brick tower with gallery, window, door and turning sails, dithered sunset, clouds, a path; tulips scattered rather than in rows, plain wooden sails, empty right half"
  }
 ]

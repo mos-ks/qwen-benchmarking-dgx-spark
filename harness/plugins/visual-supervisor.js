@@ -13,7 +13,12 @@ const MAX_ROUNDS = Number(process.env.VISUAL_SUPERVISOR_ROUNDS ?? 4);
 const TARGET_SCORE = Number(process.env.VISUAL_SUPERVISOR_TARGET ?? 8);
 const BUDGET_MIN = Number(process.env.VISUAL_SUPERVISOR_BUDGET_MIN ?? 25);
 const PAGE = process.env.VISUAL_SUPERVISOR_PAGE ?? "index.html";
-const sessions = new Map(); // sessionID -> { started, rounds, done }
+// From this minute on, tool results in a page-building session carry a wrap-up note (at most every
+// NUDGE_EVERY_MIN). Without it a model verified its own dashboard with a self-written Playwright
+// script for the whole 45 minutes and never stopped, so the supervisor never got a turn.
+const WRAP_UP_MIN = Number(process.env.VISUAL_SUPERVISOR_WRAP_UP_MIN ?? 20);
+const NUDGE_EVERY_MIN = Number(process.env.VISUAL_SUPERVISOR_NUDGE_EVERY_MIN ?? 3);
+const sessions = new Map(); // sessionID -> { started, rounds, done, nudged }
 const LOG = process.env.VISUAL_SUPERVISOR_LOG;
 function log(msg) {
   if (LOG) appendFileSync(LOG, `${new Date().toISOString()} ${msg}\n`);
@@ -30,6 +35,20 @@ async function firstUserRequest(client, id) {
   return first ? textOf(first.parts) : "";
 }
 
+function session(id) {
+  let s = sessions.get(id);
+  if (!s) {
+    s = { started: Date.now(), rounds: 0, done: false, nudged: 0 };
+    sessions.set(id, s);
+  }
+  return s;
+}
+
+function wroteThePage(directory, s) {
+  const page = join(directory, PAGE);
+  return existsSync(page) && statSync(page).mtimeMs >= s.started;
+}
+
 export const VisualSupervisor = async ({ client, $, directory }) => ({
   event: async ({ event }) => {
     try {
@@ -38,23 +57,43 @@ export const VisualSupervisor = async ({ client, $, directory }) => ({
       log(`error: ${err?.stack ?? err}`);
     }
   },
+  "tool.execute.after": async (input, output) => {
+    try {
+      nudge(directory, input, output);
+    } catch (err) {
+      log(`nudge error: ${err?.stack ?? err}`);
+    }
+  },
 });
+
+function nudge(directory, input, output) {
+  if (!WRAP_UP_MIN || process.env.VISUAL_SUPERVISOR === "off" || typeof output?.output !== "string") return;
+  const s = session(input.sessionID);
+  const elapsedMin = (Date.now() - s.started) / 60000;
+  if (elapsedMin < WRAP_UP_MIN || (Date.now() - s.nudged) / 60000 < NUDGE_EVERY_MIN) return;
+  if (!wroteThePage(directory, s)) return;
+  s.nudged = Date.now();
+  const used = Math.round(elapsedMin);
+  const note =
+    used >= BUDGET_MIN
+      ? `${used} minutes used, the budget was about ${BUDGET_MIN}. Stop now: no more checks or polish.`
+      : `${used} of about ${BUDGET_MIN} minutes used. The harness screenshots and critiques ${PAGE} every time you stop, ` +
+        `so do not write your own check scripts or verification loops. Finish the change you are making, then stop.`;
+  output.output += `\n\n[note from the harness, not from the tool] ${note}`;
+  log(`nudge ${input.sessionID} tool=${input.tool} at ${elapsedMin.toFixed(1)}min`);
+}
 
 async function handle({ client, $, directory, event }) {
   {
     const id = event.properties?.sessionID;
     if (!id || process.env.VISUAL_SUPERVISOR === "off") return;
-    let s = sessions.get(id);
-    if (!s) {
-      s = { started: Date.now(), rounds: 0, done: false };
-      sessions.set(id, s);
-    }
+    const s = session(id);
     if (event.type !== "session.idle" || s.done) return;
 
     const page = join(directory, PAGE);
     log(`idle ${id} page=${existsSync(page)} rounds=${s.rounds}`);
     // Only sessions that wrote or changed the page in this session: everything else is not UI work.
-    if (!existsSync(page) || statSync(page).mtimeMs < s.started) return;
+    if (!wroteThePage(directory, s)) return;
     if (s.rounds >= MAX_ROUNDS) {
       s.done = true;
       return;
