@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lighthouse at Night — pixel art</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #05060f;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #0b0d1f;
+    box-shadow: 0 0 0 1px #1a1e3a, 0 18px 50px rgba(0, 0, 0, 0.8);
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" width="192" height="128"></canvas>
+<script>
+'use strict';
+
+/* ---------- render setup ---------- */
+const W = 192, H = 128;
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function fit() {
+  // scale to FIT the viewport (never crop); on tall phone screens the scene stays
+  // centered with the background color above/below
+  const s = Math.max(1, Math.min(innerWidth / W, innerHeight / H));
+  canvas.style.width = (W * s) + 'px';
+  canvas.style.height = (H * s) + 'px';
+}
+addEventListener('resize', fit);
+fit();
+
+/* ---------- palette ---------- */
+const C = {
+  sky0: '#0b0d1f', sky1: '#141830', sky2: '#1f2447', sky3: '#2c3160',
+  star: '#aebcf0',
+  moon1: '#e6e9f5', moon2: '#b8bedd', moon3: '#8b92bd', moonHalo: '#3a4170',
+  cloud1: '#1d2242', cloud2: '#2f3658', cloud3: '#4a5178', cloudLit: '#6a7198',
+  sea0: '#0f2240', sea1: '#16345c', sea2: '#1f4a7a', sea3: '#2e6a9e', seaHi: '#6fb6d8',
+  foam: '#dcedf5',
+  rock1: '#1c1f30', rock2: '#2c3047', rock3: '#454b68', rock4: '#6b7190',
+  wall1: '#20263f', wall2: '#333b5c', wall3: '#4a547c',
+  roofShade: '#2b1a14', roofLit: '#6e4430',
+  mRed1: '#571e2c', mRed2: '#8a2f3c', mRed3: '#bb4a52',
+  white1: '#8b92b4', white2: '#c3c9dd', white3: '#eef1f9',
+  dark: '#10131f', dark2: '#171b2c', dark3: '#262b45',
+  glass: '#ffe08a', glassHi: '#fff7d6', lamp: '#ffd75e', flame: '#fffbe8',
+  win: '#ffca6a',
+  beam: '#ffdf9a'
+};
+
+/* ---------- pixel helpers ---------- */
+const px = (x, y, c) => { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, 1, 1); };
+function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+function disc(cx, cy, r, c) {
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++)
+    if (x * x + y * y <= r * r + r * 0.8) px(cx + x, cy + y, c);
+}
+const dither = (x, y) => ((x + y) & 1) === 0;
+const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+const bayer = (x, y, t) => ((BAYER[Math.abs(y) & 3][Math.abs(x) & 3] + 0.5) / 16) < t;
+
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- geometry ---------- */
+const HZ = 44;                 // sea horizon
+const LX = 96, BASE_Y = 82;    // lighthouse center / tower base
+const TOWER_H = 46;
+const TOP_Y = BASE_Y - TOWER_H;
+const WATER0 = 94;             // animated sea surface sits over the rock face here
+
+// rock top profile: one thick central rock mass with stepped shoulders and jagged edges
+const rockH = [];
+{
+  const rr = mulberry32(7);
+  for (let x = 0; x < W; x++) {
+    let h;
+    if (x < 20) h = 111 - (20 - x) * 0.45;          // left foreshore, low
+    else if (x < 34) h = 104;
+    else if (x < 40) h = 101;                        // stepped shoulder
+    else if (x < 50) h = 98;
+    else if (x < 58) h = 95;                         // stepped rise to the house terrace
+    else if (x < 82) h = 92;                         // house terrace
+    else if (x < 86) h = 89;                         // step up to the plateau
+    else if (x < 122) h = 82;                        // lighthouse plateau (thick rock beneath)
+    else if (x < 128) h = 89;                        // stepped descent
+    else if (x < 136) h = 92;
+    else if (x < 146) h = 95;
+    else if (x < 156) h = 98;
+    else if (x < 164) h = 101;                       // stepped shoulder
+    else if (x < 174) h = 104;
+    else h = 108 + (x - 174) * 0.2;                  // right foreshore, low
+    if (rr() < 0.42) h -= 2;                         // jagged stepped top edge
+    if (rr() < 0.12) h -= 1;
+    if (x >= 86 && x <= 106 && h < 82) h = 82;       // keep the lighthouse plateau solid
+    if (x >= 60 && x <= 80 && h < 92) h = 92;        // keep the house terrace solid
+    rockH.push(Math.round(h));
+  }
+}
+
+/* ---------- deterministic art (built once) ---------- */
+const stars = [];
+{
+  const r = mulberry32(11);
+  for (let i = 0; i < 64; i++) {
+    stars.push({ x: Math.floor(r() * W), y: Math.floor(r() * 60), p: r() < 0.3 });
+  }
+}
+
+// moon (fixed; clouds drift in front)
+const MOON = { x: 34, y: 40, r: 9 };
+
+// rock speckles and cracks
+const speckles = [];
+{
+  const r = mulberry32(23);
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) {
+      const v = r();          // consume deterministic noise for every cell
+      if (y < rockH[x]) continue;
+      if (v < 0.05) speckles.push([x, y, 'hi']);
+      else if (v < 0.09) speckles.push([x, y, 'lo']);
+    }
+  }
+}
+
+// clouds: structured silhouettes (flat bases, lobed tops) with dithered shade bands
+function cloudShape(rx, ry, lobes) {
+  const tops = new Array(2 * rx + 1);
+  for (let x = -rx; x <= rx; x++) {
+    let t = ry * (0.42 + 0.58 * Math.sqrt(Math.max(0, 1 - (x * x) / ((rx + 1) * (rx + 1)))));
+    for (const [cx, h] of lobes) {
+      const d = Math.abs(x - cx);
+      if (d < 5.5) t = Math.max(t, ry * 0.45 + h * Math.cos((d / 5.5) * Math.PI * 0.5));
+    }
+    tops[x + rx] = Math.min(ry + 2, t);
+  }
+  const out = [];
+  for (let x = -rx; x <= rx; x++) {
+    const ty = tops[x + rx];
+    for (let y = -Math.ceil(ty); y <= ry; y++) {
+      let c = C.cloud2;
+      if (y <= -ty + 1) c = C.cloud3;                                  // lit top edge
+      else if (y >= ry - 1) c = C.cloud1;                               // flat shaded base
+      else if (y < -ty * 0.15 && ((x + y) & 1) === 0) c = C.cloud3;     // dithered lit band
+      else if (y > ty * 0.05 && ((x + y) & 1) === 0) c = C.cloud1;      // dithered shade band
+      out.push([x, y, c]);
+    }
+  }
+  return out;
+}
+// the moon-band cloud is built around the moon so it is always partly obscured
+function cloudShapeAroundMoon(rx, ry, mx, my) {
+  const out = [];
+  for (let x = -rx; x <= rx; x++) {
+    const t = ry * (0.5 + 0.5 * Math.sqrt(Math.max(0, 1 - (x * x) / ((rx + 1) * (rx + 1)))));
+    for (let y = -Math.ceil(t); y <= ry; y++) {
+      let c = C.cloud2;
+      if (y <= -t + 1) c = C.cloud3;
+      else if (y >= ry - 1) c = C.cloud1;
+      else if (((x + y) & 1) === 0) c = (y < 0 ? C.cloud3 : C.cloud1);
+      out.push([x, y, c]);
+    }
+  }
+  return out;
+}
+const clouds = [
+  { x: 10,  y: 18, ps: cloudShape(13, 4, [[-5, 1.4], [4, 1.0]]),  spd: 2.2, span: W + 40 },
+  { x: 78,  y: 10, ps: cloudShape(10, 3, [[-3, 1.2], [4, 0.8]]),  spd: 1.6, span: W + 40 },
+  { x: 140, y: 26, ps: cloudShape(15, 5, [[-6, 1.6], [3, 1.1], [9, 1.3]]), spd: 2.8, span: W + 40 },
+  { x: 96,  y: 40, ps: cloudShape(9, 3, [[-2, 1.1], [4, 0.8]]),   spd: 1.2, span: W + 40 }
+];
+
+// lantern glazing (local coords; origin = (96, 49); rows cover y 49..56)
+const glass = [];
+for (let y = 0; y <= 7; y++) {
+  let x0 = 90, x1 = 101;
+  if (y === 0) { x0 = 91; x1 = 100; }
+  for (let x = x0; x <= x1; x++) {
+    let c = C.glass;
+    if (x === x0 || x === x1) c = C.glassHi;   // bright mullion edges
+    glass.push([x - 96, y, c]);
+  }
+}
+
+/* ---------- animated state ---------- */
+  // rain drops (precomputed offsets keep every frame deterministic)
+const rain = [];
+{
+  const r = mulberry32(99);
+  for (let i = 0; i < 84; i++) {
+    const l = 3 + (i % 3);
+    const offs = [];
+    for (let j = 0; j < l; j++) offs.push(Math.round(j * 0.5));
+    rain.push({ x: r() * (W + 20), y: r() * H, s: 30 + (i % 6) * 6, l, offs });
+  }
+}
+
+const BOUND_X = [12, 30, 158, 176];              // splashes at the cliff foot on both foreshores
+const drops = [];
+let nextSplash = 0;
+const rand = mulberry32(555);
+
+/* ---------- drawing ---------- */
+function drawSky() {
+  for (let y = 0; y < H; y++) {
+    let c;
+    if (y < 14) c = C.sky0;
+    else if (y < 30) c = (y & 1) === 0 ? C.sky0 : C.sky1;
+    else if (y < 44) c = C.sky1;
+    else if (y < 56) c = (y & 1) === 0 ? C.sky1 : C.sky2;
+    else if (y < 66) c = C.sky2;
+    else c = (y & 1) === 0 ? C.sky2 : C.sky3;
+    rect(0, y, W, 1, c);
+  }
+  for (const s of stars) px(s.x, s.y, s.p ? C.sky3 : C.star);
+
+  // moon halo + body, lit from top-left
+  disc(MOON.x, MOON.y, MOON.r + 3, C.moonHalo);
+  disc(MOON.x, MOON.y, MOON.r, C.moon1);
+  for (let y = -MOON.r; y <= MOON.r; y++) for (let x = -MOON.r; x <= MOON.r; x++) {
+    if (x * x + y * y > MOON.r * MOON.r + MOON.r * 0.8) continue;
+    if (x + y > 2) px(MOON.x + x, MOON.y + y, C.moon2);
+    if (x + y > 7) px(MOON.x + x, MOON.y + y, C.moon3);
+  }
+  // craters
+  disc(MOON.x - 3, MOON.y - 2, 2, C.moon2);
+  disc(MOON.x + 1, MOON.y + 3, 1, C.moon2);
+  disc(MOON.x - 5, MOON.y + 4, 1, C.moon3);
+}
+
+function drawClouds(t) {
+  for (const cl of clouds) {
+    const ox = ((cl.x + t * cl.spd) % cl.span + cl.span) % cl.span - 20;
+    for (const [dx, dy, c] of cl.ps) {
+      const x = ox + dx, y = cl.y + dy;
+      if (x < 0 || x >= W) continue;
+      px(x, y, c);
+    }
+  }
+}
+
+function drawSea(t) {
+  // base bands
+  rect(0, HZ, W, 5, C.sea0);
+  rect(0, HZ + 5, W, 15, C.sea1);
+  rect(0, HZ + 20, W, H - HZ - 20, C.sea2);
+
+  // horizontal wave rows (drift + wobble) so the sea reads as moving water
+  for (let k = 0; k < 14; k++) {
+    const y = HZ + 1 + ((k * 7 + 3) % (WATER0 - HZ - 3));
+    const len = 10 + (k % 3) * 6;
+    const speed = 5 + (k % 4) * 3;
+    const x = (((k * 23 + 7) + t * speed) % (W + 20) + W + 20) % (W + 20) - 10;
+    const wob = Math.round(Math.sin(t * 1.4 + k * 1.7) * 0.8);
+    rect(x, y + wob, len, 1, y < HZ + 6 ? C.sea3 : C.seaHi);
+    if (k % 2 === 0) rect(x + 2, y + wob + 1, Math.max(2, len - 4), 1, C.sea3);
+  }
+  // moving highlight dashes
+  for (let k = 0; k < 9; k++) {
+    const base = (k * 23 + 7) % W;
+    const len = 4 + (k % 3) * 3;
+    const speed = 5 + (k % 4) * 3;
+    const x = ((base + t * speed) % (W + 20) + W + 20) % (W + 20) - 10;
+    const y = HZ + 2 + ((k * 7 + 3) % (WATER0 - HZ - 4));
+    const c = y < HZ + 7 ? C.sea3 : C.seaHi;
+    rect(x, y, len, 1, c);
+    if (Math.sin(t * 1.3 + k) > 0.3 && y > HZ + 8) rect(x + 1, y + 1, len - 2, 1, C.sea3);
+  }
+  // moon reflection: sparse, broken shimmer dashes — never a solid vertical ladder
+  for (let y = HZ + 1; y < WATER0 - 2; y++) {
+    const d = (y - HZ) / (WATER0 - 2 - HZ);                    // 0..1 down the water
+    const half = 2 + d * 7;                                     // widens toward the viewer
+    const sway = Math.sin(t * 1.1 + y * 0.35) * (1 + d * 2.5); // path sways more near the bottom
+    const cx = MOON.x + sway;
+    const dashOn = ((y * 5 + Math.floor(t * 3)) % 3) !== 0;     // rows blink so it shimmers
+    if (!dashOn) continue;
+    const seg = 1 + ((y * 7 + Math.floor(t * 4)) % 2);          // short 1-2px dashes
+    const off = ((y * 11 + Math.floor(t * 2)) % 6) - 3;         // broken: gaps slide across
+    for (let x = Math.floor(cx - half); x <= Math.ceil(cx + half); x++) {
+      if (x < 0 || x >= W) continue;
+      const inDash = ((x - Math.floor(cx - half) + off + seg) % (seg * 3)) < seg;
+      if (!inDash) continue;
+      const dd = Math.abs(x - cx) / half;
+      px(x, y, dd < 0.45 ? C.seaHi : C.sea3);
+    }
+  }
+}
+
+function drawRocks() {
+  for (let x = 0; x < W; x++) {
+    const top = rockH[x];
+    for (let y = top; y < H; y++) {
+      let c;
+      if (y < top + 1) c = C.rock4;
+      else if (y < top + 3) c = C.rock3;
+      else if (y < top + 7) c = C.rock2;
+      else c = C.rock1;
+      px(x, y, c);
+    }
+    // occasional wet sheen at the waterline
+    if (x % 7 === 2 && top > WATER0 && top < H - 6) px(x, top, C.rock2);
+  }
+  // rock speckles: skip dry-rock pixels that the animated sea covers later
+  for (const [x, y, k] of speckles) {
+    if (y < rockH[x] + 2 || (rockH[x] > WATER0 && y >= WATER0 - 4)) continue;
+    px(x, y, k === 'hi' ? C.rock3 : C.rock1);
+  }
+  // a few cracks
+  crack(50, 104, 6, 1); crack(140, 106, 8, -1); crack(20, 118, 5, 1); crack(166, 114, 6, -1);
+}
+function crack(x, y, len, dir) {
+  for (let i = 0; i < len; i++) px(x + i * dir + (i % 2), y + (i % 3), C.rock1);
+}
+
+function drawHouse() {
+  const x = 62, y0 = 96;                   // sits on the stepped terrace left of the tower
+  // lit path from the door to the tower base
+  for (let x2 = 70; x2 <= 82; x2++) if ((x2 * 31) % 3 !== 0) px(x2, y0, C.rock3);
+  // body: stone walls, lit on the moon side
+  rect(x, y0 - 10, 16, 10, C.wall2);
+  rect(x, y0 - 10, 4, 10, C.wall3);        // lit left face
+  rect(x + 13, y0 - 10, 3, 10, C.wall1);   // shadow right face
+  for (let y = y0 - 9; y < y0; y += 3) for (let sx = x + 4; sx < x + 13; sx += 4) px(sx, y, C.wall1); // mortar specks
+  // gabled roof (distinct brown), lit top-left
+  for (let r = 0; r < 5; r++) {
+    rect(x - 2 + r, y0 - 14 + r, 20 - 2 * r, 1, C.roofShade);
+    rect(x - 2 + r, y0 - 14 + r, Math.max(2, 11 - 2 * r), 1, C.roofLit);
+  }
+  rect(x - 2, y0 - 14, 20, 1, '#9a6646');  // lit ridge
+  rect(x - 2, y0 - 10, 20, 1, C.dark);     // eave shadow line
+  // door + step, two windows (one lit, one dark)
+  rect(x + 6, y0 - 6, 4, 6, C.dark2);
+  rect(x + 6, y0 - 6, 4, 1, C.dark3);
+  px(x + 9, y0 - 4, C.wall3);                // door knob
+  rect(x + 6, y0 + 1, 4, 1, C.wall3);      // porch step
+  rect(x + 1, y0 - 7, 3, 3, C.dark);        // dark window
+  px(x + 2, y0 - 6, C.dark3);
+  rect(x + 11, y0 - 7, 3, 3, C.dark);
+  rect(x + 12, y0 - 6, 1, 1, C.win);       // lit window core
+  // warm glow spilling from the lit window and the door
+  ctx.globalAlpha = 0.25;
+  disc(74, 92, 4, '#f2a33a');
+  disc(69, 95, 3, '#c4612a');
+  ctx.globalAlpha = 1;
+  // chimney + smoke handled in drawSmoke
+  rect(x + 11, y0 - 18, 3, 5, C.wall1);
+  rect(x + 11, y0 - 18, 1, 5, C.wall3);
+}
+
+function drawSmoke(t) {
+  // chimney top at (75, 78): puffs drift up-right, fading
+  const cx = 75;
+  for (let i = 0; i < 6; i++) {
+    const ph = (t * 0.35 + i / 6) % 1;
+    const y = 77 - ph * 14;
+    const x = cx + ph * 7 + Math.sin(t * 1.2 + i * 2.1) * 1.5;
+    const c = ph < 0.5 ? C.cloud2 : C.cloud1;
+    disc(x, y, 1 + (ph > 0.55 ? 1 : 0), c);
+  }
+}
+
+function drawTower() {
+  for (let i = 0; i < TOWER_H; i++) {
+    const y = TOP_Y + i;
+    const hw = 6 + Math.floor(i * 8 / (TOWER_H - 1));
+    const stripe = Math.floor(i / 6) % 2 === 0;
+    for (let x = LX - hw; x <= LX + hw; x++) {
+      let c;
+      if (stripe) c = x < LX - hw + 3 ? C.mRed3 : x > LX + hw - 2 ? C.mRed1 : C.mRed2;
+      else c = x < LX - hw + 3 ? C.white3 : x > LX + hw - 2 ? C.white1 : C.white2;
+      px(x, y, c);
+    }
+    // outline shadow side
+    px(LX + hw, y, C.dark);
+  }
+  // stone base footing on the plateau
+  rect(82, 90, 28, 4, C.wall1);
+  rect(82, 90, 28, 1, C.wall3);
+  for (let x = 83; x < 110; x += 3) px(x, 92, C.dark);
+  // gallery deck + brackets (below the railing)
+  rect(84, 60, 24, 2, C.dark);
+  rect(84, 60, 9, 1, C.dark3);
+  rect(86, 62, 20, 1, C.dark2);
+  // railing posts + top rail (above deck)
+  for (let x = 85; x <= 107; x += 2) px(x, 56, C.dark3);
+  for (let x = 84; x <= 107; x += 2) px(x, 57, C.dark);
+  rect(84, 54, 24, 1, C.dark3);
+  rect(84, 59, 24, 1, C.dark);
+  // lantern room body + glazing + lamp
+  rect(89, 49, 14, 10, C.dark);
+  rect(89, 49, 2, 10, C.dark2);
+  rect(89, 49, 14, 1, C.dark3);
+  for (let y = 51; y <= 57; y++) { px(93, y, C.dark); px(98, y, C.dark); }   // mullions
+  for (const [dx, dy, c] of glass) px(96 + dx, 50 + dy, c);
+  disc(96, 55, 2, C.lamp);
+  px(95, 54, C.flame); px(96, 53, C.flame); px(97, 55, C.flame);
+  px(91, 52, C.glassHi); px(100, 56, C.glassHi);   // glint on the glass
+  // dome roof (above glazing)
+  rect(89, 48, 14, 1, C.dark2);
+  rect(90, 47, 12, 1, C.dark2);
+  rect(89, 48, 7, 1, C.dark3);
+  rect(91, 47, 7, 1, C.dark3);
+  rect(92, 46, 6, 1, C.dark3);
+  rect(93, 45, 5, 1, '#3a4170');
+  rect(94, 44, 3, 1, '#3a4170');
+  rect(94, 43, 3, 1, C.dark3);
+  rect(95, 42, 2, 1, C.dark3);
+  // finial
+  rect(95, 40, 2, 2, C.dark3);
+  px(96, 39, '#3a4170');
+}
+
+function drawBeam(t) {
+  const th = Math.sin(t * 0.5) * 1.05;          // slow sweep across the sky
+  const a = Math.PI * 0.5 + th;                  // around straight-up
+  const len = 115;
+  const dx = Math.cos(a), dy = -Math.sin(a);     // (dy negative: up)
+  const px0 = 96, py0 = 54;
+  const nx = -dy, ny = dx;
+  const seaY = WATER0;                           // beam stops at the water: light in the sky, not on the sea
+  // solid cone rasterized as screen rows (always continuous);
+  // alpha bands + one ordered-dither row make the fade read as light, not static
+  const y0 = Math.max(0, Math.min(py0, py0 + len * dy));
+  const y1 = Math.min(seaY - 1, Math.max(py0, py0 + len * dy));
+  for (let y = Math.floor(y0); y <= y1; y++) {
+    const s = (py0 - y) / -dy;                   // distance along the axis for this row
+    if (s < 2) continue;
+    const hw = 1.4 + s * 0.16;
+    const cx = px0 + s * dx;
+    const band = s < 26 ? 0 : s < 52 ? 1 : s < 78 ? 2 : 3;
+    ctx.globalAlpha = [0.4, 0.32, 0.24, 0.16][band];
+    const c = [C.beam, '#f0d49c', '#dcbf87', '#b39a74'][band];
+    for (let x = Math.round(cx - hw); x <= Math.round(cx + hw); x++) {
+      if (x < 0 || x >= W) continue;
+      if (band >= 2 && ((x + y * 2 + band) & 1) === 0) continue;   // dithered outer bands
+      const center = Math.abs(x - cx) < 1.5;
+      if (center && ((x + y) & 3) === 0) { px(x, y, C.glassHi); continue; }  // bright streak in the core
+      px(x, y, c);
+    }
+  }
+  ctx.globalAlpha = 1;
+  // lamp flare
+  disc(96, 54, 2, C.flame);
+  disc(96, 54, 1, '#ffffff');
+  ctx.globalAlpha = 0.3;
+  for (const [dx2, dy2] of [[3, 0], [-3, 0], [0, -3], [0, 3], [2, 2], [-2, -2], [2, -2], [-2, 2]])
+    px(96 + dx2, 54 + dy2, '#fff7d6');
+  ctx.globalAlpha = 0.35;
+  disc(96, 54, 4, C.beam);
+  ctx.globalAlpha = 1;
+}
+
+function waveH(x, t) {
+  const swell = Math.sin(x * 0.16 + t * 1.6) * 0.8 + Math.sin(x * 0.07 - t * 0.9) * 1.2;
+  let surge = 0;
+  for (let i = 0; i < BOUND_X.length; i++) {
+    const ph = ((t * 0.42) + i * 0.25) % 1;
+    const d = Math.abs(x - BOUND_X[i]);
+    if (d < 24) surge = Math.max(surge, (1 - d / 24) * 3.5 * Math.sin(Math.PI * ph));
+  }
+  return Math.round(swell + surge);
+}
+
+function drawWaves(t) {
+  const seaY = WATER0 + 4;                  // foreshore top: waves lap the cliff foot here
+  for (let x = 0; x < W; x++) {
+    const top = rockH[x];
+    const wl = seaY + waveH(x, t);
+    if (top > seaY) {
+      // cliff column: dry rock; sea laps its foot only if the water reaches that high
+      if (wl <= top + 4 && top < WATER0 + 10) {
+        const wet = Math.max(wl, top);
+        for (let y = wet; y < wet + 3; y++) {
+          if (y >= H) break;
+          px(x, y, y === wet ? C.sea1 : y === wet + 1 ? C.sea2 : C.sea3);
+        }
+        if (dither(x, wl)) px(x, wl, C.foam);
+        if (dither(x + 1, wl + 1)) px(x, wl + 1, '#b9d4e4');
+      }
+      continue;
+    }
+    // open sea column: horizontal swell bands only (aligned to the grid, never diagonal)
+    for (let y = Math.max(wl, top + 1); y < H; y++) {
+      const d = y - wl;
+      px(x, y, d < 2 ? C.sea3 : d < 5 ? C.sea2 : d < 9 ? C.sea1 : C.sea0);
+    }
+    if (wl <= top + 4) {
+      if (dither(x, wl)) px(x, wl, C.foam);
+      if (dither(x + 1, wl + 1)) px(x, wl + 1, '#b9d4e4');
+    }
+  }
+  // moving horizontal highlight dashes at fixed rows (length varies per row)
+  for (let k = 0; k < 12; k++) {
+    const y = seaY + 2 + ((k * 5 + 1) % (H - seaY - 3));
+    const len = 6 + ((k * 13 + Math.floor(t * 2)) % 3) * 4;
+    const speed = 4 + (k % 4) * 3;
+    const dx0 = (((k * 29 + 5) + t * speed) % (W + 30) + W + 30) % (W + 30) - 15;
+    const wob = Math.round(Math.sin(t * 1.2 + k) * 0.8);
+    ctx.fillStyle = y < seaY + 8 ? C.sea3 : C.seaHi;
+    ctx.fillRect(Math.round(dx0), y + wob, len, 1);
+  }
+  // foam clusters that appear and disappear at the rock base and along the shoreline
+  const spots = [10, 30, 52, 60, 138, 146, 164, 182];
+  for (let i = 0; i < spots.length; i++) {
+    const bx = spots[i];
+    const cyc = Math.sin(t * (0.7 + i * 0.13) + i * 2.1);
+    if (cyc < 0.25) continue;                 // resting phase
+    const strength = (cyc - 0.25) / 0.75;     // 0..1 bloom
+    const n = 3 + Math.round(strength * 6);
+    for (let j = 0; j < n; j++) {
+      const fx = bx + ((j * 7 + i * 5 + Math.floor(t * 2)) % 9) - 4;
+      const fy = WATER0 + 2 + ((j * 5 + i) % 3);
+      if (fx < 0 || fx >= W || fy >= H) continue;
+      if (rockH[fx] <= fy) continue;          // only spray over the sea, not the land
+      px(fx, fy, j % 3 === 0 ? C.foam : '#b9d4e4');
+      if (j % 4 === 0) px(fx, fy - 1, '#ffffff');
+    }
+  }
+}
+
+function updateSplash(t, dt) {
+  if (t >= nextSplash) {
+    nextSplash = t + 0.7 + rand() * 1.2;
+    const b = BOUND_X[Math.floor(rand() * BOUND_X.length)];
+    for (let i = 0; i < 9; i++) {
+      const a = rand(), c = rand();
+      drops.push({
+        x: b + a * 10 - 5, y: WATER0 - 1,
+        vx: (a * 2 - 1) * 20, vy: -36 - c * 32,
+        life: 0.01
+      });
+    }
+  }
+  for (const d of drops) {
+    if (d.life <= 0) continue;
+    d.life += dt;
+    if (d.life > 1.1) { d.life = 0; continue; }
+    d.vy += 70 * dt;
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+    if (d.y < H && d.x >= 0 && d.x < W) {
+      px(d.x, d.y, d.life < 0.5 ? C.foam : '#9cc6dc');
+    }
+  }
+}
+
+function drawRain(t, dt) {
+  for (const r of rain) {
+    r.y += r.s * dt;
+    r.x += r.s * 0.38 * dt;
+    if (r.y > H) { r.y = -5 - (r.y - H); r.x = (r.x + 61) % (W + 20) - 20; }
+    const c = r.s > 50 ? '#c9d4f4' : '#8f9dc9';
+    for (let j = 0; j < r.l; j++) {
+      const x = Math.round(r.x - r.offs[j]), y = Math.round(r.y - j);
+      if (y > 0 && x >= 0 && x < W) px(x, y, c);
+    }
+  }
+}
+
+/* ---------- main loop ---------- */
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let last = performance.now(); let gT = 0;
+const STATIC = 43.7;
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  gT += dt;
+  const T = reduce ? STATIC : gT;
+
+  ctx.clearRect(0, 0, W, H);
+  drawSky();
+  drawClouds(T);
+  if (!reduce) drawRain(T, dt);
+  drawSea(T);
+  drawRocks();
+  drawHouse();
+  drawTower();
+  drawBeam(T);
+  if (!reduce) drawSmoke(T);
+  drawWaves(T);
+  if (!reduce) {
+    updateSplash(T, dt);
+  } else {
+    // static foam specks and rain ticks for the reduced-motion scene
+    for (const b of BOUND_X) for (let i = 0; i < 5; i++) px(b + i * 2 - 4, WATER0 - 1 + (i % 2), C.foam);
+    for (let i = 0; i < 40; i++) px((i * 47) % W, (i * 89) % H, '#8f9dc9');
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -136,7 +136,7 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 ## Status
 
 - Done: Qwen3-Coder-Next, Qwen3.8-27B, Qwen3.6-35B-A3B on all briefs and harness versions above.
-- Qwen3.8-Flash-Next: bonsai done (7.5 in 10.9 min); lighthouse, a second bonsai attempt and the dashboard in progress.
+- Qwen3.8-Flash-Next: bonsai 7.5 in 10.9 min; lighthouse 7.0 but still iterating at the 45 min cap (234 steps); a second bonsai attempt and the dashboard in progress, then an A/B of harness kit v4 (score-driven polish, fill-the-screen rule) with and without the ponytail skill.
 - This repository is updated as runs finish.
 
 ## Reproduce

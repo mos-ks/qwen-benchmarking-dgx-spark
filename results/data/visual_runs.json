@@ -218,5 +218,16 @@
   "score": 7.5,
   "outcome": "done",
   "note": "curved barked trunk, layered shaded pads, terracotta pot, grass, mountains, clouds, drifting leaves; canvas boxed small, pads uniform"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v3 \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v3",
+  "attempt": "#1",
+  "minutes": 45.0,
+  "score": 7.0,
+  "outcome": "timeout",
+  "note": "striped tower, glowing lantern, sweeping beam, keeper's house with smoke, moon reflection, rain; squat tower, no cliff; still iterating at the 45 min cap (234 steps)"
  }
 ]
