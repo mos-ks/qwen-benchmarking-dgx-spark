@@ -20,7 +20,7 @@ dashboard brief still overruns its budget (see [Status](#status)).
 | Pixel-art bonsai with wind | 9.0 in 14 min | 7.5 in 10.9 min (Qwen3.8-Flash-Next + kit v3) | -1.5 |
 | Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.5 in 25.9 min (Qwen3.8-Flash-Next + kit v5) | -1.5 |
 | Pixel-art windmill in a tulip field (held out from every kit change) | 9.0 in 17.7 min | 6.5 in 30.9 min (Qwen3.8-Flash-Next + kit v5) | -2.5 |
-| Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3); 8.5 but in 37.3 min, over budget (Qwen3.8-Flash-Next + kit v3) | -2.0 in budget |
+| Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3) and 7.5 in 21.7 min (Qwen3.8-Flash-Next + kit v5.1); 8.0 in 26.7 min, just over budget (Flash-Next + kit v5.1) | -2.0 in budget |
 
 **[Open the results viewer](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/)**: Opus's page
 on the left, every local run on a slider on the right, per brief.
@@ -88,6 +88,7 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 | kit v4 | score-driven supervision: the critic first lists the brief's requirements, scores 1 to 10 and names the unmet ones; the plugin keeps sending fixes until 8/10, 4 rounds or 25 minutes. The `pixel-art` skill gains a fill-the-screen rule |
 | kit v4 + ponytail | kit v4 with the [ponytail](https://github.com/DietrichGebert/ponytail) "smallest change that works" skill as always-on instructions |
 | kit v5 | the `pixel-art` skill ships [`pixel-kit.js`](harness/skills/pixel-art/pixel-kit.js), a tested drawing library the agent copies into the project (full-screen integer scaling, shaded trunks and foliage pads, jagged faceted rocks, rolling sea and foam, beams, glows, particles, text-grid sprites, 16 colour ramps); the agent may read, never edit, the skills folder |
+| kit v5.1 | kit v5 plus a wrap-up note: from minute 20 of a page-building session the supervisor appends "the harness checks the page when you stop; do not write your own check scripts; finish and stop" to tool results |
 
 Third-party skills used (not redistributed here; install from their repos):
 [obra/superpowers](https://github.com/obra/superpowers) (TDD, debugging, verification, plans),
@@ -152,7 +153,8 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 - Kit v4 on the new windmill brief: 5.0 (25.5 min). On the dashboard it wrote its own Playwright check script and verified for the whole 45 minutes, so the supervisor never got a turn: 7.0, timeout.
 - Kit v5 (drawing library): bonsai 7.5 in 11.9 min, lighthouse 7.5 in 25.9 min, the best lighthouse and the fastest good bonsai so far. The critic scored both 8 or more on its first look, so no supervisor rounds ran.
 - Kit v5 on the windmill brief: 6.5 in 30.9 min, up from kit v4's 5.0. The drawing library carried over to a scene it was not built for.
-- In progress: kit v5.1 (tool results carry a wrap-up note after 20 minutes) on the dashboard, twice.
+- Kit v5.1 on the dashboard (from minute 20, tool results carry a note to stop self-checking and finish): 8.0 in 26.7 min and 7.5 in 21.7 min. Both stopped on their own, against kit v4's 45-minute timeout.
+- In progress: kit v5 with thinking on at `reasoning_effort: low` (every run so far had thinking off) on windmill and bonsai.
 - This repository is updated as runs finish.
 
 ## Reproduce

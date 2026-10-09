@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fin Overview — Personal Finance Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f5f9;
+    --surface: #ffffff;
+    --surface-2: #eaeef5;
+    --text: #0e1526;
+    --text-2: #4b5568;
+    --text-3: #77808f;
+    --border: #dfe4ec;
+    --ring: #1d4ed8;
+    --pos: #067647;
+    --pos-bg: #e6f4ec;
+    --neg: #b42318;
+    --neg-bg: #fdecea;
+    --shadow: 0 1px 2px rgba(14, 21, 38, .05), 0 6px 18px -8px rgba(14, 21, 38, .14);
+    --radius: 14px;
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+    --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 24px; --fs-2xl: 30px;
+    --cat-1: #1d4ed8; --cat-2: #d97706; --cat-3: #0d9488; --cat-4: #db2777;
+    --cat-5: #059669; --cat-6: #ea580c; --cat-7: #7c3aed; --cat-8: #64748b;
+    --income: #059669; --spend: #475569; --tooltip-bg: #0e1526; --tooltip-fg: #f5f7fb;
+    --track: #e6eaf1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #0c1017;
+      --surface: #141a24;
+      --surface-2: #1c2430;
+      --text: #eef1f7;
+      --text-2: #a6afc0;
+      --text-3: #7d8798;
+      --border: #27303e;
+      --ring: #60a5fa;
+      --pos: #4ade80;
+      --pos-bg: rgba(74, 222, 128, .13);
+      --neg: #f87171;
+      --neg-bg: rgba(248, 113, 113, .14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 10px 24px -14px rgba(0, 0, 0, .65);
+      --cat-1: #60a5fa; --cat-2: #fbbf24; --cat-3: #2dd4bf; --cat-4: #f472b6;
+      --cat-5: #34d399; --cat-6: #fb923c; --cat-7: #a78bfa; --cat-8: #94a3b8;
+      --income: #34d399; --spend: #94a3b8; --tooltip-bg: #e7ebf2; --tooltip-fg: #0e1526;
+      --track: #232c3a;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 400 var(--fs-md)/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; margin: -1px;
+    padding: 0; border: 0; clip: rect(0 0 0 0); overflow: hidden; white-space: nowrap;
+  }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
+
+  .wrap { max-width: 1140px; margin: 0 auto; padding: var(--sp-5) var(--sp-4) var(--sp-6); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: var(--sp-5);
+  }
+  .section-title { margin: 0; font-size: var(--fs-lg); font-weight: 600; letter-spacing: -.01em; }
+  .section-sub { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--text-3); }
+  .card-head { margin-bottom: var(--sp-4); display: flex; align-items: flex-start; gap: var(--sp-4); }
+  .card-head > div { min-width: 0; }
+  .head-legend { margin: 2px 0 0 auto; }
+
+  /* ---------- header ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.02em; font-size: var(--fs-lg); }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--cat-1), var(--cat-3));
+    display: grid; place-items: center; color: #fff;
+  }
+  .brand small { display: block; font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); letter-spacing: 0; }
+  .month-nav { margin-left: auto; flex: none; display: flex; align-items: center; gap: var(--sp-2); }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 10px; flex: none;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+    display: grid; place-items: center; cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+  }
+  .icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+  .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .month-select {
+    font: 600 var(--fs-md)/1 inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 30px 9px 12px; cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888f9c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+  }
+  @media (prefers-color-scheme: dark) {
+    .month-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a6afc0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+  }
+
+  /* ---------- KPI cards ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); margin-top: var(--sp-5); }
+  .kpi { padding: var(--sp-4) var(--sp-5) var(--sp-4); }
+  .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+  .kpi-label { font-size: var(--fs-xs); font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); }
+  .kpi-ico { width: 30px; height: 30px; border-radius: 9px; background: var(--surface-2); color: var(--text-2); display: grid; place-items: center; flex: none; }
+  .kpi-ico svg { opacity: .85; }
+  .kpi-value { font-size: var(--fs-2xl); font-weight: 700; letter-spacing: -.02em; line-height: 1.15; margin-top: 10px; }
+  .kpi-foot { display: flex; align-items: center; gap: 7px; margin-top: 6px; font-size: var(--fs-xs); color: var(--text-3); }
+  .delta { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
+  .delta.good { color: var(--pos); background: var(--pos-bg); }
+  .delta.bad { color: var(--neg); background: var(--neg-bg); }
+  .delta.flat { color: var(--text-2); background: var(--surface-2); }
+
+  /* ---------- charts grid ---------- */
+  .grid-2 { display: grid; grid-template-columns: 5fr 6fr; gap: var(--sp-4); margin-top: var(--sp-4); }
+  .chart-wrap { position: relative; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px var(--sp-4); list-style: none; margin: 0; padding: 0; font-size: var(--fs-sm); color: var(--text-2); }
+  .legend li { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .val { margin-left: auto; color: var(--text); font-weight: 600; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .donut-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--sp-5); align-items: center; }
+  .donut-holder { position: relative; }
+  .donut-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+  .donut-center .dc-label { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
+  .donut-center .dc-value { font-size: var(--fs-xl); font-weight: 700; letter-spacing: -.02em; }
+  .legend-list { display: grid; gap: 8px; }
+  svg .seg, svg .bar { cursor: pointer; transition: opacity .15s ease, filter .15s ease; }
+  svg .seg.dim, svg .bar.dim { opacity: .32; }
+  svg .seg:hover, svg .seg.hot, svg .bar:hover, svg .bar.hot { filter: brightness(1.09) drop-shadow(0 1px 3px rgba(0, 0, 0, .18)); }
+  svg .hit { cursor: pointer; }
+
+  /* tooltip */
+  .tooltip {
+    position: fixed; z-index: 100; pointer-events: none;
+    background: var(--tooltip-bg); color: var(--tooltip-fg);
+    border-radius: 10px; padding: 8px 11px; font-size: var(--fs-sm); line-height: 1.45;
+    box-shadow: 0 8px 24px -6px rgba(0, 0, 0, .35);
+    opacity: 0; transform: translateY(4px); transition: opacity .15s ease, transform .15s ease;
+    white-space: nowrap;
+  }
+  .tooltip.show { opacity: 1; transform: none; }
+  .tooltip b { font-weight: 600; }
+  .tooltip .tt-sub { opacity: .72; }
+
+  /* ---------- bottom grid ---------- */
+  .grid-bottom { display: grid; grid-template-columns: 6fr 5fr; gap: var(--sp-4); margin-top: var(--sp-4); }
+
+  /* transactions */
+  .tx-list { list-style: none; margin: 0; padding: 0; display: grid; }
+  .tx { display: flex; align-items: center; gap: var(--sp-3); padding: 10px 2px; border-top: 1px solid var(--border); }
+  .tx:first-child { border-top: 0; }
+  .tx-ico { width: 38px; height: 38px; border-radius: 11px; background: var(--surface-2); color: var(--cat-c); display: grid; place-items: center; flex: none; }
+  .tx-main { min-width: 0; }
+  .tx-merchant { font-weight: 600; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-meta { font-size: var(--fs-xs); color: var(--text-3); }
+  .tx-amt { margin-left: auto; text-align: right; font-weight: 600; white-space: nowrap; }
+  .tx-amt .plus { color: var(--pos); }
+  .tx-cat { display: block; font-size: var(--fs-xs); font-weight: 500; color: var(--text-3); }
+
+  /* budgets */
+  .bud-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-4); }
+  .bud-head { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-sm); margin-bottom: 7px; }
+  .bud-name { font-weight: 600; }
+  .bud-vals { margin-left: auto; color: var(--text-3); font-size: var(--fs-xs); white-space: nowrap; }
+  .bud-vals b { color: var(--text); font-size: var(--fs-sm); }
+  .bud-pct { font-size: var(--fs-xs); font-weight: 700; }
+  .bud-pct.ok { color: var(--text-3); } .bud-pct.warn { color: var(--cat-2); } .bud-pct.over { color: var(--neg); }
+  .bud-track { height: 10px; border-radius: 999px; background: var(--track); overflow: hidden; }
+  .bud-fill { height: 100%; border-radius: 999px; background: var(--cat-c); transition: width .35s ease; }
+  .bud-fill.warn { background: var(--cat-2); }
+  .bud-fill.over { background: var(--neg); }
+  .bud-flag { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; font-size: var(--fs-xs); font-weight: 600; }
+  .bud-flag.warn { color: var(--cat-2); } .bud-flag.over { color: var(--neg); }
+
+  footer { margin-top: var(--sp-6); text-align: center; font-size: var(--fs-xs); color: var(--text-3); }
+
+  @media (max-width: 1000px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-2, .grid-bottom { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    :root { --fs-2xl: 26px; --fs-xl: 21px; }
+    .wrap { padding: var(--sp-4) 12px var(--sp-6); }
+    .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .kpi { padding: var(--sp-3) var(--sp-4); }
+    .card { padding: var(--sp-4); }
+    .donut-body { grid-template-columns: 1fr; }
+    .donut-holder { width: 180px; margin: 0 auto; }
+    .topbar { position: static; }
+    .month-nav { margin-left: 0; width: 100%; }
+    #month-select { flex: 1; }
+    .kpi-label { letter-spacing: .03em; }
+    .kpi-foot { flex-wrap: wrap; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<a class="sr-only" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 19V9m6 10V5m6 14v-6m4 6H2"/></svg>
+    </span>
+    <span>Fin Overview<small>Alex Morgan · Personal finances</small></span>
+  </div>
+  <nav class="month-nav" aria-label="Month">
+    <button class="icon-btn" id="prev" type="button" aria-label="Previous month">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <label class="sr-only" for="month-select">Select month</label>
+    <select class="month-select" id="month-select"></select>
+    <button class="icon-btn" id="next" type="button" aria-label="Next month">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
+  </nav>
+</header>
+
+<main class="wrap" id="main">
+  <section aria-label="Key metrics">
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section class="grid-2" aria-label="Spending and cash-flow charts">
+    <div class="card">
+      <div class="card-head">
+        <h2 class="section-title">Spending by category</h2>
+        <p class="section-sub" id="cat-sub">Where the money went</p>
+      </div>
+      <div class="donut-body">
+        <div class="donut-holder">
+          <div class="chart-wrap" id="donut"></div>
+          <div class="donut-center" id="donut-center" aria-hidden="true"></div>
+        </div>
+        <ul class="legend legend-list" id="donut-legend"></ul>
+      </div>
+      <div class="sr-only" id="donut-sr" role="img"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="section-title">Income vs spending</h2>
+          <p class="section-sub">Monthly totals, last 6 months · selected month highlighted</p>
+        </div>
+        <ul class="legend head-legend" id="bars-legend"></ul>
+      </div>
+      <div class="chart-wrap" id="bars"></div>
+      <div class="sr-only" id="bars-sr" role="img"></div>
+    </div>
+  </section>
+
+  <section class="grid-bottom" aria-label="Transactions and budgets">
+    <div class="card">
+      <div class="card-head">
+        <h2 class="section-title">Recent transactions</h2>
+        <p class="section-sub" id="tx-sub"></p>
+      </div>
+      <ul class="tx-list" id="tx-list"></ul>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2 class="section-title">Budgets</h2>
+        <p class="section-sub" id="bud-sub">Amber at 90% of the limit, red above it</p>
+      </div>
+      <ul class="bud-list" id="bud-list"></ul>
+    </div>
+  </section>
+
+  <footer>Sample data for demonstration · Figures in USD</footer>
+</main>
+
+<div class="tooltip" id="tooltip" role="status" aria-live="off"></div>
+
+<script>
+'use strict';
+/* ------------------------------------------------------------------ data */
+const MONTHS = [
+  { key: '2026-05', label: 'May 2026' },
+  { key: '2026-04', label: 'Apr 2026' },
+  { key: '2026-03', label: 'Mar 2026' },
+  { key: '2026-02', label: 'Feb 2026' },
+  { key: '2026-01', label: 'Jan 2026' },
+  { key: '2025-12', label: 'Dec 2025' },
+];
+
+const CATEGORIES = [
+  { id: 'housing',      name: 'Housing',         colorVar: '--cat-1', budget: 1400 },
+  { id: 'groceries',    name: 'Groceries',       colorVar: '--cat-2', budget: 500  },
+  { id: 'dining',       name: 'Dining & coffee', colorVar: '--cat-3', budget: 250  },
+  { id: 'transport',    name: 'Transport',       colorVar: '--cat-4', budget: 200  },
+  { id: 'entertainment',name: 'Entertainment',   colorVar: '--cat-5', budget: 150  },
+  { id: 'shopping',     name: 'Shopping',        colorVar: '--cat-6', budget: 300  },
+  { id: 'health',       name: 'Health & fitness',colorVar: '--cat-7', budget: 160  },
+  { id: 'subscriptions',name: 'Subscriptions',   colorVar: '--cat-8', budget: 70   },
+];
+const CAT_BY_ID = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
+
+const ICONS = {
+  housing: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/>',
+  groceries: '<path d="M6 8h12l-1.2 11.5a1.5 1.5 0 0 1-1.5 1.4H8.7a1.5 1.5 0 0 1-1.5-1.4Z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+  dining: '<path d="M6 3.5v6.8a2.6 2.6 0 0 0 5.2 0V3.5"/><path d="M8.6 13v7.5"/><path d="M16.8 3.5c-1.4 1-2.1 3-2.1 5.4 0 1.7.8 2.8 2.1 2.8v8.8"/>',
+  transport: '<path d="M4.5 16.5V12l1.8-4.6A2 2 0 0 1 8.2 6h7.6a2 2 0 0 1 1.9 1.4L19.5 12v4.5"/><path d="M4.5 12h15"/><circle cx="8" cy="16.5" r="1.7"/><circle cx="16" cy="16.5" r="1.7"/>',
+  entertainment: '<rect x="3" y="4" width="18" height="13" rx="2.5"/><path d="m10.2 8.4 4 2.1-4 2.1Z"/><path d="M8 21h8"/>',
+  shopping: '<path d="M5 8h14l-1.2 12.5a1.5 1.5 0 0 1-1.5 1.4H7.7a1.5 1.5 0 0 1-1.5-1.4Z"/><path d="M9 11V7a3 3 0 0 1 6 0v4"/>',
+  health: '<path d="M12 20s-7-4.4-7-9.4A4.1 4.1 0 0 1 12 7.6a4.1 4.1 0 0 1 7 3c0 5-7 9.4-7 9.4Z"/>',
+  subscriptions: '<path d="M6.5 4.5v15"/><path d="M17.5 4.5v15"/><path d="M6.5 8.5h11"/><path d="M6.5 12h11"/><path d="M6.5 15.5h11"/>',
+  income: '<rect x="2.5" y="6" width="19" height="12.5" rx="2.5"/><path d="M2.5 10h19"/><circle cx="17" cy="14.2" r="1.4"/>',
+};
+function iconSvg(id) {
+  return '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[id] || ICONS.shopping) + '</svg>';
+}
+
+const INCOME = [
+  { m: '2026-05', d: 1,  t: 'salary', c: 'Northwind Labs — salary', a: 5200, dir: 1 },
+  { m: '2026-05', d: 15, t: 'freelance', c: 'Figma freelance — landing page', a: 650, dir: 1 },
+  { m: '2026-04', d: 1,  t: 'salary', c: 'Northwind Labs — salary', a: 5200, dir: 1 },
+  { m: '2026-04', d: 15, t: 'interest', c: 'Marcus — savings interest', a: 42, dir: 1 },
+  { m: '2026-03', d: 1,  t: 'salary', c: 'Northwind Labs — salary', a: 5200, dir: 1 },
+  { m: '2026-03', d: 12, t: 'refund', c: 'United Airlines — refund', a: 210, dir: 1 },
+  { m: '2026-02', d: 1,  t: 'salary', c: 'Northwind Labs — salary', a: 5200, dir: 1 },
+  { m: '2026-01', d: 1,  t: 'salary', c: 'Northwind Labs — salary', a: 5200, dir: 1 },
+  { m: '2026-01', d: 20, t: 'gift', c: 'Birthday gift — Mom', a: 150, dir: 1 },
+  { m: '2025-12', d: 1,  t: 'salary', c: 'Northwind Labs — salary', a: 5200, dir: 1 },
+  { m: '2025-12', d: 20, t: 'bonus', c: 'Northwind Labs — year-end bonus', a: 1200, dir: 1 },
+];
+
+const SPEND = [
+  { m: '2026-05', d: 1,  cat: 'housing', c: 'Rent — Maple Street 4B', a: 1400 },
+  { m: '2026-05', d: 3,  cat: 'subscriptions', c: 'Spotify Premium', a: 11.99 },
+  { m: '2026-05', d: 2,  cat: 'dining', c: 'Blue Bottle Coffee', a: 5.75 },
+  { m: '2026-05', d: 4,  cat: 'groceries', c: 'Whole Foods', a: 82.40 },
+  { m: '2026-05', d: 5,  cat: 'transport', c: 'Uber', a: 18.20 },
+  { m: '2026-05', d: 5,  cat: 'dining', c: 'Sweetgreen', a: 16.80 },
+  { m: '2026-05', d: 6,  cat: 'health', c: 'Equinox gym', a: 59 },
+  { m: '2026-05', d: 7,  cat: 'groceries', c: "Trader Joe's", a: 63.10 },
+  { m: '2026-05', d: 8,  cat: 'subscriptions', c: 'Netflix', a: 15.49 },
+  { m: '2026-05', d: 8,  cat: 'entertainment', c: 'AMC theatres', a: 32 },
+  { m: '2026-05', d: 9,  cat: 'dining', c: 'Chipotle', a: 14.20 },
+  { m: '2026-05', d: 10, cat: 'shopping', c: 'Amazon', a: 58.99 },
+  { m: '2026-05', d: 11, cat: 'transport', c: 'Shell gas', a: 46.30 },
+  { m: '2026-05', d: 12, cat: 'groceries', c: 'Costco run', a: 121.75 },
+  { m: '2026-05', d: 12, cat: 'dining', c: 'Ramen Nagi', a: 24.50 },
+  { m: '2026-05', d: 13, cat: 'subscriptions', c: 'iCloud+ 200GB', a: 2.99 },
+  { m: '2026-05', d: 14, cat: 'entertainment', c: 'Steam', a: 19.99 },
+  { m: '2026-05', d: 15, cat: 'health', c: 'CVS Pharmacy', a: 23.40 },
+  { m: '2026-05', d: 16, cat: 'transport', c: 'City transit card', a: 27.50 },
+  { m: '2026-05', d: 17, cat: 'shopping', c: 'Uniqlo', a: 89.90 },
+  { m: '2026-05', d: 18, cat: 'groceries', c: "Trader Joe's", a: 55.20 },
+  { m: '2026-05', d: 18, cat: 'dining', c: 'Olive Garden', a: 38.60 },
+  { m: '2026-05', d: 19, cat: 'entertainment', c: 'Steam — indie bundle', a: 12.99 },
+  { m: '2026-05', d: 19, cat: 'shopping', c: 'Best Buy — phone case', a: 24.99 },
+  { m: '2026-05', d: 20, cat: 'transport', c: 'Lyft', a: 14.75 },
+  { m: '2026-05', d: 21, cat: 'groceries', c: 'Farmers market', a: 34.85 },
+  { m: '2026-05', d: 21, cat: 'dining', c: 'Torchy’s Tacos', a: 18.40 },
+  { m: '2026-05', d: 22, cat: 'health', c: 'Dr. Alvarez — copay', a: 35 },
+  { m: '2026-05', d: 23, cat: 'shopping', c: 'Muji', a: 45.60 },
+  { m: '2026-05', d: 24, cat: 'entertainment', c: 'Topgolf', a: 48 },
+  { m: '2026-05', d: 24, cat: 'dining', c: 'Chipotle', a: 15.10 },
+  { m: '2026-05', d: 25, cat: 'transport', c: 'Uber', a: 22.40 },
+  { m: '2026-05', d: 26, cat: 'groceries', c: 'Whole Foods', a: 76.30 },
+  { m: '2026-05', d: 27, cat: 'dining', c: 'Parlor', a: 42.80 },
+  { m: '2026-05', d: 27, cat: 'health', c: 'ClassPass', a: 39 },
+  { m: '2026-05', d: 28, cat: 'shopping', c: 'Amazon — desk lamp', a: 36.49 },
+  { m: '2026-05', d: 29, cat: 'entertainment', c: 'Steam — Brotato', a: 4.99 },
+  { m: '2026-05', d: 30, cat: 'subscriptions', c: 'YouTube Premium', a: 13.99 },
+  { m: '2026-05', d: 30, cat: 'groceries', c: "Trader Joe's", a: 48.90 },
+  { m: '2026-05', d: 31, cat: 'subscriptions', c: 'NYT — games', a: 8 },
+  { m: '2026-05', d: 31, cat: 'dining', c: 'Corner Pizza', a: 21 },
+
+  { m: '2026-04', d: 1,  cat: 'housing', c: 'Rent — Maple Street 4B', a: 1400 },
+  { m: '2026-04', d: 3,  cat: 'subscriptions', c: 'Spotify Premium', a: 11.99 },
+  { m: '2026-04', d: 4,  cat: 'groceries', c: 'Whole Foods', a: 91.20 },
+  { m: '2026-04', d: 6,  cat: 'dining', c: 'Ramen Nagi', a: 26.50 },
+  { m: '2026-04', d: 8,  cat: 'transport', c: 'Uber', a: 21.40 },
+  { m: '2026-04', d: 9,  cat: 'shopping', c: 'Amazon', a: 64.99 },
+  { m: '2026-04', d: 10, cat: 'groceries', c: "Trader Joe's", a: 58.60 },
+  { m: '2026-04', d: 11, cat: 'entertainment', c: 'AMC theatres', a: 28 },
+  { m: '2026-04', d: 12, cat: 'health', c: 'Equinox gym', a: 59 },
+  { m: '2026-04', d: 14, cat: 'groceries', c: 'Costco run', a: 104.30 },
+  { m: '2026-04', d: 15, cat: 'dining', c: 'Chipotle', a: 15.90 },
+  { m: '2026-04', d: 16, cat: 'transport', c: 'Shell gas', a: 44.80 },
+  { m: '2026-04', d: 17, cat: 'shopping', c: 'Uniqlo', a: 72.40 },
+  { m: '2026-04', d: 18, cat: 'entertainment', c: 'Steam', a: 24.99 },
+  { m: '2026-04', d: 19, cat: 'subscriptions', c: 'Netflix', a: 15.49 },
+  { m: '2026-04', d: 20, cat: 'dining', c: 'Olive Garden', a: 41.20 },
+  { m: '2026-04', d: 21, cat: 'groceries', c: 'Farmers market', a: 29.40 },
+  { m: '2026-04', d: 22, cat: 'health', c: 'CVS Pharmacy', a: 18.75 },
+  { m: '2026-04', d: 23, cat: 'transport', c: 'City transit card', a: 27.50 },
+  { m: '2026-04', d: 24, cat: 'shopping', c: 'Muji', a: 38.20 },
+  { m: '2026-04', d: 25, cat: 'entertainment', c: 'Concert — The Nationals', a: 85 },
+  { m: '2026-04', d: 26, cat: 'dining', c: 'Torchy’s Tacos', a: 17.60 },
+  { m: '2026-04', d: 27, cat: 'groceries', c: 'Whole Foods', a: 69.80 },
+  { m: '2026-04', d: 28, cat: 'subscriptions', c: 'iCloud+ 200GB', a: 2.99 },
+  { m: '2026-04', d: 29, cat: 'transport', c: 'Lyft', a: 12.80 },
+  { m: '2026-04', d: 30, cat: 'dining', c: 'Blue Bottle Coffee', a: 42.50 },
+
+  { m: '2026-03', d: 1,  cat: 'housing', c: 'Rent — Maple Street 4B', a: 1400 },
+  { m: '2026-03', d: 4,  cat: 'groceries', c: "Trader Joe's", a: 74.90 },
+  { m: '2026-03', d: 5,  cat: 'transport', c: 'City transit card', a: 27.50 },
+  { m: '2026-03', d: 7,  cat: 'dining', c: 'Chipotle', a: 14.80 },
+  { m: '2026-03', d: 8,  cat: 'subscriptions', c: 'Spotify Premium', a: 11.99 },
+  { m: '2026-03', d: 9,  cat: 'shopping', c: 'Amazon', a: 51.30 },
+  { m: '2026-03', d: 11, cat: 'groceries', c: 'Whole Foods', a: 88.15 },
+  { m: '2026-03', d: 12, cat: 'entertainment', c: 'AMC theatres', a: 30 },
+  { m: '2026-03', d: 13, cat: 'health', c: 'Equinox gym', a: 59 },
+  { m: '2026-03', d: 14, cat: 'transport', c: 'Shell gas', a: 47.60 },
+  { m: '2026-03', d: 15, cat: 'dining', c: 'Ramen Nagi', a: 23.40 },
+  { m: '2026-03', d: 17, cat: 'groceries', c: 'Costco run', a: 96.40 },
+  { m: '2026-03', d: 18, cat: 'shopping', c: 'Nike — running shoes', a: 129 },
+  { m: '2026-03', d: 19, cat: 'entertainment', c: 'Steam', a: 9.99 },
+  { m: '2026-03', d: 20, cat: 'health', c: 'CVS Pharmacy', a: 21.30 },
+  { m: '2026-03', d: 21, cat: 'dining', c: 'Olive Garden', a: 39.70 },
+  { m: '2026-03', d: 22, cat: 'subscriptions', c: 'Netflix', a: 15.49 },
+  { m: '2026-03', d: 24, cat: 'transport', c: 'Uber', a: 19.20 },
+  { m: '2026-03', d: 25, cat: 'groceries', c: 'Farmers market', a: 31.25 },
+  { m: '2026-03', d: 26, cat: 'shopping', c: 'Muji', a: 42.75 },
+  { m: '2026-03', d: 27, cat: 'dining', c: 'Torchy’s Tacos', a: 16.30 },
+  { m: '2026-03', d: 28, cat: 'entertainment', c: 'Bowling night', a: 26 },
+  { m: '2026-03', d: 29, cat: 'health', c: 'ClassPass', a: 39 },
+  { m: '2026-03', d: 30, cat: 'dining', c: 'Corner Pizza', a: 19.50 },
+  { m: '2026-03', d: 31, cat: 'subscriptions', c: 'NYT — games', a: 8 },
+
+  { m: '2026-02', d: 1,  cat: 'housing', c: 'Rent — Maple Street 4B', a: 1400 },
+  { m: '2026-02', d: 3,  cat: 'groceries', c: "Trader Joe's", a: 61.40 },
+  { m: '2026-02', d: 5,  cat: 'dining', c: 'Chipotle', a: 13.90 },
+  { m: '2026-02', d: 6,  cat: 'subscriptions', c: 'Spotify Premium', a: 11.99 },
+  { m: '2026-02', d: 8,  cat: 'transport', c: 'Uber', a: 23.60 },
+  { m: '2026-02', d: 9,  cat: 'shopping', c: 'Amazon', a: 47.20 },
+  { m: '2026-02', d: 11, cat: 'groceries', c: 'Whole Foods', a: 79.65 },
+  { m: '2026-02', d: 12, cat: 'entertainment', c: 'AMC theatres', a: 28 },
+  { m: '2026-02', d: 13, cat: 'health', c: 'Equinox gym', a: 59 },
+  { m: '2026-02', d: 14, cat: 'dining', c: 'Le Clochard — Valentine’s', a: 96.40 },
+  { m: '2026-02', d: 15, cat: 'shopping', c: 'Best Buy', a: 54.99 },
+  { m: '2026-02', d: 17, cat: 'groceries', c: 'Costco run', a: 88.70 },
+  { m: '2026-02', d: 18, cat: 'transport', c: 'Shell gas', a: 42.10 },
+  { m: '2026-02', d: 19, cat: 'dining', c: 'Ramen Nagi', a: 22.80 },
+  { m: '2026-02', d: 20, cat: 'entertainment', c: 'Steam', a: 14.99 },
+  { m: '2026-02', d: 21, cat: 'health', c: 'CVS Pharmacy', a: 16.90 },
+  { m: '2026-02', d: 22, cat: 'shopping', c: 'Muji', a: 33.50 },
+  { m: '2026-02', d: 24, cat: 'groceries', c: 'Farmers market', a: 27.80 },
+  { m: '2026-02', d: 25, cat: 'dining', c: 'Torchy’s Tacos', a: 15.70 },
+  { m: '2026-02', d: 26, cat: 'transport', c: 'City transit card', a: 27.50 },
+  { m: '2026-02', d: 27, cat: 'subscriptions', c: 'Netflix', a: 15.49 },
+  { m: '2026-02', d: 28, cat: 'entertainment', c: 'Board game café', a: 18 },
+
+  { m: '2026-01', d: 1,  cat: 'housing', c: 'Rent — Maple Street 4B', a: 1400 },
+  { m: '2026-01', d: 3,  cat: 'groceries', c: "Trader Joe's", a: 69.30 },
+  { m: '2026-01', d: 5,  cat: 'health', c: 'Equinox gym', a: 59 },
+  { m: '2026-01', d: 6,  cat: 'subscriptions', c: 'Spotify Premium', a: 11.99 },
+  { m: '2026-01', d: 7,  cat: 'dining', c: 'Chipotle', a: 14.60 },
+  { m: '2026-01', d: 9,  cat: 'transport', c: 'Uber', a: 20.30 },
+  { m: '2026-01', d: 10, cat: 'shopping', c: 'Amazon — New Year splurge', a: 289.99 },
+  { m: '2026-01', d: 12, cat: 'groceries', c: 'Whole Foods', a: 84.20 },
+  { m: '2026-01', d: 13, cat: 'entertainment', c: 'AMC theatres', a: 26 },
+  { m: '2026-01', d: 15, cat: 'dining', c: 'Ramen Nagi', a: 24.10 },
+  { m: '2026-01', d: 16, cat: 'transport', c: 'Shell gas', a: 45.90 },
+  { m: '2026-01', d: 18, cat: 'groceries', c: 'Costco run', a: 92.45 },
+  { m: '2026-01', d: 19, cat: 'shopping', c: 'Uniqlo', a: 66.80 },
+  { m: '2026-01', d: 20, cat: 'entertainment', c: 'Steam', a: 19.99 },
+  { m: '2026-01', d: 21, cat: 'health', c: 'CVS Pharmacy', a: 27.40 },
+  { m: '2026-01', d: 22, cat: 'dining', c: 'Olive Garden', a: 37.90 },
+  { m: '2026-01', d: 24, cat: 'transport', c: 'City transit card', a: 27.50 },
+  { m: '2026-01', d: 25, cat: 'subscriptions', c: 'Netflix', a: 15.49 },
+  { m: '2026-01', d: 26, cat: 'groceries', c: 'Farmers market', a: 25.60 },
+  { m: '2026-01', d: 27, cat: 'shopping', c: 'Muji', a: 28.90 },
+  { m: '2026-01', d: 28, cat: 'dining', c: 'Torchy’s Tacos', a: 17.20 },
+  { m: '2026-01', d: 29, cat: 'entertainment', c: 'Escape room', a: 34 },
+  { m: '2026-01', d: 30, cat: 'health', c: 'ClassPass', a: 39 },
+  { m: '2026-01', d: 31, cat: 'dining', c: 'Corner Pizza', a: 22.50 },
+
+  { m: '2025-12', d: 1,  cat: 'housing', c: 'Rent — Maple Street 4B', a: 1400 },
+  { m: '2025-12', d: 3,  cat: 'groceries', c: "Trader Joe's", a: 66.80 },
+  { m: '2025-12', d: 5,  cat: 'subscriptions', c: 'Spotify Premium', a: 11.99 },
+  { m: '2025-12', d: 6,  cat: 'dining', c: 'Chipotle', a: 15.30 },
+  { m: '2025-12', d: 8,  cat: 'transport', c: 'Uber', a: 24.90 },
+  { m: '2025-12', d: 9,  cat: 'health', c: 'Equinox gym', a: 59 },
+  { m: '2025-12', d: 10, cat: 'groceries', c: 'Whole Foods', a: 98.40 },
+  { m: '2025-12', d: 12, cat: 'entertainment', c: 'AMC theatres', a: 30 },
+  { m: '2025-12', d: 13, cat: 'shopping', c: 'Black Friday — headphones', a: 199.99 },
+  { m: '2025-12', d: 14, cat: 'dining', c: 'Ramen Nagi', a: 23.70 },
+  { m: '2025-12', d: 15, cat: 'groceries', c: 'Costco run', a: 112.30 },
+  { m: '2025-12', d: 17, cat: 'transport', c: 'Shell gas', a: 48.20 },
+  { m: '2025-12', d: 18, cat: 'shopping', c: 'Amazon — gifts', a: 246.50 },
+  { m: '2025-12', d: 19, cat: 'health', c: 'CVS Pharmacy', a: 22.60 },
+  { m: '2025-12', d: 20, cat: 'dining', c: 'Olive Garden', a: 44.80 },
+  { m: '2025-12', d: 21, cat: 'entertainment', c: 'Steam', a: 12.99 },
+  { m: '2025-12', d: 22, cat: 'transport', c: 'City transit card', a: 27.50 },
+  { m: '2025-12', d: 23, cat: 'groceries', c: 'Holiday groceries', a: 84.60 },
+  { m: '2025-12', d: 24, cat: 'dining', c: 'Holiday brunch', a: 52.40 },
+  { m: '2025-12', d: 26, cat: 'shopping', c: 'Post-holiday sale', a: 61.20 },
+  { m: '2025-12', d: 27, cat: 'entertainment', c: 'Bowling night', a: 24 },
+  { m: '2025-12', d: 28, cat: 'dining', c: 'Torchy’s Tacos', a: 16.90 },
+  { m: '2025-12', d: 29, cat: 'groceries', c: "Trader Joe's", a: 51.70 },
+  { m: '2025-12', d: 30, cat: 'subscriptions', c: 'Netflix', a: 15.49 },
+  { m: '2025-12', d: 31, cat: 'entertainment', c: 'New Year’s party', a: 39.50 },
+];
+
+const ALL = [
+  ...INCOME.map(t => ({ ...t, cat: 'income', type: 'Income' })),
+  ...SPEND.map(t => ({ ...t, dir: -1, type: CAT_BY_ID[t.cat].name })),
+].sort((a, b) => (a.m === b.m ? b.d - a.d : a.m > b.m ? -1 : 1));
+
+const OPENING = 5820;
+function txFor(m) { return ALL.filter(t => t.m === m); }
+function spendFor(m) { return txFor(m).filter(t => t.dir === -1); }
+function incomeFor(m) { return txFor(m).filter(t => t.dir === 1).reduce((s, t) => s + t.a, 0); }
+function spentFor(m) { return spendFor(m).reduce((s, t) => s + t.a, 0); }
+function catSpend(m) {
+  const out = {};
+  for (const t of spendFor(m)) out[t.cat] = (out[t.cat] || 0) + t.a;
+  return out;
+}
+function balances() {
+  let b = OPENING;
+  const out = {};
+  const chronological = [...MONTHS].reverse();
+  for (const mo of chronological) {
+    b += incomeFor(mo.key) - spentFor(mo.key);
+    out[mo.key] = b;
+  }
+  return out;
+}
+const BALANCE = balances();
+
+/* ---------------------------------------------------------------- helpers */
+const fmtCur = n => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtCur0 = n => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const fmtAxis = n => n >= 1000 ? '$' + (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'k' : '$' + Math.round(n);
+const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function dateLabel(key, day) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+const el = id => document.getElementById(id);
+const svgNS = 'http://www.w3.org/2000/svg';
+function svg(tag, attrs, parent) {
+  const node = document.createElementNS(svgNS, tag);
+  for (const k in attrs) node.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+function text(node, str) { node.textContent = str; return node; }
+
+/* tooltip */
+const tip = el('tooltip');
+let tipHideTimer = null;
+function showTip(html, x, y) {
+  clearTimeout(tipHideTimer);
+  tip.innerHTML = html;
+  tip.classList.add('show');
+  const r = tip.getBoundingClientRect();
+  let left = x + 14, top = y - r.height - 12;
+  if (left + r.width > window.innerWidth - 8) left = x - r.width - 14;
+  if (left < 8) left = 8;
+  if (top < 8) top = y + 18;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+}
+function hideTip() { tip.classList.remove('show'); }
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.hit')) hideTip(); }, true);
+function attachHit(node, htmlFn) {
+  node.classList.add('hit');
+  node.addEventListener('pointerenter', e => showTip(htmlFn(), e.clientX, e.clientY));
+  node.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') showTip(htmlFn(), e.clientX, e.clientY); });
+  node.addEventListener('pointerleave', hideTip);
+  node.addEventListener('click', e => showTip(htmlFn(), e.clientX, e.clientY));
+  node.addEventListener('focus', () => {
+    const r = node.getBoundingClientRect();
+    showTip(htmlFn(), r.left + r.width / 2, r.top + r.height / 2);
+  });
+  node.addEventListener('blur', hideTip);
+  node.setAttribute('tabindex', '0');
+}
+
+/* ---------------------------------------------------------------- KPIs */
+function renderKPIs(monthKey) {
+  const idx = MONTHS.findIndex(m => m.key === monthKey);
+  const prevKey = idx < MONTHS.length - 1 ? MONTHS[idx + 1].key : null;
+  const bal = BALANCE[monthKey];
+  const inc = incomeFor(monthKey), spo = spentFor(monthKey);
+  const save = inc ? (inc - spo) / inc * 100 : 0;
+  const pBal = prevKey ? BALANCE[prevKey] : null;
+  const pInc = prevKey ? incomeFor(prevKey) : null;
+  const pSpo = prevKey ? spentFor(prevKey) : null;
+  const pSave = (prevKey && pInc) ? (pInc - pSpo) / pInc * 100 : null;
+
+  const pct = (cur, prev) => prev ? (cur - prev) / prev * 100 : null;
+  const kpis = [
+    { label: 'Balance', icon: 'income', value: fmtCur(bal), delta: pct(bal, pBal), goodUp: true },
+    { label: 'Income', icon: 'income', value: fmtCur0(inc), delta: pct(inc, pInc), goodUp: true },
+    { label: 'Spending', icon: 'shopping', value: fmtCur0(spo), delta: pct(spo, pSpo), goodUp: false },
+    { label: 'Savings rate', icon: 'health', value: save.toFixed(1) + '%', delta: pSave == null ? null : save - pSave, goodUp: true, pp: true },
+  ];
+  el('kpis').innerHTML = kpis.map(k => {
+    let chip;
+    if (k.delta == null) chip = '<span class="delta flat">no prior data</span>';
+    else {
+      const up = k.delta >= 0;
+      const good = k.delta === 0 ? 'flat' : ((up === k.goodUp) ? 'good' : 'bad');
+      const arrow = k.delta === 0 ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12h14"/></svg>'
+        : up ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 7 7"/></svg>'
+        : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"/></svg>';
+      const txt = (k.pp ? (up ? '+' : '−') + Math.abs(k.delta).toFixed(1) + ' pp' : (up ? '+' : '−') + Math.abs(k.delta).toFixed(1) + '%');
+      chip = `<span class="delta ${good}">${arrow}${txt}</span>`;
+    }
+    return `<article class="card kpi">
+      <div class="kpi-top"><span class="kpi-label">${k.label}</span><span class="kpi-ico" aria-hidden="true">${iconSvg(k.icon)}</span></div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-foot">${chip}<span>vs last month</span></div>
+    </article>`;
+  }).join('');
+}
+
+/* ---------------------------------------------------------------- donut */
+function polar(cx, cy, r, a) { return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; }
+function arcPath(cx, cy, rO, rI, a0, a1) {
+  const large = (a1 - a0) > Math.PI ? 1 : 0;
+  const [x1, y1] = polar(cx, cy, rO, a0), [x2, y2] = polar(cx, cy, rO, a1);
+  const [x3, y3] = polar(cx, cy, rI, a1), [x4, y4] = polar(cx, cy, rI, a0);
+  return `M${x1} ${y1} A${rO} ${rO} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${rI} ${rI} 0 ${large} 0 ${x4} ${y4} Z`;
+}
+function renderDonut(monthKey) {
+  const host = el('donut'); host.innerHTML = '';
+  const center = el('donut-center');
+  const legend = el('donut-legend');
+  const totals = CATEGORIES.map(c => ({ ...c, value: catSpend(monthKey)[c.id] || 0 })).filter(c => c.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const total = totals.reduce((s, c) => s + c.value, 0);
+  const monthLabel = MONTHS.find(m => m.key === monthKey).label;
+  el('cat-sub').textContent = `${monthLabel} · ${fmtCur0(total)} spent across ${totals.length} categories`;
+  el('donut-sr').textContent = 'Donut chart of spending by category for ' + monthLabel + '. ' +
+    totals.map(c => `${c.name} ${fmtCur(c.value)}`).join(', ') + '.';
+
+  const setCenter = (label, value) => {
+    center.innerHTML = `<span class="dc-label">${label}</span><span class="dc-value">${value}</span>`;
+  };
+  setCenter('Total spent', fmtCur0(total));
+
+  if (!totals.length) {
+    host.innerHTML = '<p class="section-sub">No spending recorded this month.</p>';
+    legend.innerHTML = '';
+    return;
+  }
+
+  const W = 200, H = 200, cx = 100, cy = 100, rO = 92, rI = 60, gap = 0.02;
+  const s = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, host);
+  s.setAttribute('aria-label', 'Spending by category, ' + monthLabel);
+  let a = -Math.PI / 2;
+  const segs = [];
+  for (const c of totals) {
+    const sweep = (c.value / total) * Math.PI * 2;
+    const a0 = a + gap / 2, a1 = a + sweep - gap / 2;
+    const path = svg('path', {
+      d: arcPath(cx, cy, rO, rI, a0, Math.max(a0, a1)),
+      fill: cssVar(c.colorVar), class: 'seg',
+    }, s);
+    const pctTxt = (c.value / total * 100).toFixed(0);
+    const html = () => `<b>${c.name}</b><br>${fmtCur(c.value)} <span class="tt-sub">· ${pctTxt}% of total</span>`;
+    segs.push({ path, c });
+    attachHit(path, html);
+    a += sweep;
+  }
+  const highlight = (on, cat) => () => {
+    for (const { path, c } of segs) {
+      const match = on && c.id === cat.id;
+      path.classList.toggle('dim', on && !match);
+      path.classList.toggle('hot', match);
+    }
+    if (on) setCenter(cat.name, fmtCur0(cat.value)); else setCenter('Total spent', fmtCur0(total));
+  };
+  for (const item of segs) {
+    item.path.addEventListener('pointerenter', highlight(true, item.c));
+    item.path.addEventListener('pointerleave', highlight(false, null));
+  }
+
+  legend.innerHTML = totals.map(c => `
+    <li><span class="swatch" style="background:var(${c.colorVar})"></span>${c.name}
+      <span class="val">${fmtCur0(c.value)}</span></li>`).join('');
+  legend.querySelectorAll('li').forEach((li, i) => {
+    li.addEventListener('pointerenter', highlight(true, totals[i]));
+    li.addEventListener('pointerleave', highlight(false, null));
+  });
+}
+
+/* ---------------------------------------------------------------- bars */
+function renderBars(monthKey) {
+  const host = el('bars'); host.innerHTML = '';
+  const months = [...MONTHS].reverse(); // chronological
+  const data = months.map(m => ({ key: m.key, label: m.label.split(' ')[0], income: incomeFor(m.key), spend: spentFor(m.key) }));
+  const maxVal = Math.max(...data.flatMap(d => [d.income, d.spend]));
+  const step = maxVal > 4000 ? 2000 : maxVal > 2000 ? 1000 : 500;
+  const yMax = Math.ceil(maxVal / step) * step;
+
+  const W = 560, H = 260, padL = 46, padR = 8, padT = 10, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const groupW = plotW / data.length;
+  const y = v => padT + plotH - (v / yMax) * plotH;
+  const s = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' }, host);
+  s.setAttribute('aria-label', 'Grouped bar chart of income versus spending per month, last 6 months');
+
+  const selIdx = data.findIndex(d => d.key === monthKey);
+  if (selIdx >= 0) {
+    svg('rect', { x: padL + groupW * selIdx + 4, y: padT, width: groupW - 8, height: plotH, rx: 10, fill: cssVar('--surface-2') }, s);
+  }
+
+  const tickCount = Math.min(5, yMax / step + 1);
+  const tickStep = yMax / (tickCount - 1);
+  for (let i = 0; i < tickCount; i++) {
+    const v = i * tickStep, yy = y(v);
+    svg('line', { x1: padL, x2: W - padR, y1: yy, y2: yy, stroke: cssVar('--border'), 'stroke-width': i === 0 ? 1.4 : 1, 'stroke-dasharray': i === 0 ? 'none' : '3 4' }, s);
+    const t = text(svg('text', { x: padL - 8, y: yy + 4, 'text-anchor': 'end', 'font-size': '11', fill: cssVar('--text-3') }, s), fmtAxis(v));
+    t.setAttribute('font-weight', '500');
+  }
+
+  const barsPer = data.map(d => {
+    const bw = Math.min(22, groupW * 0.26);
+    const cx0 = padL + groupW * (data.indexOf(d)) + groupW / 2;
+    const pair = [];
+    const defs = [
+      { k: 'income', v: d.income, fill: cssVar('--income'), name: 'Income' },
+      { k: 'spend', v: d.spend, fill: cssVar('--spend'), name: 'Spending' },
+    ];
+    defs.forEach((def, i) => {
+      const x = cx0 - bw - 3 + i * (bw + 6);
+      const bar = svg('rect', { x, y: y(def.v), width: bw, height: padT + plotH - y(def.v), rx: 4, fill: def.fill, class: 'bar' }, s);
+      if (d.key === monthKey) bar.setAttribute('stroke', cssVar('--text-3')), bar.setAttribute('stroke-width', '1.5');
+      attachHit(bar, () => `<b>${def.name}</b> · ${d.label}<br>${fmtCur(def.v)}`);
+      pair.push(bar);
+    });
+    return pair;
+  });
+
+  const setDim = keep => {
+    data.forEach((d, i) => barsPer[i].forEach((b, j) => {
+      const match = keep != null && d.key === keep.key && (keep.series == null || j === keep.series);
+      b.classList.toggle('dim', keep != null && !match);
+      b.classList.toggle('hot', !!match);
+    }));
+  };
+  data.forEach((d, i) => {
+    barsPer[i].forEach((bar, j) => {
+      bar.addEventListener('pointerenter', () => setDim({ key: d.key, series: j }));
+      bar.addEventListener('pointerleave', () => setDim(null));
+    });
+    const lx = padL + groupW * i + groupW / 2;
+    const lab = text(svg('text', { x: lx, y: H - 8, 'text-anchor': 'middle', 'font-size': '11.5', fill: d.key === monthKey ? cssVar('--text') : cssVar('--text-3'), 'font-weight': d.key === monthKey ? '700' : '500' }, s), d.label);
+    lab.setAttribute('tabindex', '0');
+    const html = () => `<b>${d.label}</b><br>Income ${fmtCur(d.income)}<br>Spending ${fmtCur(d.spend)}<br><span class="tt-sub">Net ${fmtCur(d.income - d.spend)}</span>`;
+    lab.addEventListener('pointerenter', e => { setDim({ key: d.key }); showTip(html(), e.clientX, e.clientY); });
+    lab.addEventListener('pointermove', e => showTip(html(), e.clientX, e.clientY));
+    lab.addEventListener('pointerleave', () => { setDim(null); hideTip(); });
+    lab.addEventListener('focus', () => { const r = s.getBoundingClientRect(); setDim({ key: d.key }); showTip(html(), r.left + (lx / W) * r.width, r.top + 40); });
+    lab.addEventListener('blur', () => { setDim(null); hideTip(); });
+  });
+
+  el('bars-sr').textContent = 'Income versus spending, last 6 months. ' +
+    data.map(d => `${d.label}: income ${fmtCur(d.income)}, spending ${fmtCur(d.spend)}`).join('; ') + '.';
+  el('bars-legend').innerHTML =
+    `<li><span class="swatch" style="background:var(--income)"></span>Income</li>` +
+    `<li><span class="swatch" style="background:var(--spend)"></span>Spending</li>`;
+}
+
+/* ---------------------------------------------------------------- transactions */
+function renderTx(monthKey) {
+  const list = ALL.filter(t => t.m === monthKey).slice(0, 9);
+  el('tx-sub').textContent = `${list.length} of ${txFor(monthKey).length} transactions · ${MONTHS.find(m => m.key === monthKey).label}`;
+  el('tx-list').innerHTML = list.map(t => {
+    const isIncome = t.dir === 1;
+    const colorVar = isIncome ? '--pos' : CAT_BY_ID[t.cat].colorVar;
+    const iconId = isIncome ? 'income' : t.cat;
+    return `<li class="tx">
+      <span class="tx-ico" style="--cat-c:var(${colorVar})" aria-hidden="true">${iconSvg(iconId)}</span>
+      <span class="tx-main">
+        <span class="tx-merchant">${t.c}</span>
+        <span class="tx-meta">${dateLabel(t.m, t.d)}</span>
+      </span>
+      <span class="tx-amt">${isIncome ? '<span class="plus">+</span>' : '−'}${fmtCur(t.a)}
+        <span class="tx-cat">${isIncome ? 'Income' : CAT_BY_ID[t.cat].name}</span></span>
+    </li>`;
+  }).join('');
+}
+
+/* ---------------------------------------------------------------- budgets */
+function renderBudgets(monthKey) {
+  const spent = catSpend(monthKey);
+  const monthLabel = MONTHS.find(m => m.key === monthKey).label;
+  el('bud-sub').textContent = `${monthLabel} · amber at 90% of the limit, red above it`;
+  el('bud-list').innerHTML = CATEGORIES.map(c => {
+    const s = spent[c.id] || 0;
+    const ratio = s / c.budget;
+    const state = ratio >= 1 ? 'over' : ratio >= 0.9 ? 'warn' : 'ok';
+    const pct = Math.round(ratio * 100);
+    const fill = Math.min(100, ratio * 100);
+    let flag = '';
+    if (state === 'over') flag = `<div class="bud-flag over"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 8v5"/><path d="M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg>${s > c.budget ? fmtCur(s - c.budget) + ' over budget' : 'At your limit — no room left'}</div>`;
+    else if (state === 'warn') flag = `<div class="bud-flag warn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19Z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>${fmtCur(c.budget - s)} left — nearing limit</div>`;
+    return `<li>
+      <div class="bud-head">
+        <span class="bud-name">${c.name}</span>
+        <span class="bud-vals"><b>${fmtCur0(s)}</b> / ${fmtCur0(c.budget)}</span>
+        <span class="bud-pct ${state}">${pct}%</span>
+      </div>
+      <div class="bud-track" role="img" aria-label="${c.name}: ${fmtCur(s)} spent of ${fmtCur(c.budget)} budget, ${pct} percent">
+        <div class="bud-fill ${state === 'ok' ? '' : state}" style="width:${fill}%;--cat-c:var(${c.colorVar})"></div>
+      </div>
+      ${flag}
+    </li>`;
+  }).join('');
+}
+
+/* ---------------------------------------------------------------- orchestration */
+let current = MONTHS[0].key;
+function renderAll() {
+  renderKPIs(current);
+  renderDonut(current);
+  renderBars(current);
+  renderTx(current);
+  renderBudgets(current);
+}
+const sel = el('month-select');
+sel.innerHTML = MONTHS.map(m => `<option value="${m.key}">${m.label}</option>`).join('');
+sel.addEventListener('change', () => { current = sel.value; renderAll(); });
+const go = delta => {
+  const i = MONTHS.findIndex(m => m.key === current) + delta;
+  if (i < 0 || i >= MONTHS.length) return;
+  current = MONTHS[i].key; sel.value = current; renderAll();
+};
+el('prev').addEventListener('click', () => go(1));
+el('next').addEventListener('click', () => go(-1));
+function syncNav() {
+  const i = MONTHS.findIndex(m => m.key === current);
+  el('prev').disabled = i >= MONTHS.length - 1;
+  el('next').disabled = i <= 0;
+}
+const baseRender = renderAll;
+renderAll = () => { baseRender(); syncNav(); };
+if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderAll);
+renderAll();
+</script>
+</body>
+</html>
