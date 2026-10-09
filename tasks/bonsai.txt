@@ -1,0 +1,5 @@
+Build a single web page that shows a pixel-art bonsai with floating wind. Front end only: index.html (CSS and JS may be inline or in separate files), no backend, no build step, no external libraries, fonts or images. It must work by opening index.html in a browser.
+
+The bonsai must clearly read as a bonsai, drawn as crisp pixel art (for example a small canvas scaled up with image-rendering: pixelated): a shallow pot, a thick curved trunk with some taper, a few branches, and layered rounded foliage pads with light and shadow shades. No blurry shapes or single-color blobs.
+
+Wind: small pixel leaves and wind streaks drift across the scene continuously, and the foliage sways gently. Make the whole scene look polished, centered, and good on desktop and on a phone-sized screen.

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Pixel Bonsai</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #1a2520;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+  }
+  body {
+    background: #0e1a14;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
+    width: 100vw;
+    height: 100vh;
+    object-fit: contain;
+    display: block;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── Canvas setup ─────────────────────────────────────────────────────────
+const W = 160, H = 160;
+const displayCanvas = document.getElementById('c');
+const ctx = displayCanvas.getContext('2d');
+displayCanvas.width = W; displayCanvas.height = H;
+const buf = document.createElement('canvas');
+buf.width = W; buf.height = H;
+const b = buf.getContext('2d');
+
+function R(x,y,w,h,c){b.fillStyle=c;b.fillRect(x|0,y|0,w|0,h|0)}
+function P(x,y,c){b.fillStyle=c;b.fillRect(x|0,y|0,1,1)}
+
+// ── Colors ───────────────────────────────────────────────────────────────
+const C = {
+  trunk:  '#5a3820', trunkL:'#7a5530', trunkH:'#3a1e0e', bark:'#4a2a14',
+  pot:    '#8a5a3a', potD:'#6a3a24', potL:'#a87a50', potR:'#c09068', potRh:'#d8b080',
+  soil:   '#3a2818', soilL:'#4a3824',
+  gDk:    '#145020', gM:   '#208830', gL:   '#38b848', gH:   '#58d860', gSh:'#0c3a14', gE:'#1a6a28',
+  wind:   'rgba(180,220,200,.15)',
+  bgT:    '#1a2822', bgB:  '#2a4038',
+  ground: '#1e3828',
+};
+
+// ── Coordinate map (pixels from top of canvas) ──────────────────────────
+// Ground: y=140
+// Pot:    y=120 to 140 (rim at 118)
+// Soil:   y=118 to 120
+// Trunk:  y=45 to 118 (base at 118, top at 45, tapered)
+// Branches: start from trunk at y=55,65,75,85
+// Foliage: y=5 to y=50 (connected to trunk top at 45)
+
+const CX = W/2; // 80
+
+// ── Draw background ─────────────────────────────────────────────────────
+function drawBg() {
+  const g = b.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, C.bgT); g.addColorStop(1, C.bgB);
+  R(0,0,W,H,g);
+  // subtle atmosphere
+  for (let i = 0; i < 20; i++) {
+    const a = 0.02 + Math.random()*0.03;
+    P(i*9%W, i*17%H, `rgba(180,210,200,${a})`);
+  }
+  // Ground
+  R(0, 138, W, H-138, C.ground);
+  for (let i = 0; i < 60; i++) {
+    P(i*4.3%W, 139+i*3.1%20, Math.random()>.5?C.soilL:C.ground);
+  }
+}
+
+// ── Draw pot ─────────────────────────────────────────────────────────────
+function drawPot() {
+  const pTop = 118, pBot = 140;
+  const pTopL = CX-32, pTopR = CX+32;
+  const pBotL = CX-25, pBotR = CX+25;
+
+  // Pot body
+  for (let y=pTop; y<=pBot; y++) {
+    const t=(y-pTop)/(pBot-pTop);
+    const l=pTopL-(pTopL-pBotL)*t, r=pTopR-(pTopR-pBotR)*t;
+    R(l|0, y, (r-l+1)|0, 1, C.pot);
+  }
+  // Shading
+  for (let y=pTop+2; y<=pBot-3; y++) {
+    const t=(y-pTop)/(pBot-pTop);
+    const l=pTopL-(pTopL-pBotL)*t;
+    const r=pTopR-(pTopR-pBotR)*t;
+    R(l|0, y, 3, 1, C.potD);
+    R((r-2)|0, y, 2, 1, C.potL);
+  }
+  // Rim
+  R((CX-36)|0, pTop-3, 72, 4, C.potR);
+  R((CX-34)|0, pTop-2, 68, 1, C.potRh);
+  R((CX-36)|0, pTop+1, 72, 1, C.potD);
+
+  // Soil
+  for (let y=pTop-1; y<=pTop+1; y++) {
+    R((CX-30)|0, y, 60, 1, C.soil);
+  }
+  for (let i=0;i<15;i++) P(CX+(Math.random()-.5)*55, pTop-1+Math.random()*3, C.soilL);
+}
+
+// ── Draw trunk + roots + branches ───────────────────────────────────────
+// Trunk goes from y=115 (base, inside pot) to y=40 (top)
+// Curves gently right then back
+function drawTrunk() {
+  const tTop=40, tBot=115;
+
+  function trunkX(y) {
+    const t=(y-tTop)/(tBot-tTop);
+    // gentle S-curve: start center, curve right, come back
+    return CX + Math.sin(t*Math.PI*0.7)*10 - 3;
+  }
+
+  function trunkW(y) {
+    const t=(y-tTop)/(tBot-tTop);
+    // taper: ~7px half-width at bottom, ~2.5 at top
+    return Math.round(7 - t*5 + Math.sin(y*0.2)*0.8);
+  }
+
+  // Roots spreading from base
+  for (let i=0;i<5;i++) {
+    const ang=(i-2)*0.22, rLen=6+i*2;
+    const ex=CX+Math.sin(ang)*rLen, ey=113-Math.abs(i-2)*1.5;
+    for (let t=0;t<=1;t+=.06) {
+      const rx=CX+(ex-CX)*t;
+      const ry=113-(113-ey)*t-Math.sin(t*Math.PI)*2;
+      P(rx,ry|0,C.trunk); P(rx+1,ry|0,C.bark);
+    }
+  }
+
+  // Trunk body
+  for (let y=tTop; y<=tBot; y++) {
+    const w=trunkW(y), tx=trunkX(y);
+    R((tx-w)|0, y, (w*2+1)|0, 1, C.trunk);
+    R(tx|0, y, w, 1, C.trunkL);
+    P((tx-w-1)|0, y, C.trunkH);
+    if (y%3===0) P((tx-1)|0, y, C.bark);
+    if (y%5===1) P(((tx+w-1))|0, y, C.bark);
+  }
+
+  // Branches
+  const branches = [
+    {y:50,  dx:-1, len:22, ang:-0.5},
+    {y:62,  dx: 1, len:20, ang: 0.4},
+    {y:72,  dx:-1, len:18, ang:-0.35},
+    {y:84,  dx: 1, len:16, ang: 0.3},
+  ];
+
+  branches.forEach(bd => {
+    const sx=trunkX(bd.y), y0=bd.y;
+    for (let i=0;i<=bd.len;i++) {
+      const t=i/bd.len;
+      const bx=sx+bd.dx*bd.len*t+Math.sin(t*2)*2.5;
+      const by=y0+bd.ang*bd.len*t+Math.sin(t*Math.PI)*4;
+      const bw=Math.max(1,Math.round(2.5*(1-t*.6)));
+      R(bx|0, by|0, bw, 1, C.trunk);
+      R(bx|0, (by+1)|0, bw, 1, C.trunkL);
+      if (i>bd.len*.4 && i%4===0) {
+        P((bx+(Math.random()-.5)*3)|0, (by+(Math.random()-.5)*3)|0, C.bark);
+      }
+    }
+  });
+}
+
+// ── Draw foliage ─────────────────────────────────────────────────────────
+// Distinct pads with gaps between them so they read as individual clumps
+const PADS = [
+  // top cluster
+  {x:CX, y:8,  rx:14, ry:10},
+  {x:CX-12, y:14, rx:13, ry:10},
+  {x:CX+12, y:13, rx:13, ry:10},
+  {x:CX-6, y:18, rx:15, ry:11},
+  {x:CX+8, y:17, rx:14, ry:10},
+  // middle cluster (gap from top ~2px)
+  {x:CX-18, y:28, rx:16, ry:12},
+  {x:CX+18, y:26, rx:16, ry:12},
+  {x:CX-6, y:26, rx:15, ry:11},
+  {x:CX+6, y:29, rx:14, ry:11},
+  {x:CX, y:24, rx:16, ry:11},
+  // lower cluster (gap from middle ~2px)
+  {x:CX-24, y:40, rx:13, ry:10},
+  {x:CX+24, y:39, rx:13, ry:10},
+  {x:CX-12, y:38, rx:14, ry:11},
+  {x:CX+12, y:37, rx:13, ry:10},
+  {x:CX-2, y:36, rx:14, ry:10},
+  {x:CX-32, y:44, rx:9, ry:7},
+  {x:CX+32, y:43, rx:9, ry:7},
+];
+
+function sRand(i) { const x=Math.sin(i*7.3+42)*43758.55; return x-Math.floor(x); }
+
+function drawFoliage(t) {
+  const swayMain = Math.sin(t*0.028)*1.0;
+  const swayY = Math.sin(t*0.022)*0.25;
+
+  PADS.forEach((p, i) => {
+    // Sway: top pads move more
+    const yFactor = Math.abs(p.y - 25) / 25;
+    const sX = Math.sin(t*0.032 + i*0.65)*1.5 * (0.4 + yFactor*2.0) + swayMain * (0.5+yFactor);
+    const sY = Math.sin(t*0.026 + i*1.05)*0.4 * (0.3 + yFactor) + swayY;
+
+    const sx = p.x + sX;
+    const sy = p.y + sY;
+
+    // Draw as a series of overlapping rectangles for pixel-art feel
+    // Layer 1: dark bottom shadow
+    for (let row = sy; row < sy + p.ry + 1; row++) {
+      const dy = (row - sy - p.ry*0.5) / p.ry;
+      const halfW = Math.round(p.rx * Math.sqrt(Math.max(0, 1 - dy*dy)));
+      if (halfW > 0) R((sx - halfW)|0, row, halfW, 1, C.gSh);
+    }
+    // Layer 2: dark green base
+    for (let row = sy - p.ry + 2; row < sy + p.ry + 1; row++) {
+      const dy = (row - sy) / p.ry;
+      const halfW = Math.round(p.rx * Math.sqrt(Math.max(0, 1 - dy*dy)));
+      if (halfW > 1) R((sx - halfW + 1)|0, row, (halfW-1)|0, 1, C.gDk);
+    }
+    // Layer 3: mid green
+    for (let row = sy - p.ry + 3; row < sy + p.ry; row++) {
+      const dy = (row - sy) / p.ry;
+      const halfW = Math.round(p.rx * Math.sqrt(Math.max(0, 1 - dy*dy)));
+      if (halfW > 2) R((sx - halfW + 2)|0, row, (halfW-3)|0, 1, C.gM);
+    }
+    // Layer 4: light green top half
+    for (let row = sy - p.ry + 4; row < sy - 1; row++) {
+      const dy = (row - sy) / p.ry;
+      const halfW = Math.round(p.rx * Math.sqrt(Math.max(0, 1 - dy*dy)));
+      if (halfW > 2) R((sx - halfW + 3)|0, row, (halfW-4)|0, 1, C.gL);
+    }
+    // Layer 5: highlights (small bright pixels on upper-left)
+    for (let j = 0; j < 3; j++) {
+      const a = sRand(i*7+j) * Math.PI * 2;
+      const r = Math.min(p.rx, p.ry) * (0.15 + sRand(i*7+j+50)*0.35);
+      const hx = sx + Math.cos(a) * r * 0.8;
+      const hy = sy + Math.sin(a) * r * 0.5 - 2;
+      if (hy < sy) P(hx|0, hy|0, C.gH);
+    }
+    // Layer 6: outline pixels (dark edge) for separation
+    for (let a = 0; a < Math.PI*2; a += 0.45) {
+      P((sx + Math.cos(a)*p.rx)|0, (sy + Math.sin(a)*p.ry)|0, C.gE);
+    }
+    // Layer 7: dark bottom edge
+    for (let a = 0.2; a < Math.PI - 0.2; a += 0.5) {
+      P((sx + Math.cos(a)*p.rx*1.05)|0, (sy + p.ry*0.9)|0, C.gDk);
+    }
+  });
+}
+
+// ── Wind particles ───────────────────────────────────────────────────────
+class Leaf {
+  constructor(init){ this.res(init); }
+  res(init) {
+    this.x=init?Math.random()*(W+30)-15:-10;
+    this.y=20+Math.random()*70;
+    this.vx=.5+Math.random()*1.3;
+    this.vy=(Math.random()-.5)*.3;
+    this.sz=Math.random()>.65?2:1;
+    this.life=60+Math.random()*100;
+    this.rot=Math.random()*6.28;
+    this.rs=(Math.random()-.5)*.13;
+    this.w=Math.random()*6.28;
+    this.ws=.05+Math.random()*.07;
+    this.c=[C.gM,C.gL,C.gH,C.gE][Math.random()*4|0];
+  }
+  update() {
+    this.w+=this.ws;
+    this.x+=this.vx+Math.sin(this.w)*.35;
+    this.y+=this.vy+Math.cos(this.w*.7)*.1;
+    this.rot+=this.rs;
+    this.life--;
+    if (this.life<=0||this.x>W+25) this.res();
+  }
+  draw() {
+    const a=Math.min(1,this.life/12)*Math.min(1,Math.max(0,this.life-8)/12);
+    b.globalAlpha=a;
+    b.save(); b.translate(this.x,this.y); b.rotate(this.rot);
+    if (this.sz===2) { R(-1,-1,2,1,this.c); P(0,0,this.c); }
+    else P(0,0,this.c);
+    b.restore(); b.globalAlpha=1;
+  }
+}
+
+class WindLine {
+  constructor(init){ this.res(init); }
+  res(init) {
+    this.y=10+Math.random()*90;
+    this.len=8+Math.random()*25;
+    this.speed=2+Math.random()*4;
+    this.a=.06+Math.random()*.14;
+    this.thin = Math.random()>.5;
+    this.x=init?Math.random()*(W+60)-30:-this.len;
+  }
+  update() { this.x+=this.speed; if (this.x>W+50) this.res(); }
+  draw() {
+    b.globalAlpha=this.a;
+    if (this.thin) {
+      R(this.x,this.y,this.len,1,C.wind);
+      b.globalAlpha=this.a*0.6;
+      R(this.x,this.y+1,this.len*.7,1,'rgba(200,235,215,.1)');
+    } else {
+      R(this.x,this.y,this.len,1,'rgba(200,230,210,.1)');
+    }
+    b.globalAlpha=1;
+  }
+}
+
+const leaves = Array.from({length:25}, ()=>new Leaf(1));
+const winds  = Array.from({length:14}, ()=>new WindLine(1));
+
+// ── Main loop ────────────────────────────────────────────────────────────
+let t = 0;
+let lastTime = 0;
+let framesThisSecond = 0;
+
+function frame(ts) {
+  t++;
+  b.clearRect(0,0,W,H);
+
+  drawBg();
+  drawPot();
+  drawTrunk();
+
+  // Foliage with sway, clipped
+  b.save();
+  b.beginPath(); b.rect(0,0,W,65); b.clip();
+  drawFoliage(t);
+  b.restore();
+
+  // Wind
+  winds.forEach(s=>{s.update();s.draw();});
+  leaves.forEach(l=>{l.update();l.draw();});
+
+  // Blit to display canvas
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(buf,0,0);
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

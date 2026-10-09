@@ -1,0 +1,52 @@
+[
+ {
+  "check": "BigCodeBench-Hard, 89 tasks (bare)",
+  "model": "Qwen3-Coder-Next",
+  "value": 0.579
+ },
+ {
+  "check": "BigCodeBench-Hard, 89 tasks (bare)",
+  "model": "Qwen3.8-27B",
+  "value": 0.633
+ },
+ {
+  "check": "BigCodeBench-Hard, 89 tasks (terse)",
+  "model": "Qwen3-Coder-Next",
+  "value": 0.608
+ },
+ {
+  "check": "BigCodeBench-Hard, 89 tasks (terse)",
+  "model": "Qwen3.8-27B",
+  "value": 0.582
+ },
+ {
+  "check": "5 agent tasks pass rate (OpenCode + kit)",
+  "model": "Qwen3-Coder-Next",
+  "value": 1.0
+ },
+ {
+  "check": "5 agent tasks pass rate (OpenCode + kit)",
+  "model": "Qwen3.8-27B",
+  "value": 1.0
+ },
+ {
+  "check": "Greenfield API, hidden tests (OpenCode + kit)",
+  "model": "Qwen3-Coder-Next",
+  "value": 0.567
+ },
+ {
+  "check": "Greenfield API, hidden tests (OpenCode + kit)",
+  "model": "Qwen3.8-27B",
+  "value": 0.6
+ },
+ {
+  "check": "Greenfield API, hidden tests (OpenCode bare)",
+  "model": "Qwen3-Coder-Next",
+  "value": 0.2
+ },
+ {
+  "check": "Greenfield API, hidden tests (Qwen Code 0.25)",
+  "model": "Qwen3-Coder-Next",
+  "value": 0.6
+ }
+]

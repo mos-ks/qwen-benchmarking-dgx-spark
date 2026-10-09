@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0f22">
+<meta name="description" content="A pixel-art bonsai tree in the wind, drawn on a pixelated canvas.">
+<title>Bonsai in the Wind</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    background:
+      radial-gradient(130% 90% at 50% 108%, #12203c 0%, #0a0f22 60%, #06091a 100%);
+    padding: clamp(12px, 4vw, 48px);
+  }
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(12px, 3vw, 24px);
+    max-width: 100%;
+  }
+  .frame {
+    position: relative;
+    width: min(92vw, 60vh, 780px);
+    aspect-ratio: 300 / 260;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #04060f;
+    box-shadow:
+      0 34px 70px -26px rgba(0, 0, 0, 0.85),
+      0 0 0 1px rgba(140, 170, 220, 0.10),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  }
+  #scene {
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .caption {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+    font-size: clamp(11px, 3.4vw, 15px);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: #7d92b4;
+    opacity: 0.85;
+    user-select: none;
+    white-space: nowrap;
+  }
+  @media (max-width: 480px) {
+    .caption { letter-spacing: 0.18em; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #scene { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="frame">
+      <canvas id="scene" width="300" height="260" aria-label="Pixel-art bonsai tree in the wind"></canvas>
+    </div>
+    <div class="caption">bonsai in the wind</div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  var W = 300, H = 260;
+  var TAU = Math.PI * 2;
+
+  var scene = document.getElementById("scene");
+  var sctx = scene.getContext("2d");
+
+  var potC = document.createElement("canvas"); potC.width = W; potC.height = H;
+  var potCtx = potC.getContext("2d");
+  var treeC = document.createElement("canvas"); treeC.width = W; treeC.height = H;
+  var treeCtx = treeC.getContext("2d");
+  var foliageC = document.createElement("canvas"); foliageC.width = W; foliageC.height = H;
+  var foliageCtx = foliageC.getContext("2d");
+
+  var trunkPath = { baseX: 150, baseY: 214 };
+
+  var padDefs = [
+    { bx: 150, by: 72, rx: 52, ry: 21, freq: 1.6, phase: 0.0, amp: 2.6, sway: 3.2 },
+    { bx: 106, by: 110, rx: 34, ry: 16, freq: 1.9, phase: 1.0, amp: 3.0, sway: 2.2 },
+    { bx: 196, by: 116, rx: 40, ry: 17, freq: 1.5, phase: 2.2, amp: 2.8, sway: 2.6 },
+    { bx: 150, by: 140, rx: 32, ry: 15, freq: 2.1, phase: 3.1, amp: 2.4, sway: 2.0 }
+  ];
+
+  var leafColors = [
+    "rgba(150,198,110,0.55)", "rgba(118,172,80,0.55)",
+    "rgba(86,140,64,0.55)", "rgba(176,214,142,0.55)",
+    "rgba(198,232,160,0.50)", "rgba(128,180,86,0.55)"
+  ];
+
+  var leaves = [];
+  var streaks = [];
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  var rng = mulberry32(1337);
+
+  var g = 0;
+  function grad(ctx, x0, y0, x1, y1, stops) {
+    g = ctx.createLinearGradient(x0, y0, x1, y1);
+    for (var i = 0; i < stops.length; i++) g.addColorStop(stops[i][0], stops[i][1]);
+    return g;
+  }
+
+  function drawSky() {
+    var ctx = sctx;
+    ctx.fillStyle = grad(ctx, 0, 0, 0, H, [
+      [0.00, "#0c1330"], [0.35, "#101d3f"], [0.62, "#18294f"],
+      [0.80, "#2b3a5b"], [0.90, "#3a4a63"], [1.00, "#46536b"]
+    ]);
+    ctx.fillRect(0, 0, W, H);
+
+    var moonX = 244, moonY = 44;
+    for (var r = 46; r >= 12; r -= 2) {
+      var t = 1 - (r - 12) / 34;
+      ctx.globalAlpha = 0.05 * (1 - t);
+      ctx.fillStyle = "#cdd9ff";
+      ctx.beginPath(); ctx.arc(moonX, moonY, r, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#dfe6ff";
+    ctx.beginPath(); ctx.arc(moonX, moonY, 12, 0, TAU); ctx.fill();
+    ctx.fillStyle = "rgba(150,170,225,0.55)";
+    ctx.beginPath(); ctx.arc(moonX - 4, moonY - 4, 2.6, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(moonX + 3, moonY + 4, 1.6, 0, TAU); ctx.fill();
+
+    var stars = [
+      [30, 34, 1], [58, 22, 1], [90, 50, 1], [118, 30, 1], [150, 46, 1],
+      [186, 28, 1], [70, 84, 1], [40, 110, 1], [210, 70, 1], [262, 118, 1],
+      [278, 60, 1], [250, 30, 1], [14, 74, 1], [200, 120, 1]
+    ];
+    ctx.fillStyle = "#c8d4ff";
+    for (var s = 0; s < stars.length; s++) {
+      ctx.globalAlpha = 0.45 + ((s * 7) % 5) / 10;
+      ctx.fillRect(stars[s][0], stars[s][1], stars[s][2], stars[s][2]);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTrunk(ctx) {
+    var pts = [
+      [150, 214, 11], [148, 198, 10], [152, 184, 8], [158, 170, 7],
+      [162, 158, 6], [156, 146, 5], [144, 136, 4], [130, 130, 3], [118, 124, 2], [106, 120, 1]
+    ];
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.fillStyle = grad(ctx, 150, 214, 150, 120, [
+      [0.00, "#2e2013"], [0.50, "#4a3722"], [1.00, "#5d4a33"]
+    ]);
+    ctx.strokeStyle = ctx.fillStyle;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) {
+      var mx = (pts[i - 1][0] + pts[i][0]) / 2;
+      var my = (pts[i - 1][1] + pts[i][1]) / 2;
+      ctx.quadraticCurveTo(pts[i - 1][0], pts[i - 1][1], mx, my);
+    }
+    ctx.quadraticCurveTo(pts[pts.length - 1][0], pts[pts.length - 1][1], pts[pts.length - 1][0], pts[pts.length - 1][1]);
+    ctx.lineWidth = 11; ctx.stroke();
+    ctx.lineWidth = 8; ctx.stroke();
+    ctx.lineWidth = 6; ctx.stroke();
+    ctx.lineWidth = 4; ctx.stroke();
+    ctx.lineWidth = 2; ctx.stroke();
+
+    ctx.strokeStyle = "#5e4a33";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(150, 212);
+    ctx.quadraticCurveTo(152, 198, 152, 184);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(20,14,8,0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(148, 200); ctx.lineTo(149, 196); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(155, 174); ctx.lineTo(154, 171); ctx.stroke();
+
+    ctx.fillStyle = "#3a2a1a";
+    ctx.beginPath();
+    ctx.moveTo(150, 168);
+    ctx.quadraticCurveTo(176, 150, 198, 118);
+    ctx.lineWidth = 6; ctx.stroke();
+    ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(148, 162);
+    ctx.quadraticCurveTo(126, 140, 108, 112);
+    ctx.stroke();
+    ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  function drawPot(ctx) {
+    ctx.fillStyle = grad(ctx, 150, 214, 150, 258, [
+      [0.00, "#8a3a2c"], [0.50, "#5f2a22"], [1.00, "#3c1c17"]
+    ]);
+    ctx.beginPath();
+    ctx.moveTo(104, 214);
+    ctx.lineTo(196, 214);
+    ctx.lineTo(188, 256);
+    ctx.lineTo(112, 256);
+    ctx.closePath();
+    ctx.fill();
+
+    var top = grad(ctx, 110, 208, 190, 208, [
+      [0.00, "#9c4334"], [0.50, "#82362b"], [1.00, "#6f2d26"]
+    ]);
+    ctx.fillStyle = top;
+    ctx.fillRect(104, 207, 92, 7);
+    ctx.fillStyle = "#9c4334"; ctx.fillRect(104, 206, 92, 2);
+    ctx.fillStyle = "#6f2d26"; ctx.fillRect(104, 213, 92, 1);
+
+    ctx.strokeStyle = "rgba(20,10,8,0.45)";
+    ctx.lineWidth = 1;
+    var xx;
+    for (xx = 110; xx < 196; xx += 8) { ctx.beginPath(); ctx.moveTo(xx, 216); ctx.lineTo(xx - 3, 254); ctx.stroke(); }
+
+    ctx.fillStyle = "rgba(255,190,160,0.16)";
+    ctx.fillRect(108, 208, 3, 47);
+
+    ctx.fillStyle = "#2b120f";
+    ctx.fillRect(112, 214, 76, 5);
+    ctx.fillStyle = grad(ctx, 150, 214, 150, 219, [
+      [0.00, "#5f4a24"], [1.00, "#836d3a"]
+    ]);
+    ctx.fillRect(112, 214, 76, 4);
+    ctx.fillStyle = "#9c8447"; ctx.fillRect(112, 214, 76, 1);
+  }
+
+  function drawPad(ctx, cx, cy, rx, ry) {
+    var base = grad(ctx, cx, cy - ry, cx, cy + ry, [
+      [0.00, "#6fa04d"], [0.55, "#4f8038"], [1.00, "#345c26"]
+    ]);
+    ctx.fillStyle = base;
+    ctx.beginPath();
+    ctx.moveTo(cx - rx, cy);
+    ctx.bezierCurveTo(cx - rx, cy - ry * 1.6, cx - rx * 0.2, cy - ry * 1.55, cx, cy - ry * 1.5);
+    ctx.bezierCurveTo(cx + rx * 0.2, cy - ry * 1.55, cx + rx, cy - ry * 1.6, cx + rx, cy);
+    ctx.bezierCurveTo(cx + rx, cy + ry * 0.65, cx + rx * 0.3, cy + ry * 0.92, cx, cy + ry);
+    ctx.bezierCurveTo(cx - rx * 0.3, cy + ry * 0.92, cx - rx, cy + ry * 0.65, cx - rx, cy);
+    ctx.closePath();
+    ctx.fill();
+
+    var hi = grad(ctx, cx, cy - ry, cx, cy - ry * 0.2, [
+      [0.00, "#a3d47f"], [1.00, "rgba(127,184,90,0)"]
+    ));
+    ctx.fillStyle = hi;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - ry * 0.55, rx * 0.86, ry * 0.62, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(40,72,32,0.55)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + ry * 0.62, rx * 0.9, ry * 0.5, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(214,242,182,0.7)";
+    var h1 = [[cx - rx * 0.5, cy - ry * 0.6, 3], [cx - rx * 0.15, cy - ry * 0.85, 2],
+             [cx + rx * 0.25, cy - ry * 0.7, 2], [cx + rx * 0.6, cy - ry * 0.5, 3]];
+    for (var i = 0; i < h1.length; i++) {
+      ctx.fillRect(h1[i][0], h1[i][1], h1[i][2], h1[i][2]);
+    }
+  }
+
+  function buildFoliage() {
+    var ctx = foliageCtx;
+    ctx.clearRect(0, 0, W, H);
+    for (var i = 0; i < padDefs.length; i++) {
+      var p = padDefs[i];
+      drawPad(ctx, p.bx, p.by, p.rx, p.ry);
+    }
+  }
+
+  function buildTree() {
+    var ctx = treeCtx;
+    ctx.clearRect(0, 0, W, H);
+    drawTrunk(ctx);
+    drawPot(ctx);
+  }
+
+  function initLeaves() {
+    for (var i = 0; i < 18; i++) {
+      leaves.push({
+        x: rng() * W, y: rng() * H,
+        vx: 0.35 + rng() * 0.9,
+        vy: 0.06 + rng() * 0.22,
+        size: 1 + (rng() < 0.6 ? 1 : 0),
+        col: leafColors[(rng() * leafColors.length) | 0],
+        phase: rng() * TAU, freq: 1.4 + rng() * 2.0, amp: 1.2 + rng() * 2.6
+      });
+    }
+  }
+
+  function initStreaks() {
+    for (var i = 0; i < 10; i++) {
+      streaks.push({
+        y: 48 + Math.random() * (H - 96),
+        len: 18 + Math.random() * 30,
+        speed: 28 + Math.random() * 36,
+        alpha: 0.05 + Math.random() * 0.11
+      });
+    }
+  }
+
+  function drawWind(t, dt) {
+    var ctx = sctx;
+    for (var s = 0; s < streaks.length; s++) {
+      var st = streaks[s];
+      st.x = (st.x + st.speed * dt) % (W + 60);
+      if (st.x > W + 30) st.x = -st.len;
+      var fade = Math.min(1, st.x / 34) * Math.min(1, (W + 60 - st.x) / 34);
+      ctx.globalAlpha = st.alpha * fade;
+      ctx.fillStyle = "#cfe0ff";
+      ctx.fillRect(Math.floor(st.x), Math.floor(st.y), Math.round(st.len), 1);
+      ctx.globalAlpha = st.alpha * 0.5 * fade;
+      ctx.fillRect(Math.floor(st.x + 3), Math.floor(st.y - 1), Math.round(st.len * 0.6), 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawLeaves() {
+    var ctx = sctx;
+    for (var i = 0; i < leaves.length; i++) {
+      var l = leaves[i];
+      ctx.fillStyle = l.col;
+      ctx.fillRect(Math.floor(l.x), Math.floor(l.y), l.size, l.size);
+      ctx.fillRect(Math.floor(l.x + 1), Math.floor(l.y), l.size, 1);
+    }
+  }
+
+  function updateLeaves(dt) {
+    for (var i = 0; i < leaves.length; i++) {
+      var l = leaves[i];
+      l.x += l.vx * dt;
+      l.y += (l.vy + Math.sin(performance.now() * 0.001 + l.phase) * 0.004) * dt * 60;
+      if (l.x > W + 3) { l.x = -3; l.y = rng() * H; }
+      if (l.y > H + 3) { l.y = -3; }
+      else if (l.y < -3) { l.y = H + 3; }
+    }
+  }
+
+  function drawSwayingFoliage(t) {
+    for (var i = 0; i < padDefs.length; i++) {
+      var p = padDefs[i];
+      var dx = Math.sin(t * 0.001 * p.freq + p.phase) * p.amp + Math.sin(t * 0.0007) * 1.2;
+      var dy = Math.cos(t * 0.0012 * p.freq) * p.sway * 0.35;
+      sctx.drawImage(foliageC, Math.round(p.bx + dx), Math.round(p.by + dy));
+    }
+  }
+
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    updateLeaves(dt);
+
+    sctx.putImageData(sky, 0, 0);
+    drawWind(now, dt);
+    sctx.drawImage(potC, 0, 0);
+    sctx.drawImage(treeC, 0, 0);
+    drawSwayingFoliage(now);
+    drawLeaves();
+
+    requestAnimationFrame(frame);
+  }
+
+  var sky;
+  function init() {
+    sctx.putImageData = sctx.putImageData;
+    drawSky();
+    sky = sctx.getImageData(0, 0, W, H);
+    buildTree();
+    buildFoliage();
+    initLeaves();
+    initStreaks();
+    requestAnimationFrame(frame);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

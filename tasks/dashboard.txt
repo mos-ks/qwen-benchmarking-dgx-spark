@@ -1,0 +1,5 @@
+Build a single web page: a personal finance dashboard. Front end only: index.html (CSS and JS may be inline or in separate files), no backend, no build step, no external libraries, fonts or images. It must work by opening index.html in a browser. Use realistic hardcoded sample data for one person over the last 6 months.
+
+It must include: a header with the month selector, four KPI cards (balance, income, spending, savings rate) each with the change vs last month, a spending-by-category chart, an income vs spending chart over the 6 months, a list of recent transactions with category icons drawn in CSS or inline SVG, and a budget progress section with bars per category that turn amber near the limit and red over it. Charts are drawn by you with SVG or canvas, with labels and a hover tooltip.
+
+Make it look like a polished modern product: consistent spacing, type scale and color tokens, light and dark mode following the system setting, and a layout that works on desktop and on a phone-sized screen.

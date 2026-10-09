@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bonsai</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0b1018; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(function () {
+  "use strict";
+
+  const W = 160, H = 120;
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  canvas.width = W;
+  canvas.height = H;
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const rand = mulberry32(42);
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function px(x, y, c) {
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    ctx.fillStyle = c;
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  function disc(cx, cy, r, c) {
+    for (let y = -r; y <= r; y++)
+      for (let x = -r; x <= r; x++)
+        if (x * x + y * y <= r * r + r * 0.8) px(cx + x, cy + y, c);
+  }
+
+  function ellipse(cx, cy, rx, ry, c) {
+    for (let y = -ry; y <= ry; y++)
+      for (let x = -rx; x <= rx; x++)
+        if ((x * x) / (rx * rx) + (y * y) / (ry * ry) <= 1.0) px(cx + x, cy + y, c);
+  }
+
+  function taper(x0, y0, cx, cy, x1, y1, w0, w1, c) {
+    const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0)) * 2;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, u = 1 - t;
+      const x = u * u * x0 + 2 * u * t * cx + t * t * x1;
+      const y = u * u * y0 + 2 * u * t * cy + t * t * y1;
+      const r = Math.max(0, Math.round((w0 + (w1 - w0) * t) / 2));
+      disc(x, y, r, c);
+    }
+  }
+
+  // --- Sky: smooth gradient, no ground ---
+  const skyStops = [
+    [0.0, [13, 26, 47]],
+    [0.35, [19, 40, 68]],
+    [0.6, [30, 64, 104]],
+    [0.8, [43, 90, 140]],
+    [1.0, [74, 136, 184]],
+  ];
+  function skyColor(t) {
+    for (let i = 1; i < skyStops.length; i++) {
+      if (t <= skyStops[i][0]) {
+        const a = skyStops[i - 1], b = skyStops[i];
+        const f = (t - a[0]) / (b[0] - a[0]);
+        return `rgb(${Math.round(a[1][0] + (b[1][0] - a[1][0]) * f)},${Math.round(a[1][1] + (b[1][1] - a[1][1]) * f)},${Math.round(a[1][2] + (b[1][2] - a[1][2]) * f)})`;
+      }
+    }
+    return `rgb(${skyStops[skyStops.length - 1][1][0]},${skyStops[skyStops.length - 1][1][1]},${skyStops[skyStops.length - 1][1][2]})`;
+  }
+
+  function drawSky() {
+    for (let y = 0; y < H; y++) {
+      const c = skyColor(y / H);
+      for (let x = 0; x < W; x++) px(x, y, c);
+    }
+  }
+
+  // --- Pot: distinct, shallow ceramic container ---
+  function drawPot() {
+    const x0 = 64, x1 = 96, y0 = 92, y1 = 97;
+    // contact shadow
+    for (let x = x0 - 2; x <= x1 + 2; x++) {
+      px(x, y1 + 1, "#0a0a14");
+    }
+    // dark outline
+    for (let x = x0 - 1; x <= x1 + 1; x++) {
+      px(x, y0 - 1, "#1a0e08");
+      px(x, y1 + 1, "#1a0e08");
+    }
+    for (let y = y0 - 1; y <= y1 + 1; y++) {
+      px(x0 - 1, y, "#1a0e08");
+      px(x1 + 1, y, "#1a0e08");
+    }
+    // body: shallow, with distinct sides
+    for (let y = y0; y <= y1; y++) {
+      const t = (y - y0) / (y1 - y0);
+      const left = Math.round(x0 - t * 1);
+      const right = Math.round(x1 + t * 1);
+      for (let x = left; x <= right; x++) {
+        let c = "#5a3418";
+        if (x < (left + right) / 2 - 3) c = "#4a2810";
+        if (x > (left + right) / 2 + 2) c = "#6a4428";
+        if (y === y0) c = "#7a5030";
+        if (y === y1) c = "#3a2010";
+        px(x, y, c);
+      }
+    }
+    // rim: lighter, distinct top edge
+    for (let x = x0 - 2; x <= x1 + 2; x++) {
+      px(x, y0 - 1, "#6a4424");
+      px(x, y0, "#8a6038");
+    }
+    // soil
+    for (let x = x0; x <= x1; x++) {
+      let c = "#2a1a10";
+      if (rand() < 0.15) c = "#3a2818";
+      px(x, y0 - 1, c);
+    }
+  }
+
+  // --- Trunk: thick, curved, with strong sway ---
+  function drawTrunk(time) {
+    const sway = Math.sin(time * 1.0) * 0.6;
+    // shadow pass
+    taper(80, 90, 75 + sway * 0.4, 74, 80 + sway * 0.8, 58, 7.0, 2.5, "#1a0e08");
+    // main pass
+    taper(80, 90, 75 + sway * 0.4, 74, 80 + sway * 0.8, 58, 6.0, 2.0, "#6e4430");
+    // highlight pass
+    taper(79, 90, 74 + sway * 0.4, 74, 79 + sway * 0.8, 58, 4.0, 1.5, "#9a6646");
+    // root flare
+    taper(77, 90, 72, 88, 66, 90, 5.0, 1.0, "#4a2c1f");
+    taper(83, 90, 88, 88, 94, 90, 5.0, 1.0, "#4a2c1f");
+    // bark texture
+    for (let i = 0; i < 12; i++) {
+      const bx = 75 + Math.round(rand() * 10);
+      const by = 60 + Math.round(rand() * 28);
+      px(bx, by, "#2b1a14");
+    }
+  }
+
+  // --- Branches with sway ---
+  function drawBranches(time) {
+    const sway = Math.sin(time * 1.2) * 0.4;
+    // left
+    taper(76 + sway * 0.3, 72, 71 + sway * 0.5, 67, 63 + sway, 62, 3.0, 0.8, "#5a3a24");
+    taper(76 + sway * 0.3, 72, 71 + sway * 0.5, 67, 63 + sway, 62, 1.5, 0.5, "#8a5a38");
+    // right
+    taper(81 + sway * 0.3, 68, 87 + sway * 0.5, 63, 94 + sway, 58, 3.0, 0.8, "#5a3a24");
+    taper(81 + sway * 0.3, 68, 87 + sway * 0.5, 63, 94 + sway, 58, 1.5, 0.5, "#8a5a38");
+    // upper right
+    taper(80 + sway * 0.4, 62, 85 + sway * 0.6, 55, 91 + sway, 49, 2.0, 0.5, "#5a3a24");
+    // lower left
+    taper(76 + sway * 0.2, 78, 70 + sway * 0.4, 75, 64 + sway, 72, 2.0, 0.5, "#5a3a24");
+  }
+
+  // --- Foliage: clearly separated, distinct pads ---
+  const pads = [
+    { cx: 62, cy: 63, rx: 7, ry: 4, phase: 0.0 },
+    { cx: 94, cy: 58, rx: 7, ry: 4, phase: 1.5 },
+    { cx: 78, cy: 52, rx: 8, ry: 5, phase: 2.5 },
+    { cx: 60, cy: 74, rx: 5, ry: 3, phase: 0.8 },
+    { cx: 92, cy: 72, rx: 5, ry: 3, phase: 2.0 },
+    { cx: 79, cy: 44, rx: 7, ry: 4, phase: 0.3 },
+  ];
+
+  function drawPad(pad, time) {
+    const heightFactor = (90 - pad.cy) / 45;
+    const sway = Math.round(Math.sin(time * 1.5 + pad.phase) * 1.5 * heightFactor);
+    const sx = pad.cx + sway;
+    // shadow pass
+    for (let dy = -pad.ry + 1; dy <= pad.ry; dy++)
+      for (let dx = -rx + 1; dx <= pad.rx; dx++) {
+        if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1.0)
+          px(sx + dx + 1, pad.cy + dy + 1, "#1a3020");
+      }
+    // mid pass
+    for (let dy = -pad.ry; dy <= pad.ry; dy++)
+      for (let dx = -pad.rx; dx <= pad.rx; dx++) {
+        if ((dx * dx) / (pad.rx * pad.rx) + (dy * dy) / (pad.ry * pad.ry) <= 1.0)
+          px(sx + dx, pad.cy + dy, "#2d5c38");
+      }
+    // light pass
+    for (let dy = -pad.ry; dy <= 0; dy++)
+      for (let dx = -pad.rx; dx <= 0; dx++) {
+        if ((dx * dx) / (pad.rx * pad.rx) + (dy * dy) / (pad.ry * pad.ry) <= 1.0 && (dx + dy) % 2 === 0)
+          px(sx + dx - 1, pad.cy + dy - 1, "#4a8a4a");
+      }
+    // bright highlight
+    for (let dy = -pad.ry + 1; dy <= -1; dy++)
+      for (let dx = -pad.rx + 1; dx <= -1; dx++) {
+        if ((dx * dx) / (pad.rx * pad.rx) + (dy * dy) / (pad.ry * pad.ry) <= 0.5)
+          px(sx + dx - 1, pad.cy + dy - 1, "#78b84a");
+      }
+    // texture
+    for (let i = 0; i < 10; i++) {
+      const sx2 = sx + Math.round(rand() * (pad.rx * 2) - pad.rx);
+      const sy2 = pad.cy + Math.round(rand() * (pad.ry * 2) - pad.ry);
+      if ((sx2 - sx) * (sx2 - sx) / (pad.rx * pad.rx) + (sy2 - pad.cy) * (sy2 - pad.cy) / (pad.ry * pad.ry) <= 1.0)
+        px(sx2, sy2, rand() < 0.5 ? "#3a6a3e" : "#5aaa50");
+    }
+  }
+
+  function drawFoliage(time) {
+    for (const pad of pads) drawPad(pad, time);
+  }
+
+  // --- Particles: subtle, consistent ---
+  const parts = [];
+  const leafColors = ["#4a8a3c", "#78b84a", "#b8e070", "#2d5c38"];
+
+  function initParts() {
+    for (let i = 0; i < 20; i++) {
+      parts.push({
+        x: Math.round(rand() * W),
+        y: Math.round(rand() * H),
+        vx: 0.5 + rand() * 1.5,
+        vy: -0.1 + rand() * 0.5,
+        life: 200 + rand() * 400,
+        maxLife: 600,
+        size: 1 + Math.round(rand() * 2),
+        color: leafColors[Math.floor(rand() * leafColors.length)],
+        kind: rand() < 0.4 ? "streak" : "leaf",
+        len: 3 + Math.round(rand() * 3),
+      });
+    }
+  }
+  initParts();
+
+  function updateParts(dt) {
+    for (const p of parts) {
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      p.life -= dt * 60;
+      if (p.x > W + 4 || p.x < -4 || p.y > H + 4 || p.life <= 0) {
+        p.x = -2 - rand() * 8;
+        p.y = Math.round(rand() * H);
+        p.life = 200 + rand() * 400;
+        p.vx = 0.5 + rand() * 1.5;
+        p.vy = -0.1 + rand() * 0.5;
+      }
+    }
+  }
+
+  function drawParts() {
+    for (const p of parts) {
+      const a = Math.min(1, p.life / 80);
+      ctx.globalAlpha = a;
+      if (p.kind === "leaf") {
+        px(p.x, p.y, p.color);
+        if (p.size > 1) {
+          px(p.x + 1, p.y, p.color);
+          px(p.x, p.y - 1, p.color);
+        }
+        if (p.size > 2) {
+          px(p.x + 1, p.y - 1, p.color);
+          px(p.x + 2, p.y, "#2a4a20");
+        }
+      } else {
+        for (let i = 0; i < p.len; i++) {
+          const t = i / p.len;
+          let c;
+          if (t < 0.33) c = "#c8e8f8";
+          else if (t < 0.66) c = "#8ac8e0";
+          else c = "#5aa0c0";
+          px(p.x + i, p.y, c);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // --- Main loop ---
+  let time = 0;
+  let lastT = 0;
+
+  function frame(now) {
+    const t = now / 1000;
+    const dt = lastT === 0 ? 1 / 60 : (t - lastT);
+    lastT = t;
+    time = reducedMotion ? 0 : t;
+
+    drawSky();
+    drawPot();
+    drawTrunk(time);
+    drawBranches(time);
+    drawFoliage(time);
+    if (!reducedMotion) updateParts(dt);
+    drawParts();
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // --- Resize ---
+  function resize() {
+    const scale = Math.max(1, Math.floor(Math.min(
+      (window.innerWidth - 20) / W,
+      (window.innerHeight - 20) / H
+    )));
+    canvas.style.width = (W * scale) + "px";
+    canvas.style.height = (H * scale) + "px";
+  }
+  window.addEventListener("resize", resize);
+  resize();
+})();
+</script>
+</body>
+</html>

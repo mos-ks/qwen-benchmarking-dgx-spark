@@ -1,0 +1,101 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["playwright==1.62.0"]
+# ///
+"""pick: choose the best of several builds of the same page.
+
+Screenshots each candidate's index.html (two desktop frames and a phone frame), shows all of them
+to the vision model behind the Spark's endpoint in one request, labelled A, B, C..., and prints
+the winner's directory on the last line. Candidates whose page throws errors are shown with their
+errors, so the model can weigh a broken page correctly.
+
+    pick --goal "a pixel-art bonsai with drifting leaves" build-1/ build-2/ build-3/
+"""
+
+import argparse
+import base64
+import json
+import os
+import re
+import sys
+import tempfile
+import urllib.request
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+ENDPOINT = os.environ.get("LOOK_ENDPOINT", "http://127.0.0.1:8000/v1")
+MODEL = os.environ.get("LOOK_MODEL", "qwen3-coder")
+
+
+def shoot(index: Path, out: Path) -> tuple[list[Path], list[str]]:
+    shots: list[Path] = []
+    errors: list[str] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        for w, h, tag, n in ((1280, 800, "desktop", 2), (390, 844, "phone", 1)):
+            page = browser.new_page(viewport={"width": w, "height": h})
+            page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+            page.on("console", lambda m: errors.append(f"console.error: {m.text}") if m.type == "error" else None)
+            page.goto(index.as_uri())
+            page.wait_for_timeout(1200)
+            for i in range(n):
+                f = out / f"{tag}-{i}.png"
+                page.screenshot(path=str(f))
+                shots.append(f)
+                if i < n - 1:
+                    page.wait_for_timeout(1500)
+            page.close()
+        browser.close()
+    return shots, errors
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--goal", required=True)
+    ap.add_argument("candidates", nargs="+", help="directories that each contain an index.html")
+    a = ap.parse_args()
+    dirs = [Path(c).resolve() for c in a.candidates]
+    labels = [chr(ord("A") + i) for i in range(len(dirs))]
+    content: list[dict] = [{
+        "type": "text",
+        "text": (
+            f"Several developers built the same web page. Goal: {a.goal}\n"
+            "For each candidate you get two desktop frames 1.5 s apart (to judge animation) and one phone frame. "
+            "Pick the candidate a demanding client would ship: first, does it clearly read as the goal at a glance; "
+            "then craft, animation, layout. A page with errors or a blank screen loses to any working page.\n"
+            "Reply with one line per candidate, `X: <score 1-10> <one-sentence reason>`, then a final line `WINNER: X`."
+        ),
+    }]
+    for label, d in zip(labels, dirs, strict=True):
+        index = d / "index.html"
+        if not index.exists():
+            content.append({"type": "text", "text": f"Candidate {label}: no index.html, cannot be shown."})
+            continue
+        shots, errors = shoot(index, Path(tempfile.mkdtemp(prefix=f"pick-{label}-")))
+        content.append({"type": "text", "text": f"Candidate {label} (errors: {'; '.join(errors[:5]) or 'none'}):"})
+        for f in shots:
+            b64 = base64.b64encode(f.read_bytes()).decode()
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}})
+    body = {
+        "model": MODEL,
+        "messages": [{"role": "user", "content": content}],
+        "max_tokens": 600,
+        "temperature": 0,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    req = urllib.request.Request(f"{ENDPOINT}/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        reply = json.load(r)["choices"][0]["message"]["content"].strip()
+    print(reply)
+    m = re.search(r"WINNER:\s*([A-Z])", reply)
+    if not m or m.group(1) not in labels:
+        print("pick: no valid WINNER line", file=sys.stderr)
+        return 3
+    print(dirs[labels.index(m.group(1))])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

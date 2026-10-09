@@ -1,0 +1,5 @@
+Build a single web page that shows an animated pixel-art lighthouse at night. Front end only: index.html (CSS and JS may be inline or in separate files), no backend, no build step, no external libraries, fonts or images. It must work by opening index.html in a browser.
+
+The scene must clearly read as a lighthouse on a rocky cliff by the sea, drawn as crisp pixel art (for example a small canvas scaled up with image-rendering: pixelated): a striped tower with a lantern room and railing, a small keeper's house, jagged rocks, the sea, and a moon partly behind clouds. Use a limited palette with shading; no blurry shapes or flat single-color blobs.
+
+Animation: the lantern's light beam sweeps slowly across the sky, rain falls at a slight angle, waves roll and break against the rocks with foam, and the clouds drift. Make the whole scene look polished, centered, and good on desktop and on a phone-sized screen.

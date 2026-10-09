@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Bonsai — Wind</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d0d1a; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
+    display: block;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+/* ════════════════════════════════════════════════════════
+   1.  PRNG & helpers
+   ════════════════════════════════════════════════════════ */
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const R = mulberry32(7777);
+const ri = (a, b) => Math.floor(R() * (b - a + 1)) + a;
+const rcf = () => R();
+
+/* logical canvas */
+const W = 192, H = 160;
+const cvs = document.getElementById('c');
+const cx = cvs.getContext('2d');
+cx.imageSmoothingEnabled = false;
+
+/* pixel draw — every pixel is 1×1 on the low-res canvas */
+const P = (x, y, c) => { cx.fillStyle = c; cx.fillRect(x | 0, y | 0, 1, 1); };
+const R2 = (x, y, w, h, c) => { cx.fillStyle = c; cx.fillRect(x | 0, y | 0, w | 0, h | 0); };
+
+/* solid circle (disc) — used for foliage pads & round shapes */
+function circle(xc, yc, r, col) {
+  const r2 = r * r + r >> 1;
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++)
+    if (x * x + y * y <= r2) P(xc + x, yc + y, col);
+}
+
+/* tapered quadratic-curve stroke — trunks & branches */
+function tap(x0, y0, cx0, cy0, x1, y1, w0, w1, col) {
+  const n = Math.max(Math.hypot(x1 - x0, y1 - y0) * 2 | 0, 3);
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    const px = u * u * x0 + 2 * u * t * cx0 + t * t * x1;
+    const py = u * u * y0 + 2 * u * t * cy0 + t * t * y1;
+    const w = Math.max(1, (w0 + (w1 - w0) * t) / 2 | 0);
+    circle(px, py, w, col);
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   2.  Palette
+   ════════════════════════════════════════════════════════ */
+const C = {
+  bg:      '#141428',
+  skyGrad: '#1c1c38',
+  moon:    '#d8d4c8',
+  moonGlow:'rgba(200,195,175,0.06)',
+  table:   '#1a1410',
+  tableH:  '#261e18',
+  pot:     '#6b4430',
+  potDk:   '#4a2e1e',
+  potLs:   '#8b6048',
+  potRim:  '#7d523a',
+  soil:    '#241a12',
+  soilH:   '#382820',
+  trunk:   '#4a3020',
+  trunkL:  '#6a4a34',
+  trunkDk: '#2a1a10',
+  branch:  '#3e2818',
+  bL:      '#5a3c28',
+  /* foliage 5-shade ramp (dark→light, top-left light) */
+  fDk:     '#152810',
+  fMid:    '#285020',
+  fLit:    '#3c7a30',
+  fHi:     '#58a840',
+  fHil:    '#78cc54',
+  fShd:    '#0e1e0a',
+  leaf:    '#489030',
+  leafL:   '#60b040',
+  leafA:   '#78c050',
+  wind1:   'rgba(140,200,100,0.18)',
+  wind2:   'rgba(170,220,130,0.12)',
+};
+
+/* ════════════════════════════════════════════════════════
+   3.  Bonsai geometry (hand-tuned)
+   ════════════════════════════════════════════════════════ */
+
+/* Foliage pads: {cx,cy,r,phase}  — positions around the trunk */
+const PADS = [
+  {cx:96,  cy:20, r:16, p:0},
+  {cx:82,  cy:32, r:13, p:1.1},
+  {cx:112, cy:28, r:14, p:2.3},
+  {cx:90,  cy:14, r:11, p:0.6},
+  {cx:104, cy:16, r:10, p:1.7},
+  {cx:72,  cy:44, r:11, p:3.2},
+  {cx:122, cy:40, r:10, p:2.0},
+  {cx:86,  cy:48, r:8,  p:0.9},
+  {cx:108, cy:46, r:9,  p:2.6},
+  {cx:96,  cy:8,  r:8,  p:0.3},
+  {cx:64,  cy:34, r:8,  p:3.8},
+  {cx:128, cy:32, r:7,  p:1.4},
+  {cx:76,  cy:16, r:7,  p:2.9},
+  {cx:116, cy:14, r:7,  p:0.5},
+  {cx:56,  cy:42, r:6,  p:3.5},
+  {cx:136, cy:42, r:6,  p:1.9},
+];
+
+/* Branch definitions: [startX,startY,ctrlX,ctrlY,endX,endY,startW,endW] */
+const BRANCHES = [
+  [93, 60, 78, 44, 70, 36,  3, 0.8],
+  [95, 54, 112,40, 120,32,  2.5,0.7],
+  [92, 46, 76, 30, 80, 20,  2,   0.6],
+  [96, 48, 110,32, 114,22,  2,   0.5],
+  [94, 70, 62, 54, 54, 46,  2.5, 0.7],
+  [96, 42, 108,26, 122,24,  1.5, 0.5],
+  [90, 34, 66, 20, 58, 16,  1.2, 0.4],
+  [98, 36, 120,22, 130,18,  1,   0.35],
+];
+
+/* ════════════════════════════════════════════════════════
+   4.  Foliage pad renderer (3-pass volume)
+   ════════════════════════════════════════════════════════ */
+function drawPad(xc, cy, r) {
+  // Pass 1 — dark outer rim / shadow (offset +1,+1 toward bottom-right)
+  for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++)
+    if (x * x + y * y <= r * r + r >> 1) P(xc + 1 + x, cy + 1 + y, C.fDk);
+  // Pass 2 — mid body
+  const m = r - 1; if (m > 0) for (let y = -m; y <= m; y++) for (let x = -m; x <= m; x++)
+    if (x * x + y * y <= m * m + m >> 1) P(xc + x, cy + y, C.fMid);
+  // Pass 3 — light fill (offset -1,-0)
+  const l = r - 2; if (l > 1) for (let y = -l; y <= l; y++) for (let x = -l - 1; x <= l; x++)
+    if (x * x + y * y <= l * l + l >> 1) P(xc + x, cy - 0 + y, C.fLit);
+  // Pass 4 — highlights (offset -1,-2 toward top-left light source)
+  const h = r - 3; if (h > 1) for (let y = -h; y <= h; y++) for (let x = -h - 1; x <= h - 1; x++)
+    if (x * x + y * y <= h * h + h >> 1) P(xc + x, cy - 2 + y, C.fHi);
+  const k = r - 4; if (k > 0) for (let y = -k; y <= k; y++) for (let x = -k - 1; x <= k - 1; x++)
+    if (x * x + y * y <= k * k + k >> 1) P(xc + x, cy - 3 + y, C.fHil);
+  // Texture specks (random, seeded once at init — not per frame)
+  for (let i = 0; i < r; i++) {
+    const tx = xc + ri(-r, r), ty = cy + ri(-r, r);
+    if (tx * tx + ty * ty < r * r >> 1) P(xc + tx, cy + ty, rcf() > .5 ? C.fHi : C.fShd);
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   5.  Scene drawers
+   ════════════════════════════════════════════════════════ */
+
+function background(t) {
+  R2(0, 0, W, H, C.bg);
+  /* subtle radial glow (moonlight) */
+  for (let y = -30; y <= 30; y++) for (let x = -30; x <= 30; x++) {
+    const d = Math.hypot(x, y);
+    if (d <= 30) {
+      const a = (1 - d / 30) * .08;
+      cx.globalAlpha = a;
+      P(100 + x, 40 + y, C.moon);
+    }
+  }
+  cx.globalAlpha = 1;
+  /* moon */
+  circle(100, 38, 5, C.moon);
+  circle(99, 37, 4, '#e8e4d8');
+  circle(100, 38, 2, '#e0dcc8');
+  /* tiny stars */
+  const starSeed = mulberry32(42);
+  for (let i = 0; i < 20; i++) {
+    const sx = ri(5, W - 5), sy = ri(3, 55);
+    const fl = Math.sin(t * 1.5 + i * 2.3) * .25 + .75;
+    cx.globalAlpha = fl * .55;
+    P(sx, sy, '#cccce0');
+  }
+  cx.globalAlpha = 1;
+  /* table surface */
+  R2(0, 126, W, 34, C.table);
+  R2(0, 126, W, 1, C.tableH);
+  /* wood grain */
+  const gSeed = mulberry32(999);
+  for (let i = 0; i < 12; i++) {
+    const gy = 128 + ri(2, 28), gx = ri(2, 50), gw = ri(10, 30);
+    R2(gx, gy, gw, 1, '#1e1812');
+  }
+  /* contact shadow under pot */
+  for (let x = 68; x <= 124; x++) {
+    const d = Math.min(Math.abs(x - 96), 28);
+    cx.globalAlpha = .25 * (1 - d / 28);
+    R2(x, 125, 1, 2, '#0a0806');
+  }
+  cx.globalAlpha = 1;
+}
+
+function drawPot() {
+  /* pot body — trapezoid 72→80 rim, 82→106 base 26→16 wide */
+  for (let y = 82; y <= 106; y++) {
+    const p = (y - 82) / 24;
+    const w = 26 - p * 10 | 0;
+    const x = 96 - w >> 1;
+    R2(x, y, w, 1, C.pot);
+  }
+  /* left highlight edge */
+  for (let y = 82; y <= 106; y++) {
+    const p = (y - 82) / 24, w = 26 - p * 10 | 0, x = 96 - w >> 1;
+    R2(x, y, 2, 1, C.potLs);
+  }
+  /* right shadow edge */
+  for (let y = 82; y <= 106; y++) {
+    const p = (y - 82) / 24, w = 26 - p * 10 | 0, x = 96 + w >> 1 - 2;
+    R2(x, y, 2, 1, C.potDk);
+  }
+  /* pot rim */
+  R2(68, 80, 56, 3, C.potRim);
+  R2(70, 79, 52, 1, C.potLs);         /* rim highlight */
+  R2(68, 83, 56, 1, C.potDk);         /* rim underside shadow */
+  R2(74, 80, 44, 1, '#2e2018');       /* inner shadow */
+  /* soil */
+  R2(74, 81, 44, 2, C.soil);
+  R2(76, 81, 40, 1, C.soilH);
+  /* soil texture */
+  const sSeed = mulberry32(555);
+  for (let i = 0; i < 14; i++) P(76 + ri(0, 40), 81, sSeed() > .5 ? '#4a3828' : '#1a1008');
+  /* root flare */
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 5) * Math.PI * 2 + .4;
+    const rx = 96 + Math.cos(a) * (9 + i * 2) | 0, ry = 106 + Math.sin(a) * 2 | 0;
+    P(rx, ry, C.trunk);
+  }
+  /* decorative stripe */
+  R2(78, 94, 36, 1, '#5a4030');
+  R2(80, 95, 32, 1, '#5a4030');
+  /* bottom */
+  R2(86, 107, 20, 1, C.potDk);
+}
+
+function drawTrunk(t, sway) {
+  const ox = sway * .35 | 0;
+  /* shadow pass */
+  tap(91 + ox, 107, 87, 73, 92 + ox, 52, 6, 3, C.trunkDk);
+  /* main trunk */
+  tap(93 + ox, 107, 89, 73, 94 + ox, 52, 5, 2.5, C.trunk);
+  /* highlight */
+  tap(92 + ox, 107, 88, 73, 93 + ox, 52, 2, 1, C.trunkL);
+  /* bark streaks (static, seeded) */
+  const bSeed = mulberry32(3333);
+  for (let i = 0; i < 20; i++) {
+    const ty = 56 + ri(0, 48);
+    const prog = (107 - ty) / 55;
+    const tx = 92 + ox - 1 + (prog * 2 | 0) + ri(-1, 1);
+    P(tx, ty, bSeed() > .5 ? '#2a1a10' : '#5a3e2a');
+  }
+  /* subtle groove */
+  tap(94 + ox, 102, 91, 72, 95 + ox, 56, .8, .3, '#1a1008');
+}
+
+function drawBranches(t, sway) {
+  const ox = sway * .55 | 0;
+  for (const [x0, y0, cx0, cy0, x1, y1, w0, w1] of BRANCHES) {
+    /* shadow */
+    tap(x0 + 1, y0 + 1, cx0 + 1, cy0 + 1, x1 + 1, y1 + 1, w0, w1, '#1a1008');
+    /* body */
+    tap(x0 + ox * .3, y0, cx0 + ox * .4, cy0, x1 + ox * .6, y1, w0, w1, C.branch);
+    /* highlight */
+    tap(x0 + ox * .3 - 1, y0 - 1, cx0 + ox * .4 - 1, cy0 - 1, x1 + ox * .6 - 1, y1 - 1, .8, .2, C.bL);
+  }
+}
+
+function drawFoliage(t) {
+  /* back→front by cy */
+  const sorted = [...PADS].sort((a, b) => b.cy - a.cy);
+  for (const pad of sorted) {
+    /* wind sway: higher pads move more */
+    const hF = (140 - pad.cy) / 140;
+    const wind = Math.sin(t * 1.6 + pad.p) * (1.8 + hF * 2.5);
+    const sway = Math.sin(t * 1.3 + pad.p * .7) * hF * 1.5;
+    const dx = (wind + sway) | 0;
+    const dy = (Math.sin(t * .9 + pad.p) * .6) | 0;
+    drawPad(pad.cx + dx, pad.cy + dy, pad.r);
+  }
+}
+
+/* ════════════════════════════════════════════════════════
+   6.  Particle system  (leaves + wind streaks)
+   ════════════════════════════════════════════════════════ */
+class PT {
+  constructor(init) { this.reset(init); }
+  reset(init) {
+    if (rcf() > .4) {
+      /* leaf */
+      this.x = rcf() > .5 ? -3 : W + 3;
+      this.y = ri(10, 100);
+      this.vx = this.x < 0 ? rcf() * 1.2 + .4 : -(rcf() * 1.2 + .4);
+      this.vy = rcf() * .25 - .1;
+      this.rot = rcf() * 6.28;
+      this.rs = (rcf() - .5) * 3;
+      this.sz = ri(1, 2);
+      this.alive = 1;
+      this.decay = rcf() * .003 + .002;
+      this.wa = rcf() * .6 + .25;
+      this.ws = rcf() * 2.2 + .8;
+      this.wp = rcf() * 6.28;
+      this.col = rcf() > .3 ? C.leaf : C.leafL;
+    } else {
+      /* wind streak */
+      this.x = rcf() > .5 ? -8 : W + 8;
+      this.y = ri(5, 110);
+      this.vx = this.x < 0 ? rcf() * 2.2 + .8 : -(rcf() * 2.2 + .8);
+      this.vy = (rcf() - .5) * .25;
+      this.alive = 1;
+      this.decay = rcf() * .01 + .006;
+      this.len = ri(3, 8);
+      this.wide = rcf() > .75;
+    }
+    if (init) { this.x = ri(-5, W + 5); this.y = ri(5, 100); this.alive = 1; }
+  }
+  update(dt) {
+    const gust = Math.sin(tGlobal * .8) * .6 + Math.sin(tGlobal * 2.3) * .25;
+    if (this.col !== undefined) { // leaf
+      this.wp += this.ws * dt;
+      this.x += (this.vx + gust + Math.sin(this.wp) * this.wa) * dt * 60;
+      this.y += this.vy * dt * 60 + Math.sin(this.wp * .65) * .18;
+      this.rot += this.rs * dt * 3;
+      this.alive -= this.decay * dt * 60;
+    } else { // streak
+      this.x += (this.vx + gust) * dt * 60;
+      this.y += this.vy * dt * 60;
+      this.alive -= this.decay * dt * 60;
+    }
+    if (this.alive <= 0 || this.x < -25 || this.x > W + 25 || this.y < -25 || this.y > H + 25)
+      this.reset(false);
+  }
+  draw() {
+    const a = Math.max(0, this.alive);
+    if (this.col !== undefined) { // leaf
+      cx.globalAlpha = a * .8;
+      const co = (Math.cos(this.rot) + .5) | 0, si = (Math.sin(this.rot) + .5) | 0;
+      for (let i = 0; i < this.sz; i++) P(this.x + i * co >> 1, this.y + i * si >> 1, this.col);
+      if (this.sz > 1) P(this.x + co >> 1, this.y + si >> 1, C.leafA);
+      cx.globalAlpha = 1;
+    } else {
+      cx.globalAlpha = a * .35;
+      const d = Math.sign(this.vx) || 1;
+      for (let i = 0; i < this.len; i++) {
+        const px = this.x + i * d, py = this.y | 0;
+        R2(px, py, 1, this.wide ? 2 : 1, C.wind2);
+        if (i < 2) R2(px, py, 1, 1, C.wind1);
+      }
+      cx.globalAlpha = 1;
+    }
+  }
+}
+
+let tGlobal = 0;
+const pts = Array.from({ length: 45 }, () => new PT(true));
+
+/* ════════════════════════════════════════════════════════
+   7.  Render loop
+   ════════════════════════════════════════════════════════ */
+let last = 0;
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, .05);
+  last = now;
+  tGlobal += dt;
+
+  /* bg */
+  background(tGlobal);
+
+  /* wind streaks behind */
+  for (const p of pts) { if (p.col === undefined) { p.update(dt); p.draw(); } }
+
+  /* pot → trunk → branches → foliage */
+  drawPot();
+  const sway = Math.sin(tGlobal * 1.3) * 2.8 + Math.sin(tGlobal * 2.7) * .7;
+  drawTrunk(tGlobal, sway);
+  drawBranches(tGlobal, sway);
+  drawFoliage(tGlobal);
+
+  /* floating leaves in front */
+  for (const p of pts) { if (p.col !== undefined) { p.update(dt); p.draw(); } }
+
+  /* vignette */
+  const vSeed = mulberry32(2024);
+  for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
+    if (Math.hypot(x - W / 2, y - H / 2) > 55) {
+      cx.globalAlpha = .12 + vSeed() * .08;
+      P(x, y, '#0a0a14');
+    }
+  }
+  cx.globalAlpha = 1;
+
+  requestAnimationFrame(frame);
+}
+
+/* ════════════════════════════════════════════════════════
+   8.  Resize
+   ════════════════════════════════════════════════════════ */
+function resize() {
+  const s = Math.max(1, Math.min(
+    (window.innerWidth - 8) / W | 0,
+    (window.innerHeight - 8) / H | 0,
+    10
+  ));
+  cvs.width = W * s; cvs.height = H * s;
+  cvs.style.width = (W * s) + 'px';
+  cvs.style.height = (H * s) + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

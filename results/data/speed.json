@@ -1,0 +1,30 @@
+[
+ {
+  "model": "Qwen3.6-35B-A3B",
+  "tok_s": 134.8,
+  "ttft_ms": 87,
+  "active_b": 3,
+  "vision": "yes"
+ },
+ {
+  "model": "Qwen3-Coder-Next",
+  "tok_s": 68.3,
+  "ttft_ms": 71,
+  "active_b": 3,
+  "vision": "no"
+ },
+ {
+  "model": "Qwen3.8-Flash-Next",
+  "tok_s": 56.3,
+  "ttft_ms": 229,
+  "active_b": 6,
+  "vision": "yes"
+ },
+ {
+  "model": "Qwen3.8-27B",
+  "tok_s": 20.2,
+  "ttft_ms": 318,
+  "active_b": 27,
+  "vision": "yes"
+ }
+]

@@ -1,0 +1,211 @@
+[
+ {
+  "run": "Bonsai \u00b7 Opus 5.5 \u00b7 Claude Code \u00b7 ref",
+  "brief": "Bonsai",
+  "model": "Opus 5.5",
+  "kit": "Claude Code",
+  "attempt": "ref",
+  "minutes": 14.0,
+  "score": 9.0,
+  "outcome": "done",
+  "note": "S-curved trunk, layered shaded pads, glazed pot on a stand, dusk sky, wind"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3-Coder-Next \u00b7 kit v1 \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3-Coder-Next",
+  "kit": "kit v1",
+  "attempt": "#1",
+  "minutes": 1.3,
+  "score": 2.4,
+  "outcome": "done",
+  "note": "dead twig with smooth green circles floating above"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3-Coder-Next \u00b7 kit v1 \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3-Coder-Next",
+  "kit": "kit v1",
+  "attempt": "#2",
+  "minutes": 1.1,
+  "score": 3.4,
+  "outcome": "done",
+  "note": "stub trunk with green blobs in a pot"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-27B \u00b7 kit v1 \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-27B",
+  "kit": "kit v1",
+  "attempt": "#1",
+  "minutes": 14.3,
+  "score": 0.0,
+  "outcome": "no output",
+  "note": "announced a plan and stopped; no files"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-27B \u00b7 kit v1 \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-27B",
+  "kit": "kit v1",
+  "attempt": "#2",
+  "minutes": 45.0,
+  "score": 0.0,
+  "outcome": "timeout",
+  "note": "page throws a syntax error"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-27B \u00b7 kit v2 \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-27B",
+  "kit": "kit v2",
+  "attempt": "#1",
+  "minutes": 45.0,
+  "score": 4.2,
+  "outcome": "timeout",
+  "note": "pixel trunk in a pot, no foliage (JS error)"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-27B \u00b7 kit v2 \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-27B",
+  "kit": "kit v2",
+  "attempt": "#2",
+  "minutes": 45.0,
+  "score": 5.8,
+  "outcome": "timeout",
+  "note": "pixel tree with shaded pads, moon, leaves; weak pot"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.6-35B-A3B \u00b7 kit v2 \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v2",
+  "attempt": "#1",
+  "minutes": 3.8,
+  "score": 3.0,
+  "outcome": "done",
+  "note": "canvas tiny in a corner, pot beside the tree"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.6-35B-A3B \u00b7 kit v2 \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v2",
+  "attempt": "#2",
+  "minutes": 4.3,
+  "score": 0.0,
+  "outcome": "done",
+  "note": "blank page, JS error"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.6-35B-A3B \u00b7 kit v3 \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v3",
+  "attempt": "#1",
+  "minutes": 13.4,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "curved trunk, terracotta pot, textured canopy, wind"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.6-35B-A3B \u00b7 kit v3 \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v3",
+  "attempt": "#2",
+  "minutes": 7.6,
+  "score": 5.5,
+  "outcome": "done",
+  "note": "readable tree and pot, round blobby pads"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.6-35B-A3B \u00b7 kit v3 best of 3 \u00b7 best",
+  "brief": "Bonsai",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v3 best of 3",
+  "attempt": "best",
+  "minutes": 17.8,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "picked best of three (6.5 / 3.5 / 5)"
+ },
+ {
+  "run": "Lighthouse \u00b7 Opus 5.5 \u00b7 Claude Code \u00b7 ref",
+  "brief": "Lighthouse",
+  "model": "Opus 5.5",
+  "kit": "Claude Code",
+  "attempt": "ref",
+  "minutes": 24.5,
+  "score": 9.0,
+  "outcome": "done",
+  "note": "striped tower, keeper's house, cliff, moon, rain, sweeping beam"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-27B \u00b7 kit v2 \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-27B",
+  "kit": "kit v2",
+  "attempt": "#1",
+  "minutes": 45.0,
+  "score": 0.0,
+  "outcome": "timeout",
+  "note": "no page written"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.6-35B-A3B \u00b7 kit v2 \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v2",
+  "attempt": "#1",
+  "minutes": 2.3,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "tower, lantern, house, moon, rain, beam; off-center"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.6-35B-A3B \u00b7 kit v3 \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v3",
+  "attempt": "#1",
+  "minutes": 18.7,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "tower, lit lantern, shore, sea bands, moon, rain; no cliff"
+ },
+ {
+  "run": "Dashboard \u00b7 Opus 5.5 \u00b7 Claude Code \u00b7 ref",
+  "brief": "Dashboard",
+  "model": "Opus 5.5",
+  "kit": "Claude Code",
+  "attempt": "ref",
+  "minutes": 11.6,
+  "score": 9.5,
+  "outcome": "done",
+  "note": "KPI cards with sparklines, drill-in bars, donut, budgets, dark mode"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.6-35B-A3B \u00b7 kit v2 \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v2",
+  "attempt": "#1",
+  "minutes": 3.7,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "KPI cards, donut, bars, budget progress"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.6-35B-A3B \u00b7 kit v3 \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.6-35B-A3B",
+  "kit": "kit v3",
+  "attempt": "#1",
+  "minutes": 17.9,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "KPI cards, donut, bars, transactions"
+ }
+]

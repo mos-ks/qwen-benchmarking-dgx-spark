@@ -1,0 +1,138 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["playwright==1.62.0"]
+# ///
+"""look: let a coding agent see the page it built.
+
+Screenshots a local HTML file or URL (desktop frames over time, plus a phone frame), collects console
+and page errors, sends the screenshots to the vision model behind the Spark's OpenAI-compatible
+endpoint, and prints a critique against the stated goal. Exit code 0 even when the critique is
+harsh; non-zero only when the page could not be rendered or the model could not be reached.
+
+    look index.html --goal "a pixel-art bonsai with drifting leaves"
+    look http://localhost:5173 --goal "finance dashboard" --frames 1
+"""
+
+import argparse
+import base64
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+ENDPOINT = os.environ.get("LOOK_ENDPOINT", "http://127.0.0.1:8000/v1")
+# Rounds per project. Enforced here rather than asked of the agent: a small model told "stop after
+# 4 rounds" kept calling look 16 times and ran out of time polishing.
+MAX_ROUNDS = int(os.environ.get("LOOK_MAX_ROUNDS", "4"))
+MODEL = os.environ.get("LOOK_MODEL", "qwen3-coder")
+
+CRITIC_PROMPT = """You are a demanding senior visual designer reviewing screenshots of a web page a developer just built.
+Goal of the page: {goal}
+
+You see {n} screenshots: desktop frames taken {gap_ms} ms apart (so you can judge animation), then a phone-sized frame.
+Console/page errors captured while loading: {errors}
+
+Judge only what is visible. GOOD means: it clearly reads as the goal at a glance, nothing is broken, and the
+remaining issues are polish. NEEDS WORK means: it reads as the goal but has visible defects worth fixing.
+BROKEN means: blank, errors, or it does not read as the goal. Reply in this exact structure:
+VERDICT: one of GOOD / NEEDS WORK / BROKEN
+READS AS: one sentence on what a viewer would actually say this picture shows.
+TOP FIXES (most important first, max 5, each concrete and actionable, naming the element, what is wrong, and what to change):
+1. ...
+ANIMATION: does anything visibly change between the desktop frames? what?
+PHONE: does the layout hold at phone size?
+Be specific and blunt. Do not praise. If it does not clearly read as the goal, say so first."""
+
+
+def shoot(target: str, frames: int, gap_ms: int) -> tuple[list[Path], list[str]]:
+    url = target if "://" in target else Path(target).resolve().as_uri()
+    # Inside the project, not /tmp: an agent that opens a screenshot outside its project hits an
+    # external_directory permission prompt that nobody answers in server mode.
+    out = Path.cwd() / ".look"
+    out.mkdir(exist_ok=True)
+    shots: list[Path] = []
+    errors: list[str] = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        for w, h, tag, n in ((1280, 800, "desktop", frames), (390, 844, "phone", 1)):
+            page = browser.new_page(viewport={"width": w, "height": h})
+            page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+            page.on("console", lambda m: errors.append(f"console.{m.type}: {m.text}") if m.type == "error" else None)
+            page.goto(url)
+            page.wait_for_timeout(1200)
+            for i in range(n):
+                f = out / f"{tag}-{i}.png"
+                page.screenshot(path=str(f))
+                shots.append(f)
+                if i < n - 1:
+                    page.wait_for_timeout(gap_ms)
+            page.close()
+        browser.close()
+    return shots, errors
+
+
+def critique(goal: str, shots: list[Path], errors: list[str], gap_ms: int) -> str:
+    content: list[dict] = [{
+        "type": "text",
+        "text": CRITIC_PROMPT.format(goal=goal, n=len(shots), gap_ms=gap_ms, errors="; ".join(errors[:10]) or "none"),
+    }]
+    for f in shots:
+        b64 = base64.b64encode(f.read_bytes()).decode()
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}})
+    body = {
+        "model": MODEL,
+        "messages": [{"role": "user", "content": content}],
+        "max_tokens": 900,
+        "temperature": 0.2,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    req = urllib.request.Request(f"{ENDPOINT}/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        return json.load(r)["choices"][0]["message"]["content"].strip()
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("target", help="HTML file path or URL")
+    ap.add_argument("--goal", required=True, help="what the page is supposed to show, in one or two sentences")
+    ap.add_argument("--frames", type=int, default=2, help="desktop frames to capture (animation check)")
+    ap.add_argument("--gap-ms", type=int, default=1500)
+    a = ap.parse_args()
+    if "://" not in a.target and not Path(a.target).exists():
+        print(f"look: {a.target} does not exist", file=sys.stderr)
+        return 2
+    counter = Path.cwd() / ".look-rounds"
+    try:
+        used = int(counter.read_text()) if counter.exists() else 0
+    except ValueError:
+        used = 0
+    if used >= MAX_ROUNDS:
+        print(f"look budget used up ({used}/{MAX_ROUNDS} rounds). Do not call look again: finish the task now and report the last verdict.")
+        return 0
+    counter.write_text(str(used + 1))
+    try:
+        shots, errors = shoot(a.target, max(1, a.frames), a.gap_ms)
+    except Exception as exc:  # report, do not traceback into the agent's context
+        print(f"look: could not render {a.target}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 3
+    print("screenshots saved in .look/ (the critique below already describes them)")
+    print("errors:", "; ".join(errors[:10]) or "none")
+    try:
+        print(critique(a.goal, shots, errors, a.gap_ms))
+        if used + 1 >= MAX_ROUNDS:
+            print(f"\nThis was round {used + 1} of {MAX_ROUNDS}, the last one. Fix the top item if it is quick, then finish and report; do not call look again.")
+        else:
+            print(f"\nRound {used + 1} of {MAX_ROUNDS}. If the verdict is GOOD, stop iterating and finish.")
+    except (urllib.error.URLError, KeyError, json.JSONDecodeError) as exc:
+        print(f"look: vision model at {ENDPOINT} did not answer: {exc}", file=sys.stderr)
+        return 4
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,11 @@
+Build a simple bonsai care app as a single web page: index.html plus CSS and JS files, no build step, no external libraries, fonts or image files. It must work by opening index.html in a browser.
+
+Pixel-art style. The tree must clearly read as a bonsai: a shallow pot, a curved trunk, a few branches, and rounded foliage pads, drawn as crisp pixel art (for example a small canvas scaled up with image-rendering: pixelated). No blurry or blob shapes.
+
+Interactions:
+- A button labelled "Water": watering makes the tree grow through visible stages over several waterings (more foliage, bigger pads, longer branches).
+- A button labelled "Prune": pruning lets the user cut a branch or foliage pad (for example click Prune, then click the part of the tree to cut); the tree changes visibly.
+- Show the current stage and how many waterings until the next stage.
+- Save the tree in localStorage so it survives a page reload.
+
+Make it look polished on desktop and on a phone-sized screen.

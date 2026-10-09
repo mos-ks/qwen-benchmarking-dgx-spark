@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1a35">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #1b1a35;
+  }
+  canvas {
+    position: fixed;
+    left: 0;
+    top: 0;
+    display: block;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" role="img" aria-label="Pixel-art bonsai on a wooden stand at dusk, foliage swaying while leaves and wind streaks drift past"></canvas>
+<script>
+(() => {
+  'use strict';
+
+  // Scene box in art pixels; everything in the tree composition is laid out in these coordinates.
+  const SW = 180, SH = 150;
+  const HORIZON = 116;
+  const SOIL_Y = 103;
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const MOTION = reduceMotion ? 0.45 : 1;
+
+  const PAL = {
+    sky: ['#1b1a35', '#262448', '#36305e', '#4f3c72', '#71487f', '#9a5682', '#c66a80', '#e48a7f', '#f3ac84', '#f8cb94'],
+    sunTop: '#fff3d0', sunBottom: '#ffd99e',
+    mountains: [
+      { color: '#d6909a', mist: '#f2b49a' },
+      { color: '#a96b8b', mist: '#d98f95' },
+      { color: '#6f4d7d', mist: '#9d6888' },
+    ],
+    ground: ['#5c3f66', '#4b3459', '#3c2a4b', '#2f213e', '#241a32'],
+    horizonLine: '#b97690',
+    star: '#fff3d6',
+    cloud: ['#c97b8e', '#eb9f95', '#ffcfae'],
+    stand: { outline: '#190f17', shades: ['#2c1a20', '#42282b', '#5b3934', '#794e41', '#9a6a53'] },
+    pot: { outline: '#111827', shades: ['#1b2e4c', '#27466c', '#33628e', '#4d84ab', '#a3d1e3'] },
+    soil: ['#2e221f', '#43312a', '#6d5d52'],
+    moss: ['#3f6a33', '#5f8f3c', '#8fb84e'],
+    stone: ['#4a4652', '#77727d', '#a9a3ad'],
+    bark: { outline: '#22171c', shades: ['#3b2a2a', '#584036', '#775846', '#99785d', '#bf9d78'] },
+    barkBack: { outline: '#1e1419', shades: ['#33242a', '#4a3632', '#634a3f', '#7f644f', '#9c8064'] },
+    padFront: { outline: '#132a23', shades: ['#1d4531', '#2a6139', '#45893f', '#77b24c', '#bddb6c'] },
+    padBack: { outline: '#132520', shades: ['#1a3a30', '#234e37', '#33693e', '#4f8745', '#77a553'] },
+    wind: '#fff6e6',
+    leaves: [
+      { w: 0.38, c: ['#86bf50', '#45893f'] },
+      { w: 0.27, c: ['#c4df6e', '#77b24c'] },
+      { w: 0.18, c: ['#f0cf68', '#bd8d3e'] },
+      { w: 0.17, c: ['#ef9a5a', '#ad5c38'] },
+    ],
+  };
+
+  const BAYER = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+  ].map(row => row.map(v => (v + 0.5) / 16));
+  const bayer = (x, y) => BAYER[y & 3][x & 3];
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  // ImageData is RGBA in memory; on little-endian hosts a Uint32 reads it as ABGR.
+  function pack(hex) {
+    const [r, g, b] = hexToRgb(hex);
+    return (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
+  }
+  function scaleColor(c, f) {
+    const r = Math.min(255, Math.round((c & 255) * f));
+    const g = Math.min(255, Math.round(((c >>> 8) & 255) * f));
+    const b = Math.min(255, Math.round(((c >>> 16) & 255) * f));
+    return (0xff000000 | (b << 16) | (g << 8) | r) >>> 0;
+  }
+
+  function hash(x, y, s) {
+    let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(s | 0, 1274126177);
+    h = Math.imul(h ^ (h >>> 13), 1103515245);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+  class Pix {
+    constructor(w, h) {
+      this.w = w;
+      this.h = h;
+      this.d = new Uint32Array(w * h);
+    }
+    inside(x, y) { return x >= 0 && y >= 0 && x < this.w && y < this.h; }
+    set(x, y, c) { if (this.inside(x, y)) this.d[y * this.w + x] = c; }
+    get(x, y) { return this.inside(x, y) ? this.d[y * this.w + x] : 0; }
+    toCanvas() {
+      const c = document.createElement('canvas');
+      c.width = this.w;
+      c.height = this.h;
+      const g = c.getContext('2d');
+      const img = g.createImageData(this.w, this.h);
+      img.data.set(new Uint8ClampedArray(this.d.buffer));
+      g.putImageData(img, 0, 0);
+      return c;
+    }
+  }
+
+  // Outline any empty pixel that touches an opaque one (restricted to a row range).
+  function autoOutline(b, color, yMin, yMax) {
+    const marks = [];
+    for (let y = yMin; y <= yMax; y++) {
+      for (let x = 0; x < b.w; x++) {
+        if (b.get(x, y)) continue;
+        if (b.get(x - 1, y) || b.get(x + 1, y) || b.get(x, y - 1) || b.get(x, y + 1)) marks.push(x, y);
+      }
+    }
+    for (let i = 0; i < marks.length; i += 2) b.set(marks[i], marks[i + 1], color);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Tree geometry                                                       */
+  /* ------------------------------------------------------------------ */
+
+  const TRUNK = [[88, 104, 8.5], [84, 96, 7.6], [77, 86, 6.6], [74, 78, 6], [80, 70, 5.2], [91, 62, 4.4],
+    [95, 54, 3.7], [90, 45, 3.0], [85, 37, 2.4], [86, 27, 1.7]];
+  const ROOTS = [
+    [[87, 101, 4.6], [79, 102, 3.4], [71, 103, 2.2], [63, 104, 1.1]],
+    [[90, 101, 4.6], [99, 102, 3.2], [107, 103, 2], [114, 104, 1]],
+  ];
+  const FRONT_BRANCHES = [
+    [[78, 83, 3.4], [67, 81, 2.8], [56, 79, 2.3], [45, 76, 1.8], [35, 73, 1.3]],
+    [[89, 64, 3.0], [100, 62, 2.5], [112, 59, 2.0], [122, 55, 1.5], [130, 52, 1.1]],
+    [[92, 47, 2.4], [82, 45, 2.0], [72, 41, 1.6], [62, 37, 1.2]],
+    [[87, 36, 2.0], [97, 33, 1.6], [106, 30, 1.2]],
+  ];
+  // Branches feeding the back pads live on their own layer so the back pads can cover their tips.
+  const BACK_BRANCHES = [
+    [[80, 73, 2.4], [93, 74, 2.0], [104, 72, 1.5]],
+    [[94, 57, 2.0], [80, 56, 1.6], [66, 54, 1.2]],
+    [[88, 41, 1.6], [97, 40, 1.2]],
+  ];
+  const PADS = [
+    { x: 105, y: 71, w: 30, h: 11, back: true, amp: 1.0 },
+    { x: 61, y: 53, w: 24, h: 10, back: true, amp: 1.2 },
+    { x: 99, y: 40, w: 22, h: 9, back: true, amp: 1.4 },
+    { x: 42, y: 70, w: 46, h: 16, amp: 1.5 },
+    { x: 126, y: 50, w: 40, h: 14, amp: 1.7 },
+    { x: 64, y: 36, w: 32, h: 12, amp: 1.9 },
+    { x: 108, y: 28, w: 26, h: 11, amp: 2.0 },
+    { x: 86, y: 19, w: 30, h: 14, amp: 2.2 },
+  ];
+  const SUN = { x: 124, y: 52, r: 25 };
+  const LIGHT = (() => {
+    const v = [-0.6, -0.38, 0.7];
+    const l = Math.hypot(v[0], v[1], v[2]);
+    return v.map(c => c / l);
+  })();
+
+  function sampleSpline(pts, step) {
+    const out = [];
+    const n = pts.length;
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(n - 1, i + 2)];
+      const segs = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / step));
+      for (let j = 0; j < segs; j++) {
+        const t = j / segs, t2 = t * t, t3 = t2 * t;
+        const f = k => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 +
+          (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3);
+        const df = k => 0.5 * ((-p0[k] + p2[k]) + 2 * (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t +
+          3 * (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t2);
+        let tx = df(0), ty = df(1);
+        const l = Math.hypot(tx, ty) || 1;
+        out.push({ x: f(0), y: f(1), r: p1[2] + (p2[2] - p1[2]) * t, tx: tx / l, ty: ty / l });
+      }
+    }
+    const a = pts[n - 2], b = pts[n - 1];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    out.push({ x: b[0], y: b[1], r: b[2], tx: (b[0] - a[0]) / l, ty: (b[1] - a[1]) / l });
+    return out;
+  }
+
+  function forDisc(cx, cy, r, fn) {
+    const x0 = Math.floor(cx - r), x1 = Math.ceil(cx + r);
+    const y0 = Math.floor(cy - r), y1 = Math.ceil(cy + r);
+    const r2 = r * r;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+        if (dx * dx + dy * dy <= r2) fn(x, y, dx, dy);
+      }
+    }
+  }
+
+  // Tubes are shaded as cylinders lit from the upper left, with bark streaks that follow the path.
+  function paintTubes(b, tubes, pal, clipY) {
+    const outline = pack(pal.outline);
+    const shades = pal.shades.map(pack);
+    const sampled = tubes.map(t => sampleSpline(t, 0.35));
+    for (const samples of sampled) {
+      for (const s of samples) {
+        forDisc(s.x, s.y, s.r + 1, (x, y) => { if (y <= clipY) b.set(x, y, outline); });
+      }
+    }
+    sampled.forEach((samples, id) => {
+      let along = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i];
+        if (i > 0) along += Math.hypot(s.x - samples[i - 1].x, s.y - samples[i - 1].y);
+        const nx = -s.ty, ny = s.tx;
+        forDisc(s.x, s.y, s.r, (x, y, dx, dy) => {
+          if (y > clipY) return;
+          const side = clamp((dx * nx + dy * ny) / s.r, -1, 1);
+          const nz = Math.sqrt(1 - side * side);
+          let v = LIGHT[0] * nx * side + LIGHT[1] * ny * side + LIGHT[2] * nz;
+          v += (hash(Math.floor(along / 3.2), Math.floor((side + 1) * 2.6), id + 11) - 0.5) * 0.36;
+          const k = v < -0.05 ? 0 : v < 0.3 ? 1 : v < 0.58 ? 2 : v < 0.8 ? 3 : 4;
+          b.set(x, y, shades[k]);
+        });
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Static scene: stand, pot, soil, trunk, branches                     */
+  /* ------------------------------------------------------------------ */
+
+  function buildStatic() {
+    const b = new Pix(SW, SH);
+
+    // Display stand
+    const st = PAL.stand.shades.map(pack);
+    for (let x = 34; x <= 146; x++) {
+      const edge = x === 34 || x === 146;
+      if (!edge) b.set(x, 121, x < 52 ? st[4] : st[3]);
+      b.set(x, 122, st[2]);
+      b.set(x, 123, st[1]);
+    }
+    for (let x = 40; x <= 140; x++) {
+      b.set(x, 124, st[1]);
+      b.set(x, 125, st[1]);
+      b.set(x, 126, st[0]);
+    }
+    for (const lx of [42, 133]) {
+      for (let y = 124; y <= 133; y++) {
+        for (let x = lx; x <= lx + 5; x++) {
+          const col = x - lx;
+          b.set(x, y, col === 0 ? st[3] : col < 3 ? st[2] : col < 5 ? st[1] : st[0]);
+        }
+      }
+      for (let x = lx - 1; x <= lx + 6; x++) b.set(x, 134, x < lx + 2 ? st[2] : st[1]);
+    }
+    // Pot footprint shadow on the stand top
+    for (let x = 57; x <= 123; x++) b.set(x, 121, st[2]);
+    for (let x = 59; x <= 121; x++) b.set(x, 122, st[1]);
+
+    // Soil mound with moss, visible above the rim
+    const soil = PAL.soil.map(pack), moss = PAL.moss.map(pack);
+    for (let x = 56; x <= 124; x++) {
+      const u = (x - 90) / 35;
+      const top = SOIL_Y - Math.round(2.8 * (1 - u * u));
+      for (let y = top; y <= SOIL_Y; y++) {
+        let c = soil[y === top ? 1 : 0];
+        if (hash(x, y, 5) < 0.08) c = soil[2];
+        const mossy = hash(x >> 2, 0, 9) > 0.3;
+        if (y === top && mossy) c = hash(x, y, 4) < 0.35 ? moss[2] : moss[1];
+        else if (y === top + 1 && mossy && hash(x, y, 6) < 0.6) c = moss[0];
+        b.set(x, y, c);
+      }
+      if (hash(x, 1, 13) < 0.16 && Math.abs(u) < 0.95) b.set(x, top - 1, hash(x, 2, 3) < 0.5 ? moss[2] : moss[1]);
+    }
+    // Accent stone
+    const stone = PAL.stone.map(pack);
+    const stoneRows = ['..aab.', '.abbbc', 'abbbbc', 'aabbcc'];
+    stoneRows.forEach((row, r) => {
+      [...row].forEach((ch, i) => {
+        if (ch === '.') return;
+        b.set(110 + i, 99 + r, ch === 'a' ? stone[2] : ch === 'b' ? stone[1] : stone[0]);
+      });
+    });
+
+    // Trunk, roots and branches (branches first so the trunk sits on top of their joints)
+    paintTubes(b, [...FRONT_BRANCHES, ...ROOTS, TRUNK], PAL.bark, SOIL_Y);
+
+    // Hollow (uro) on the trunk
+    const bark = PAL.bark.shades.map(pack);
+    const hollow = [[76, 85], [75, 86], [76, 86], [77, 86], [75, 87], [76, 87], [77, 87], [76, 88]];
+    hollow.forEach(([x, y]) => b.set(x, y, pack(PAL.bark.outline)));
+    b.set(74, 86, bark[4]);
+    b.set(74, 87, bark[3]);
+    b.set(75, 85, bark[3]);
+    b.set(77, 88, bark[1]);
+
+    // Glazed pot: rim, tapered body, feet
+    const pot = PAL.pot.shades.map(pack);
+    for (let x = 52; x <= 128; x++) {
+      const u = (x - 52) / 76;
+      if (x > 52 && x < 128) b.set(x, 104, u < 0.18 ? pot[4] : u < 0.7 ? pot[3] : pot[2]);
+      b.set(x, 105, u < 0.12 ? pot[3] : u < 0.75 ? pot[2] : pot[1]);
+      if (x > 52 && x < 128) b.set(x, 106, pot[0]);
+    }
+    for (let y = 107; y <= 117; y++) {
+      const taper = Math.floor((y - 107) / 4);
+      const L = 55 + taper, R = 125 - taper;
+      for (let x = L; x <= R; x++) {
+        const u = (x - L) / (R - L);
+        let k = u < 0.07 ? 2 : u < 0.3 ? 3 : u < 0.68 ? 2 : u < 0.88 ? 1 : 0;
+        if (u >= 0.1 && u < 0.15 && y < 115) k = 4;
+        if (y === 107) k = Math.max(0, k - 2);
+        else if (y === 108) k = Math.max(0, k - 1);
+        if (y >= 116) k = Math.max(0, k - 1);
+        if (y === 117) k = 0;
+        if (k > 0 && k < 4 && hash(x, y, 21) < 0.05) k += 1;
+        b.set(x, y, pot[k]);
+      }
+    }
+    for (const fx of [61, 112]) {
+      for (let y = 118; y <= 120; y++) {
+        for (let x = fx; x <= fx + 7; x++) b.set(x, y, x === fx ? pot[1] : pot[0]);
+      }
+    }
+
+    autoOutline(b, pack(PAL.stand.outline), 98, SH - 1);
+    return b;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Foliage pads                                                        */
+  /* ------------------------------------------------------------------ */
+
+  function buildPad(spec, index) {
+    const pal = spec.back ? PAL.padBack : PAL.padFront;
+    const shades = pal.shades.map(pack);
+    const outline = pack(pal.outline);
+    const rnd = rng(4021 + index * 977);
+    const bw = spec.w + 10, bh = spec.h + 14;
+    const shade = new Int8Array(bw * bh).fill(-1);
+    const cx = bw / 2, cy = bh / 2 + 1;
+    const half = spec.w / 2, H = spec.h;
+
+    const clumps = [{ x: cx, y: cy + H * 0.16, rx: half - 0.5, ry: H * 0.34 }];
+    const n = Math.max(2, Math.round(spec.w / 10));
+    const rxBase = spec.w / (n * 1.42);
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const rx = rxBase * (0.85 + rnd() * 0.3);
+      const dome = 1 - (t * 2 - 1) ** 2;
+      clumps.push({
+        x: cx + (t * 2 - 1) * (half - rx * 0.95),
+        y: cy - H * 0.1 - dome * H * 0.16 + (rnd() - 0.5) * 1.5,
+        rx,
+        ry: Math.min(rx * 0.78, H * 0.42),
+      });
+    }
+    for (let i = 0; i < n - 1; i++) {
+      const t = (i + 0.5) / (n - 1);
+      const rx = rxBase * (0.95 + rnd() * 0.3);
+      clumps.push({
+        x: cx + (t * 2 - 1) * (half - rx * 1.05) + (rnd() - 0.5) * 2,
+        y: cy + H * 0.1 + (rnd() - 0.5),
+        rx,
+        ry: Math.min(rx * 0.68, H * 0.4),
+      });
+    }
+
+    for (const c of clumps) {
+      for (let y = Math.floor(c.y - c.ry); y <= Math.ceil(c.y + c.ry); y++) {
+        for (let x = Math.floor(c.x - c.rx); x <= Math.ceil(c.x + c.rx); x++) {
+          if (x < 0 || y < 0 || x >= bw || y >= bh) continue;
+          const nx = (x + 0.5 - c.x) / c.rx, ny = (y + 0.5 - c.y) / c.ry;
+          const d2 = nx * nx + ny * ny;
+          if (d2 > 1) continue;
+          const nz = Math.sqrt(1 - d2);
+          let v = -0.42 * nx - 0.62 * ny + 0.55 * nz;
+          v += ((cy - (y + 0.5)) / H) * 0.45;
+          v += (hash(x, y, index + 50) - 0.5) * 0.3 + (hash(x >> 1, y >> 1, index + 90) - 0.5) * 0.24;
+          shade[y * bw + x] = v < -0.1 ? 0 : v < 0.2 ? 1 : v < 0.46 ? 2 : v < 0.74 ? 3 : 4;
+        }
+      }
+    }
+    // Darken the underside rim so each pad reads as a flat cloud with depth beneath it.
+    const at = (x, y) => (x < 0 || y < 0 || x >= bw || y >= bh ? -1 : shade[y * bw + x]);
+    const final = shade.slice();
+    for (let y = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++) {
+        const s = at(x, y);
+        if (s < 0) continue;
+        if (at(x, y + 1) < 0) final[y * bw + x] = 0;
+        else if (at(x, y + 2) < 0) final[y * bw + x] = Math.min(s, 1);
+      }
+    }
+
+    let minX = bw, minY = bh, maxX = -1, maxY = -1;
+    for (let y = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++) {
+        if (final[y * bw + x] < 0) continue;
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      }
+    }
+    minX -= 1; minY -= 1; maxX += 1; maxY += 1;
+    const pw = maxX - minX + 1, ph = maxY - minY + 1;
+    const b = new Pix(pw, ph);
+    for (let y = 0; y < ph; y++) {
+      for (let x = 0; x < pw; x++) {
+        const s = at(x + minX, y + minY) >= 0 ? final[(y + minY) * bw + x + minX] : -1;
+        if (s >= 0) b.set(x, y, shades[s]);
+      }
+    }
+    autoOutline(b, outline, 0, ph - 1);
+
+    return {
+      canvas: b.toCanvas(),
+      x0: Math.round(spec.x - cx + minX),
+      y0: Math.round(spec.y - cy + minY),
+      w: pw,
+      h: ph,
+      amp: spec.amp,
+      back: !!spec.back,
+      phase: index * 1.37,
+      freq: 1.25 + (index % 3) * 0.17,
+      spec,
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Background: dithered dusk sky, sun, mountains, ground               */
+  /* ------------------------------------------------------------------ */
+
+  function ditherPick(stops, idx, x, y) {
+    idx = clamp(idx, 0, stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(idx));
+    const f = clamp((idx - i - 0.5) * 2.2 + 0.5, 0, 1);
+    return f > bayer(x, y) ? stops[i + 1] : stops[i];
+  }
+
+  function buildBackground(W, H, ox, oy) {
+    const b = new Pix(W, H);
+    const hy = oy + HORIZON;
+    const sky = PAL.sky.map(pack);
+    const sunX = ox + SUN.x, sunY = oy + SUN.y;
+    const sunTop = pack(PAL.sunTop), sunBottom = pack(PAL.sunBottom);
+    const n = sky.length;
+
+    for (let y = 0; y < hy; y++) {
+      const base = y >= oy ? 2 + ((y - oy) / HORIZON) * (n - 3) : (oy > 0 ? (2 * y) / oy : 2);
+      for (let x = 0; x < W; x++) {
+        const d = Math.hypot(x + 0.5 - sunX, y + 0.5 - sunY);
+        if (d <= SUN.r) {
+          const t = (y - (sunY - SUN.r)) / (2 * SUN.r);
+          b.set(x, y, t * 1.4 - 0.2 > bayer(x, y) ? sunBottom : sunTop);
+          continue;
+        }
+        let idx = base;
+        if (d < SUN.r + 18) idx += 1.7 * (1 - (d - SUN.r) / 18);
+        b.set(x, y, ditherPick(sky, idx, x, y));
+      }
+    }
+
+    // Mountains, far to near
+    const ridges = [
+      xs => 20 + 12 * Math.pow(1 - Math.abs(Math.sin(xs * 0.021 + 0.9)), 2) + 4 * Math.sin(xs * 0.083 + 2.1) + 1.5 * Math.sin(xs * 0.23),
+      xs => 11 + 9 * Math.pow(1 - Math.abs(Math.sin(xs * 0.029 + 2.4)), 2) + 3 * Math.sin(xs * 0.11 + 0.6) + Math.sin(xs * 0.31),
+      xs => 5 + 4 * Math.pow(1 - Math.abs(Math.sin(xs * 0.04 + 4.1)), 2) + 1.5 * Math.sin(xs * 0.17 + 1.2),
+    ];
+    ridges.forEach((ridge, li) => {
+      const col = pack(PAL.mountains[li].color), mist = pack(PAL.mountains[li].mist);
+      for (let x = 0; x < W; x++) {
+        const top = hy - Math.round(ridge(x - ox));
+        for (let y = Math.max(0, top); y < hy; y++) {
+          const dh = hy - y;
+          const m = clamp(1 - dh / 9, 0, 1) * (li === 2 ? 0.45 : 0.75);
+          b.set(x, y, m > bayer(x, y) ? mist : col);
+        }
+      }
+    });
+
+    // Ground plane
+    const ground = PAL.ground.map(pack);
+    const groundSpan = Math.max(20, H - hy);
+    for (let y = hy; y < H; y++) {
+      const idx = Math.pow((y - hy) / groundSpan, 0.7) * (ground.length - 1);
+      for (let x = 0; x < W; x++) {
+        let c = ditherPick(ground, idx, x, y);
+        if (hash(x, y, 77) < 0.035) c = ground[Math.max(0, Math.floor(idx) - 1)];
+        b.set(x, y, c);
+      }
+    }
+    const line = pack(PAL.horizonLine);
+    for (let x = 0; x < W; x++) if (hash(x >> 3, 3, 8) > 0.25) b.set(x, hy, line);
+
+    // Soft shadow of the stand on the ground
+    const shadowCx = ox + 90, shadowCy = oy + 135;
+    for (let y = shadowCy - 3; y <= shadowCy + 3; y++) {
+      for (let x = shadowCx - 64; x <= shadowCx + 64; x++) {
+        const e = ((x - shadowCx) / 62) ** 2 + ((y - shadowCy) / 2.6) ** 2;
+        if (e > 1) continue;
+        const keep = e > 0.6 ? bayer(x, y) < 0.5 : true;
+        if (keep) b.set(x, y, scaleColor(b.get(x, y), 0.72));
+      }
+    }
+
+    // Dithered vignette toward the corners
+    const vcx = W / 2, vcy = oy + SH * 0.48;
+    const vr = Math.hypot(Math.max(vcx, W - vcx), Math.max(vcy, H - vcy));
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const d = Math.hypot(x - vcx, y - vcy) / vr;
+        const k = clamp((d - 0.55) / 0.45, 0, 1) * 3;
+        const step = Math.floor(k) + (k - Math.floor(k) > bayer(x, y) ? 1 : 0);
+        if (step > 0) b.set(x, y, scaleColor(b.get(x, y), 1 - step * 0.09));
+      }
+    }
+    return b.toCanvas();
+  }
+
+  function buildCloud(seed) {
+    const rnd = rng(seed);
+    const w = 30 + Math.floor(rnd() * 34), h = 9;
+    const b = new Pix(w, h);
+    const cols = PAL.cloud.map(pack);
+    const puffs = [{ x: w / 2, y: 6.2, rx: w / 2 - 1, ry: 2.6 }];
+    const k = 2 + Math.floor(rnd() * 3);
+    for (let i = 0; i < k; i++) {
+      const rx = 4 + rnd() * 6;
+      puffs.push({ x: rx + 2 + rnd() * (w - 2 * rx - 4), y: 4.5 + rnd(), rx, ry: 2.4 + rnd() * 1.6 });
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let inside = false;
+        for (const p of puffs) {
+          if (((x + 0.5 - p.x) / p.rx) ** 2 + ((y + 0.5 - p.y) / p.ry) ** 2 <= 1) { inside = true; break; }
+        }
+        if (inside) b.set(x, y, cols[1]);
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!b.get(x, y)) continue;
+        if (!b.get(x, y - 1)) b.set(x, y, cols[2]);
+        else if (!b.get(x, y + 1)) b.set(x, y, cols[0]);
+      }
+    }
+    return b.toCanvas();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Runtime state                                                       */
+  /* ------------------------------------------------------------------ */
+
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  const staticLayer = buildStatic().toCanvas();
+  const backBranchLayer = (() => {
+    const b = new Pix(SW, SH);
+    paintTubes(b, BACK_BRANCHES, PAL.barkBack, SOIL_Y);
+    return b.toCanvas();
+  })();
+  const pads = PADS.map(buildPad);
+  const backPads = pads.filter(p => p.back);
+  const frontPads = pads.filter(p => !p.back);
+  const cloudSprites = [11, 23, 37, 51].map(buildCloud);
+
+  let W = 0, H = 0, ox = 0, oy = 0, bg = null;
+  let stars = [], clouds = [], leaves = [], streaks = [];
+
+  const LEAF_FRAMES_FRONT = [
+    ['..aaa', 'abbb.'],
+    ['..a', '.ab', 'bb.'],
+    ['aabb'],
+    ['a..', 'ba.', '.bb'],
+  ];
+  const LEAF_FRAMES_BACK = [['ab'], ['a', 'b'], ['a.', '.b'], ['.a', 'b.']];
+
+  function windAt(t) {
+    const g = Math.sin(t * 0.31) * 0.5 + Math.sin(t * 0.73 + 1.3) * 0.32 + Math.sin(t * 1.7 + 0.4) * 0.12;
+    return clamp(0.55 + 0.45 * g, 0.12, 1);
+  }
+
+  function pickLeafColors() {
+    let r = Math.random();
+    for (const l of PAL.leaves) {
+      if ((r -= l.w) <= 0) return l.c;
+    }
+    return PAL.leaves[0].c;
+  }
+
+  function resetLeaf(l, scatter) {
+    l.depth = Math.random() < 0.55 ? 1 : 0;
+    const fromTree = !scatter && Math.random() < 0.3;
+    if (fromTree) {
+      const p = frontPads[Math.floor(Math.random() * frontPads.length)];
+      l.x = ox + p.spec.x + (Math.random() - 0.5) * p.spec.w * 0.8;
+      l.y = oy + p.spec.y + (Math.random() - 0.3) * p.spec.h * 0.6;
+      l.depth = 1;
+    } else {
+      l.x = scatter ? Math.random() * W : -6 - Math.random() * 40;
+      l.y = oy - 25 + Math.random() * (SH - 5);
+    }
+    l.k = 0.6 + Math.random() * 0.6;
+    l.bob = 5 + Math.random() * 9;
+    l.bobF = 0.8 + Math.random() * 1.4;
+    l.phase = Math.random() * Math.PI * 2;
+    l.fall = 2 + Math.random() * 5;
+    l.spin = (0.6 + Math.random() * 0.9) * (Math.random() < 0.5 ? -1 : 1);
+    l.spinPhase = Math.random() * 4;
+    const c = pickLeafColors();
+    l.ca = c[0];
+    l.cb = c[1];
+  }
+
+  function resetStreak(s, scatter) {
+    s.depth = Math.random() < 0.55 ? 1 : 0;
+    s.x = scatter ? Math.random() * W : -4;
+    s.amp = 1.5 + Math.random() * 3.5;
+    s.freq = 0.035 + Math.random() * 0.05;
+    s.phase = Math.random() * Math.PI * 2;
+    s.y0 = oy - 15 + Math.random() * (SH - 20);
+    s.y = s.y0 + s.amp * Math.sin(s.x * s.freq + s.phase);
+    s.speed = 42 + Math.random() * 34;
+    s.len = Math.round(22 + Math.random() * 30);
+    s.R = 3.5 + Math.random() * 3.5;
+    s.curlAt = Math.random() < 0.5 ? s.x + 20 + Math.random() * Math.max(40, W * 0.7) : Infinity;
+    s.curl = null;
+    s.hist = [[s.x, s.y]];
+    s.wait = scatter ? Math.random() * 1.2 : 0.3 + Math.random() * 1.8;
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const vw = Math.max(1, window.innerWidth * dpr), vh = Math.max(1, window.innerHeight * dpr);
+    // Integer device-pixel scale keeps every art pixel the same size and perfectly crisp.
+    // The fit box is tighter than the scene box: the tree spans x 19..147 and y 13..141 of it.
+    let s = Math.floor(Math.min(vw / (SW - 12), vh / (SH + 12)));
+    if (s < 2) s = Math.max(1, Math.min(vw / (SW - 24), vh / SH));
+    W = Math.ceil(vw / s);
+    H = Math.ceil(vh / s);
+    canvas.width = W;
+    canvas.height = H;
+    canvas.style.width = (W * s) / dpr + 'px';
+    canvas.style.height = (H * s) / dpr + 'px';
+    ox = Math.floor((W - SW) / 2);
+    // On tall portrait screens, sit the tree a little low so the sky gets the room, not the ground.
+    const portrait = H / W > 1.3;
+    oy = Math.floor((H - SH) * (portrait ? 0.66 : 0.5));
+    ctx.imageSmoothingEnabled = false;
+    bg = buildBackground(W, H, ox, oy);
+
+    stars = [];
+    const starBottom = oy + 34;
+    const starCount = Math.round((W * Math.max(0, starBottom)) / 260);
+    for (let i = 0; i < starCount; i++) {
+      const x = Math.floor(Math.random() * W), y = Math.floor(Math.random() * starBottom);
+      if (Math.hypot(x - (ox + SUN.x), y - (oy + SUN.y)) < SUN.r + 22) continue;
+      stars.push({ x, y, f: 0.6 + Math.random() * 1.8, p: Math.random() * 6.3, base: 0.25 + Math.random() * 0.5 });
+    }
+
+    clouds = cloudSprites.map((sprite, i) => ({
+      sprite,
+      x: Math.random() * (W + sprite.width) - sprite.width,
+      y: Math.round(Math.max(4, oy + HORIZON - 52) - i * Math.max(10, (oy + HORIZON - 52) / 4.5)),
+      speed: 2 + Math.random() * 3,
+    }));
+
+    const leafCount = Math.round(clamp(W / 8, 18, 46) * (reduceMotion ? 0.5 : 1));
+    leaves = Array.from({ length: leafCount }, () => { const l = {}; resetLeaf(l, true); return l; });
+    const streakCount = Math.round(clamp(W / 22, 8, 18) * (reduceMotion ? 0.5 : 1));
+    streaks = Array.from({ length: streakCount }, () => { const st = {}; resetStreak(st, true); return st; });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Animation                                                           */
+  /* ------------------------------------------------------------------ */
+
+  function updateLeaves(dt, t, w) {
+    const windSpeed = 16 + 34 * w;
+    for (const l of leaves) {
+      const depthK = l.depth ? 1 : 0.7;
+      l.x += (windSpeed * l.k * depthK + 3) * dt * MOTION;
+      l.y += (Math.sin(t * l.bobF + l.phase) * l.bob + l.fall - (w - 0.45) * 10) * dt * MOTION;
+      l.spinPhase += dt * (1.5 + 5 * w) * l.spin * MOTION;
+      if (l.x > W + 6 || l.y > H + 6 || l.y < -12) resetLeaf(l, false);
+    }
+  }
+
+  function drawLeaves(depth) {
+    const frames = depth ? LEAF_FRAMES_FRONT : LEAF_FRAMES_BACK;
+    ctx.globalAlpha = depth ? 1 : 0.8;
+    for (const l of leaves) {
+      if (l.depth !== depth) continue;
+      const fi = ((Math.floor(l.spinPhase) % 4) + 4) % 4;
+      const rows = frames[fi];
+      const bx = Math.round(l.x), by = Math.round(l.y);
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        for (let c = 0; c < row.length; c++) {
+          const ch = row[c];
+          if (ch === '.') continue;
+          ctx.fillStyle = ch === 'a' ? l.ca : l.cb;
+          ctx.fillRect(bx + c, by + r, 1, 1);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function pushTrail(s, x, y) {
+    const last = s.hist[s.hist.length - 1];
+    const d = Math.hypot(x - last[0], y - last[1]);
+    if (d < 0.7) return;
+    const steps = Math.floor(d / 0.7);
+    for (let i = 1; i <= steps; i++) {
+      const f = i / steps;
+      s.hist.push([last[0] + (x - last[0]) * f, last[1] + (y - last[1]) * f]);
+    }
+    if (s.hist.length > s.len) s.hist.splice(0, s.hist.length - s.len);
+  }
+
+  function updateStreaks(dt, w) {
+    for (const s of streaks) {
+      if (s.wait > 0) { s.wait -= dt; continue; }
+      const sp = s.speed * (0.55 + 0.75 * w) * MOTION;
+      let x, y;
+      if (s.curl) {
+        const c = s.curl;
+        c.th += (dt * sp) / s.R;
+        c.cx += dt * sp * 0.22;
+        if (c.th >= Math.PI * 2) {
+          x = c.cx; y = c.cy;
+          s.curl = null;
+          s.curlAt = Infinity;
+          s.x = x;
+          s.y0 = y - s.amp * Math.sin(x * s.freq + s.phase);
+        } else {
+          x = c.cx + s.R * Math.sin(c.th);
+          y = c.cy - s.R * (1 - Math.cos(c.th));
+        }
+      } else {
+        s.x += sp * dt;
+        x = s.x;
+        y = s.y0 + s.amp * Math.sin(x * s.freq + s.phase);
+        if (x >= s.curlAt) s.curl = { th: 0, cx: x, cy: y };
+      }
+      pushTrail(s, x, y);
+      const tail = s.hist[0];
+      if (tail[0] > W + 2) resetStreak(s, false);
+    }
+  }
+
+  function drawStreaks(depth) {
+    ctx.fillStyle = PAL.wind;
+    const base = depth ? 0.95 : 0.5;
+    for (const s of streaks) {
+      if (s.depth !== depth || s.wait > 0) continue;
+      const n = s.hist.length;
+      let lastKey = -1;
+      for (let i = 0; i < n; i++) {
+        const px = Math.round(s.hist[i][0]), py = Math.round(s.hist[i][1]);
+        const key = py * 100000 + px;
+        if (key === lastKey) continue;
+        lastKey = key;
+        const f = i / n;
+        ctx.globalAlpha = base * (f < 0.3 ? 0.25 : f < 0.65 ? 0.55 : 1);
+        ctx.fillRect(px, py, 1, 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPad(p, t, w) {
+    const sway = p.amp * MOTION * (0.3 * w + 0.7 * w * Math.sin(t * p.freq + p.phase));
+    let start = 0;
+    let prevOff = null;
+    // Shear: the crown of each pad moves further than its base, and rows with equal offsets are blitted together.
+    for (let y = 0; y <= p.h; y++) {
+      const off = y < p.h ? Math.round(sway * (0.25 + 0.75 * (1 - y / p.h))) : null;
+      if (y > 0 && off !== prevOff) {
+        const rows = y - start;
+        ctx.drawImage(p.canvas, 0, start, p.w, rows, ox + p.x0 + prevOff, oy + p.y0 + start, p.w, rows);
+        start = y;
+      }
+      prevOff = off;
+    }
+  }
+
+  function drawStars(t) {
+    ctx.fillStyle = PAL.star;
+    for (const s of stars) {
+      const a = s.base * (0.4 + 0.6 * Math.abs(Math.sin(t * s.f + s.p)));
+      ctx.globalAlpha = a < 0.25 ? 0.2 : a < 0.45 ? 0.45 : 0.8;
+      ctx.fillRect(s.x, s.y, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawClouds(dt, w) {
+    for (const c of clouds) {
+      c.x += c.speed * (0.4 + w) * dt * MOTION;
+      if (c.x > W) c.x = -c.sprite.width;
+      ctx.drawImage(c.sprite, Math.round(c.x), c.y);
+    }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+    last = now;
+    const t = now / 1000;
+    const w = windAt(t);
+
+    updateLeaves(dt, t, w);
+    updateStreaks(dt, w);
+
+    ctx.drawImage(bg, 0, 0);
+    drawStars(t);
+    drawClouds(dt, w);
+    drawStreaks(0);
+    drawLeaves(0);
+    ctx.drawImage(backBranchLayer, ox, oy);
+    for (const p of backPads) drawPad(p, t, w);
+    ctx.drawImage(staticLayer, ox, oy);
+    for (const p of frontPads) drawPad(p, t, w);
+    drawLeaves(1);
+    drawStreaks(1);
+
+    requestAnimationFrame(frame);
+  }
+
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resize, 80);
+  });
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f5f7;
+  --card: #ffffff;
+  --card-hover: #fafafa;
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --border: #e5e5ea;
+  --accent: #0071e3;
+  --accent-light: #0a84ff;
+  --green: #30d158;
+  --green-bg: rgba(48, 209, 88, 0.1);
+  --red: #ff453a;
+  --red-bg: rgba(255, 69, 58, 0.1);
+  --amber: #ffd60a;
+  --amber-bg: rgba(255, 214, 10, 0.1);
+  --purple: #bf5af2;
+  --orange: #ff9f0a;
+  --pink: #ff375f;
+  --teal: #64d2ff;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --transition: 0.25s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --card: #1c1c1e;
+    --card-hover: #2c2c2e;
+    --text: #f5f5f7;
+    --text-secondary: #a1a1a6;
+    --border: #38383a;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,0.4);
+  }
+}
+
+[data-theme="dark"] {
+  --bg: #000000;
+  --card: #1c1c1e;
+  --card-hover: #2c2c2e;
+  --text: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --border: #38383a;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+[data-theme="light"] {
+  --bg: #f5f5f7;
+  --card: #ffffff;
+  --card-hover: #fafafa;
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --border: #e5e5ea;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+html { font-size: 16px; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--transition), color var(--transition);
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.header-left { display: flex; align-items: baseline; gap: 14px; }
+.header h1 {
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.header-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+.header-controls { display: flex; align-items: center; gap: 10px; }
+.month-select {
+  appearance: none;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 36px 8px 14px;
+  font-size: 0.9rem;
+  font-family: var(--font);
+  font-weight: 500;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%236e6e73' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color var(--transition);
+}
+.month-select:focus { outline: none; border-color: var(--accent); }
+.theme-toggle {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--transition), border-color var(--transition);
+  flex-shrink: 0;
+}
+.theme-toggle:hover { background: var(--card-hover); }
+.theme-toggle svg { width: 20px; height: 20px; }
+
+/* ── KPI Cards ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card:hover { box-shadow: var(--shadow-lg); }
+.kpi-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 8px;
+}
+.kpi-change {
+  font-size: 0.78rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.kpi-change.up { color: var(--green); background: var(--green-bg); }
+.kpi-change.down { color: var(--red); background: var(--red-bg); }
+.kpi-change.neutral { color: var(--text-secondary); background: rgba(110,110,115,0.08); }
+.kpi-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 14px;
+}
+.kpi-icon svg { width: 18px; height: 18px; }
+
+/* ── Section titles ── */
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+  letter-spacing: -0.02em;
+}
+
+/* ── Charts row ── */
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.chart-card canvas { display: block; }
+
+/* ── Budget section ── */
+.budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.budget-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.budget-category {
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.budget-amounts {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.budget-bar-bg {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.budget-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+.budget-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ── Transactions ── */
+.tx-list { display: flex; flex-direction: column; gap: 2px; }
+.tx-item {
+  display: flex;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: 14px 18px;
+  gap: 14px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.tx-item:first-child { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.tx-item:last-child { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.tx-item:only-child { border-radius: var(--radius-sm); }
+.tx-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.05rem;
+}
+.tx-info { flex: 1; min-width: 0; }
+.tx-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tx-meta {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.tx-amount {
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+}
+.tx-amount.income { color: var(--green); }
+.tx-amount.expense { color: var(--text); }
+
+/* ── Tooltip ── */
+.tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.8rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  max-width: 220px;
+  line-height: 1.45;
+}
+.tooltip.show { opacity: 1; }
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-row { grid-template-columns: 1fr; }
+  .header h1 { font-size: 1.35rem; }
+  .kpi-value { font-size: 1.45rem; }
+}
+@media (max-width: 520px) {
+  .container { padding: 16px 12px 36px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kpi-card { padding: 14px; }
+  .kpi-value { font-size: 1.3rem; }
+  .charts-row { gap: 12px; }
+  .chart-card { padding: 14px; }
+  .budget-grid { grid-template-columns: 1fr; }
+  .tx-item { padding: 12px; }
+  .header { margin-bottom: 20px; }
+}
+@media (max-width: 380px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <h1>Dashboard</h1>
+      <span class="header-subtitle">Personal Finance</span>
+    </div>
+    <div class="header-controls">
+      <select class="month-select" id="monthSelect"></select>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- KPI Cards -->
+  <section class="kpi-grid" id="kpiGrid"></section>
+
+  <!-- Charts -->
+  <h2 class="section-title">Spending Breakdown</h2>
+  <section class="charts-row">
+    <div class="chart-card">
+      <canvas id="donutChart" width="300" height="300"></canvas>
+    </div>
+    <div class="chart-card">
+      <canvas id="barChart" width="600" height="300"></canvas>
+    </div>
+  </section>
+
+  <!-- Budget Progress -->
+  <h2 class="section-title">Budget Progress</h2>
+  <section class="budget-grid" id="budgetGrid"></section>
+
+  <!-- Transactions -->
+  <h2 class="section-title">Recent Transactions</h2>
+  <section class="tx-list" id="txList"></section>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ── Data ──
+const MONTHS = ['March 2025','April 2025','May 2025','June 2025','July 2025','August 2025'];
+const MONTH_KEYS = ['2025-03','2025-04','2025-05','2025-06','2025-07','2025-08'];
+
+const DATA = {
+  monthly: {
+    '2025-03': { balance: 5240.12, income: 6200.00, spending: 3180.50, savingsRate: 48.7 },
+    '2025-04': { balance: 6520.80, income: 6200.00, spending: 4920.12, savingsRate: 20.6 },
+    '2025-05': { balance: 7180.45, income: 6700.00, spending: 6039.35, savingsRate: 9.9 },
+    '2025-06': { balance: 8450.30, income: 7100.00, spending: 5830.15, savingsRate: 17.9 },
+    '2025-07': { balance: 9380.60, income: 6200.00, spending: 5270.30, savingsRate: 15.0 },
+    '2025-08': { balance: 10650.25, income: 6200.00, spending: 4929.65, savingsRate: 20.3 },
+  },
+  categories: {
+    '2025-03': { 'Food & Dining': 720.30, Transport: 280.00, Shopping: 650.00, Entertainment: 340.00, Utilities: 185.20, Health: 200.00, Other: 805.00 },
+    '2025-04': { 'Food & Dining': 980.50, Transport: 310.00, Shopping: 1200.00, Entertainment: 420.00, Utilities: 210.62, Health: 150.00, Other: 649.00 },
+    '2025-05': { 'Food & Dining': 870.20, Transport: 290.00, Shopping: 1500.00, Entertainment: 530.00, Utilities: 240.15, Health: 320.00, Other: 2419.00 },
+    '2025-06': { 'Food & Dining': 790.40, Transport: 260.00, Shopping: 980.00, Entertainment: 380.00, Utilities: 195.75, Health: 270.00, Other: 1953.00 },
+    '2025-07': { 'Food & Dining': 810.60, Transport: 300.00, Shopping: 870.00, Entertainment: 350.00, Utilities: 188.30, Health: 180.00, Other: 1371.40 },
+    '2025-08': { 'Food & Dining': 845.30, Transport: 275.00, Shopping: 720.00, Entertainment: 310.00, Utilities: 192.35, Health: 230.00, Other: 1357.00 },
+  },
+  budgets: {
+    'Food & Dining': 900,
+    Transport: 400,
+    Shopping: 800,
+    Entertainment: 500,
+    Utilities: 250,
+    Health: 300,
+  },
+  transactions: [
+    { date: '2025-08-28', name: 'Whole Foods Market', category: 'Food & Dining', amount: -87.43, icon: '🛒' },
+    { date: '2025-08-27', name: 'Uber Ride', category: 'Transport', amount: -24.50, icon: '🚗' },
+    { date: '2025-08-27', name: 'Netflix Subscription', category: 'Entertainment', amount: -15.99, icon: '🎬' },
+    { date: '2025-08-26', name: 'Salary Deposit', category: 'Income', amount: 3100.00, icon: '💰' },
+    { date: '2025-08-26', name: 'Amazon Purchase', category: 'Shopping', amount: -134.99, icon: '📦' },
+    { date: '2025-08-25', name: 'City Light & Power', category: 'Utilities', amount: -96.18, icon: '⚡' },
+    { date: '2025-08-25', name: 'Starbucks', category: 'Food & Dining', amount: -6.75, icon: '☕' },
+    { date: '2025-08-24', name: 'Freelance Payment', category: 'Income', amount: 3100.00, icon: '💻' },
+    { date: '2025-08-24', name: 'CVS Pharmacy', category: 'Health', amount: -32.50, icon: '💊' },
+    { date: '2025-08-23', name: 'Chipotle', category: 'Food & Dining', amount: -13.20, icon: '🌮' },
+    { date: '2025-08-22', name: 'Spotify Premium', category: 'Entertainment', amount: -10.99, icon: '🎵' },
+    { date: '2025-08-22', name: 'Target', category: 'Shopping', amount: -67.43, icon: '🏷️' },
+    { date: '2025-08-21', name: 'Gas Station', category: 'Transport', amount: -48.30, icon: '⛽' },
+    { date: '2025-08-20', name: 'Trader Joe\'s', category: 'Food & Dining', amount: -54.12, icon: '🛒' },
+    { date: '2025-08-20', name: 'Dry Cleaner', category: 'Other', amount: -22.00, icon: '👔' },
+    { date: '2025-08-19', name: 'Landlord Payment', category: 'Other', amount: -1200.00, icon: '🏠' },
+    { date: '2025-08-18', name: 'Sushi Restaurant', category: 'Food & Dining', amount: -42.80, icon: '🍣' },
+    { date: '2025-08-17', name: 'Walgreens', category: 'Health', amount: -18.75, icon: '🏥' },
+    { date: '2025-08-16', name: 'Movie Theater', category: 'Entertainment', amount: -28.00, icon: '🎥' },
+    { date: '2025-08-15', name: 'Nike Store', category: 'Shopping', amount: -89.95, icon: '👟' },
+  ]
+};
+
+const CATEGORY_COLORS = {
+  'Food & Dining': '#30d158',
+  Transport: '#0a84ff',
+  Shopping: '#bf5af2',
+  Entertainment: '#ff9f0a',
+  Utilities: '#64d2ff',
+  Health: '#ff375f',
+  Other: '#a1a1a6',
+  Income: '#30d158',
+};
+
+const CATEGORY_BG = {
+  'Food & Dining': 'rgba(48,209,88,0.12)',
+  Transport: 'rgba(10,132,255,0.12)',
+  Shopping: 'rgba(191,90,242,0.12)',
+  Entertainment: 'rgba(255,159,10,0.12)',
+  Utilities: 'rgba(100,210,255,0.12)',
+  Health: 'rgba(255,55,95,0.12)',
+  Other: 'rgba(161,161,170,0.12)',
+  Income: 'rgba(48,209,88,0.12)',
+};
+
+// ── Helpers ──
+const fmt = n => {
+  const abs = Math.abs(n);
+  const s = abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n < 0 ? '-$' : '$') + s;
+};
+const fmtPct = n => n.toFixed(1) + '%';
+const catColor = c => CATEGORY_COLORS[c] || '#a1a1a6';
+const catBg = c => CATEGORY_BG[c] || 'rgba(161,161,170,0.12)';
+
+// ── Theme ──
+const toggle = document.getElementById('themeToggle');
+const icon = document.getElementById('themeIcon');
+let theme = localStorage.getItem('theme');
+if (!theme) {
+  theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  localStorage.setItem('theme', theme);
+}
+document.documentElement.setAttribute('data-theme', theme);
+updateThemeIcon();
+
+toggle.addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  updateThemeIcon();
+  drawDonut();
+  drawBar();
+});
+
+function updateThemeIcon() {
+  if (theme === 'dark') {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  } else {
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+  }
+}
+
+// ── Month Selector ──
+const select = document.getElementById('monthSelect');
+let selectedIdx = 5; // last month (August)
+MONTHS.forEach((m, i) => { const o = document.createElement('option'); o.value = i; o.textContent = m; select.appendChild(o); });
+select.value = 5;
+select.addEventListener('change', () => { selectedIdx = parseInt(select.value); renderAll(); });
+
+// ── KPI Cards ──
+function renderKPIs() {
+  const grid = document.getElementById('kpiGrid');
+  const cur = DATA.monthly[MONTH_KEYS[selectedIdx]];
+  const prev = selectedIdx > 0 ? DATA.monthly[MONTH_KEYS[selectedIdx - 1]] : cur;
+
+  const cards = [
+    {
+      label: 'Balance',
+      value: fmt(cur.balance),
+      change: prev.balance !== 0 ? ((cur.balance - prev.balance) / prev.balance * 100) : 0,
+      up: true,
+      bg: 'rgba(10,132,255,0.12)',
+      color: '#0a84ff',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>'
+    },
+    {
+      label: 'Income',
+      value: fmt(cur.income),
+      change: prev.income !== 0 ? ((cur.income - prev.income) / prev.income * 100) : 0,
+      up: true,
+      bg: 'rgba(48,209,88,0.12)',
+      color: '#30d158',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
+    },
+    {
+      label: 'Spending',
+      value: fmt(cur.spending),
+      change: prev.spending !== 0 ? ((cur.spending - prev.spending) / prev.spending * 100) : 0,
+      up: false,
+      bg: 'rgba(255,55,95,0.12)',
+      color: '#ff375f',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
+    },
+    {
+      label: 'Savings Rate',
+      value: fmtPct(cur.savingsRate),
+      change: cur.savingsRate - prev.savingsRate,
+      up: true,
+      bg: 'rgba(255,214,10,0.12)',
+      color: '#ffd60a',
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+    }
+  ];
+
+  grid.innerHTML = cards.map(c => {
+    const diff = c.change;
+    const changeLabel = diff >= 0 ? `↑ ${Math.abs(diff).toFixed(1)}%` : `↓ ${Math.abs(diff).toFixed(1)}%`;
+    const changeClass = diff > 0 ? (c.up ? 'up' : 'down') : diff < 0 ? (c.up ? 'down' : 'up') : 'neutral';
+    return `
+      <div class="kpi-card">
+        <div class="kpi-icon" style="background:${c.bg};color:${c.color}">${c.icon}</div>
+        <div class="kpi-label">${c.label}</div>
+        <div class="kpi-value">${c.value}</div>
+        <span class="kpi-change ${changeClass}">${changeLabel}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Donut Chart ──
+function drawDonut() {
+  const canvas = document.getElementById('donutChart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cats = DATA.categories[MONTH_KEYS[selectedIdx]];
+  const total = Object.values(cats).reduce((a, b) => a + b, 0);
+  const entries = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  const cx = W / 2, cy = H / 2 - 10;
+  const outerR = Math.min(W, H) / 2 - 30;
+  const innerR = outerR * 0.62;
+
+  let startAngle = -Math.PI / 2;
+  const slices = [];
+
+  entries.forEach(([cat, val]) => {
+    const sliceAngle = (val / total) * Math.PI * 2;
+    const endAngle = startAngle + sliceAngle;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, startAngle, endAngle);
+    ctx.arc(cx, cy, innerR, endAngle, startAngle, true);
+    ctx.closePath();
+    ctx.fillStyle = catColor(cat);
+    ctx.fill();
+
+    slices.push({ cat, val, pct: val / total * 100, start: startAngle, end: endAngle });
+    startAngle = endAngle;
+  });
+
+  // Center text
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+  ctx.font = '700 22px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(fmt(total), cx, cy - 6);
+  ctx.font = '500 12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+  ctx.fillText('Total Spending', cx, cy + 16);
+
+  // Legend
+  const legendY = H - 30;
+  const legendItemW = W / 3;
+  entries.slice(0, 6).forEach(([cat, val], i) => {
+    const lx = legendItemW * i + legendItemW / 2;
+    ctx.fillStyle = catColor(cat);
+    ctx.beginPath();
+    ctx.arc(lx - 20, legendY + 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+    ctx.font = '500 10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(cat, lx - 13, legendY + 5);
+  });
+
+  // Hover
+  canvas.onmousemove = e => {
+    const r2 = canvas.getBoundingClientRect();
+    const mx = e.clientX - r2.left, my = e.clientY - r2.top;
+    const dx = mx - cx, dy = my - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+    const normAngle = angle < -Math.PI / 2 ? angle + Math.PI * 2 : angle;
+
+    if (dist >= innerR && dist <= outerR) {
+      const hit = slices.find(s => {
+        const a = normAngle < s.start ? normAngle + Math.PI * 2 : normAngle;
+        return a >= s.start && a <= s.end;
+      });
+      if (hit) {
+        showTooltip(e.clientX, e.clientY, `${hit.cat}<br><strong>${fmt(hit.val)}</strong><br>${hit.pct.toFixed(1)}%`);
+        return;
+      }
+    }
+    hideTooltip();
+  };
+  canvas.onmouseleave = hideTooltip;
+}
+
+// ── Bar Chart ──
+function drawBar() {
+  const canvas = document.getElementById('barChart');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = { top: 20, right: 20, bottom: 40, left: 60 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  const maxVal = Math.max(...MONTH_KEYS.map(k => Math.max(DATA.monthly[k].income, DATA.monthly[k].spending))) * 1.15;
+
+  // Grid lines
+  const gridLines = 5;
+  ctx.font = '500 11px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= gridLines; i++) {
+    const y = pad.top + ch - (i / gridLines) * ch;
+    const val = (i / gridLines) * maxVal;
+    ctx.fillText(fmt(val).replace('.00', ''), pad.left - 8, y);
+    ctx.beginPath();
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--border').trim();
+    ctx.lineWidth = 1;
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(W - pad.right, y);
+    ctx.stroke();
+  }
+
+  const groupW = cw / MONTH_KEYS.length;
+  const barW = groupW * 0.28;
+  const gap = 4;
+  const bars = [];
+
+  MONTH_KEYS.forEach((key, i) => {
+    const d = DATA.monthly[key];
+    const gx = pad.left + i * groupW + groupW / 2;
+
+    // Income bar
+    const incH = (d.income / maxVal) * ch;
+    const incX = gx - barW - gap / 2;
+    const incY = pad.top + ch - incH;
+    ctx.fillStyle = '#30d158';
+    roundRect(ctx, incX, incY, barW, incH, 4);
+
+    // Spending bar
+    const spdH = (d.spending / maxVal) * ch;
+    const spdX = gx + gap / 2;
+    const spdY = pad.top + ch - spdH;
+    ctx.fillStyle = '#ff375f';
+    roundRect(ctx, spdX, spdY, barW, spdH, 4);
+
+    bars.push(
+      { x: incX, y: incY, w: barW, h: incH, label: 'Income', value: d.income },
+      { x: spdX, y: spdY, w: barW, h: spdH, label: 'Spending', value: d.spending }
+    );
+
+    // X label
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = '500 11px -apple-system, BlinkMacSystemFont, sans-serif';
+    const monthShort = key.split('-')[1];
+    ctx.fillText('Mon ' + monthShort, gx, H - pad.bottom + 10);
+  });
+
+  // Legend
+  const legendY = 8;
+  ctx.fillStyle = '#30d158';
+  ctx.beginPath(); ctx.arc(pad.left + 8, legendY + 4, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+  ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Income', pad.left + 18, legendY);
+
+  ctx.fillStyle = '#ff375f';
+  ctx.beginPath(); ctx.arc(pad.left + 70, legendY + 4, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+  ctx.fillText('Spending', pad.left + 80, legendY);
+
+  // Hover
+  canvas.onmousemove = e => {
+    const r2 = canvas.getBoundingClientRect();
+    const mx = e.clientX - r2.left, my = e.clientY - r2.top;
+    const hit = bars.find(b => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+    if (hit) {
+      showTooltip(e.clientX, e.clientY, `${hit.label} — ${MONTHS[selectedIdx]}<br><strong>${fmt(hit.value)}</strong>`);
+      return;
+    }
+    hideTooltip();
+  };
+  canvas.onmouseleave = hideTooltip;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  if (h < 1) return;
+  r = Math.min(r, h / 2, w / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ── Budget Progress ──
+function renderBudgets() {
+  const grid = document.getElementById('budgetGrid');
+  const cats = DATA.categories[MONTH_KEYS[selectedIdx]];
+  const budgets = DATA.budgets;
+
+  grid.innerHTML = Object.entries(budgets).map(([cat, budget]) => {
+    const spent = cats[cat] || 0;
+    const pct = Math.min((spent / budget) * 100, 100);
+    const over = spent > budget;
+    const near = pct >= 80 && !over;
+    const color = over ? '#ff453a' : near ? '#ffd60a' : catColor(cat);
+    const statusText = over ? 'Over budget' : near ? 'Near limit' : 'On track';
+
+    return `
+      <div class="budget-card">
+        <div class="budget-header">
+          <div class="budget-category"><span style="font-size:1.1em">${DATA.transactions.find(t => t.category === cat)?.icon || '📋'}</span> ${cat}</div>
+          <div class="budget-amounts">${fmt(spent)} / ${fmt(budget)}</div>
+        </div>
+        <div class="budget-bar-bg"><div class="budget-bar" style="width:${pct}%;background:${color}"></div></div>
+        <div class="budget-status" style="color:${color}">${statusText}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Transactions ──
+function renderTransactions() {
+  const list = document.getElementById('txList');
+  list.innerHTML = DATA.transactions.map(t => {
+    const isIncome = t.amount > 0;
+    const dateStr = new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `
+      <div class="tx-item">
+        <div class="tx-icon" style="background:${catBg(t.category)}">${t.icon}</div>
+        <div class="tx-info">
+          <div class="tx-name">${t.name}</div>
+          <div class="tx-meta">${t.category} · ${dateStr}</div>
+        </div>
+        <div class="tx-amount ${isIncome ? 'income' : 'expense'}">${isIncome ? '+' : ''}${fmt(t.amount)}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Tooltip ──
+const tooltipEl = document.getElementById('tooltip');
+function showTooltip(x, y, html) {
+  tooltipEl.innerHTML = html;
+  tooltipEl.classList.add('show');
+  const tw = tooltipEl.offsetWidth, th = tooltipEl.offsetHeight;
+  let tx = x + 14, ty = y - th - 8;
+  if (tx + tw > window.innerWidth - 10) tx = x - tw - 14;
+  if (ty < 10) ty = y + 14;
+  tooltipEl.style.left = tx + 'px';
+  tooltipEl.style.top = ty + 'px';
+}
+function hideTooltip() { tooltipEl.classList.remove('show'); }
+
+// ── Render All ──
+function renderAll() {
+  renderKPIs();
+  drawDonut();
+  drawBar();
+  renderBudgets();
+  renderTransactions();
+}
+
+renderAll();
+window.addEventListener('resize', () => { drawDonut(); drawBar(); });
+</script>
+</body>
+</html>

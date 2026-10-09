@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Art Lighthouse</title>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a1a;
+}
+
+canvas {
+  display: block;
+  margin: 0 auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// --- Internal resolution (pixel art scale) ---
+const W = 320;
+const H = 240;
+canvas.width = W;
+canvas.height = H;
+
+// --- Palette ---
+const C = {
+  sky1: '#0b0e2a',
+  sky2: '#151b3d',
+  sky3: '#1f2650',
+  moon: '#e8e4c8',
+  moonGlow: '#f5f0d0',
+  cloud1: '#2a2e4a',
+  cloud2: '#353a5c',
+  cloud3: '#40466a',
+  star: '#d0d4f0',
+  sea1: '#0a1628',
+  sea2: '#0f2040',
+  sea3: '#152e50',
+  seaFoam: '#5a8ab0',
+  rock1: '#2a2a30',
+  rock2: '#3a3a42',
+  rock3: '#4a4a52',
+  rockShadow: '#1a1a20',
+  tower: '#d8d4c0',
+  towerShadow: '#b0aca0',
+  stripe: '#8b2020',
+  stripeShadow: '#6a1818',
+  lantern: '#f0c040',
+  lanternGlow: '#ffe080',
+  house: '#7a7060',
+  houseShadow: '#5a5040',
+  roof: '#5a4030',
+  window: '#ffe090',
+  windowDark: '#3a3020',
+  rain: '#6080a0',
+  rainSplash: '#90b0d0',
+  grass: '#2a4a2a',
+  grassLight: '#3a6a3a',
+};
+
+// --- State ---
+let t = 0;
+const stars = [];
+for (let i = 0; i < 60; i++) {
+  stars.push({
+    x: Math.random() * W,
+    y: Math.random() * H * 0.45,
+    speed: 0.3 + Math.random() * 1.5,
+    phase: Math.random() * Math.PI * 2,
+  });
+}
+
+const clouds = [];
+for (let i = 0; i < 5; i++) {
+  clouds.push({
+    x: Math.random() * (W + 80) - 40,
+    y: 15 + Math.random() * 40,
+    w: 25 + Math.random() * 35,
+    speed: 0.15 + Math.random() * 0.2,
+  });
+}
+
+const raindrops = [];
+for (let i = 0; i < 120; i++) {
+  raindrops.push({
+    x: Math.random() * (W + 40) - 20,
+    y: Math.random() * H,
+    speed: 3.5 + Math.random() * 2.5,
+    len: 3 + Math.floor(Math.random() * 4),
+  });
+}
+
+const waves = [];
+for (let i = 0; i < 8; i++) {
+  waves.push({
+    y: 148 + i * 7,
+    speed: 0.4 + Math.random() * 0.4,
+    amp: 1 + Math.floor(Math.random() * 2),
+    phase: Math.random() * Math.PI * 2,
+    alpha: 0.3 + (i / 8) * 0.5,
+  });
+}
+
+const foamParticles = [];
+for (let i = 0; i < 20; i++) {
+  foamParticles.push({
+    x: 130 + Math.random() * 60,
+    y: 142 + Math.random() * 10,
+    vx: (Math.random() - 0.5) * 0.8,
+    vy: -Math.random() * 0.5,
+    life: Math.random(),
+    maxLife: 0.5 + Math.random() * 1,
+  });
+}
+
+// --- Resize handling ---
+function resize() {
+  const ratio = W / H;
+  let cw = window.innerWidth;
+  let ch = window.innerHeight;
+  if (cw / ch > ratio) {
+    cw = ch * ratio;
+  } else {
+    ch = cw / ratio;
+  }
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+// --- Drawing helpers ---
+function drawRect(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+}
+
+function drawCircle(x, y, r, color) {
+  ctx.fillStyle = color;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        ctx.fillRect(Math.floor(x + dx), Math.floor(y + dy), 1, 1);
+      }
+    }
+  }
+}
+
+// --- Sky gradient ---
+function drawSky() {
+  for (let y = 0; y < H; y++) {
+    const t2 = y / H;
+    let r, g, b;
+    if (t2 < 0.5) {
+      const s = t2 * 2;
+      r = Math.floor(11 + s * 8);
+      g = Math.floor(14 + s * 8);
+      b = Math.floor(42 + s * 20);
+    } else {
+      const s = (t2 - 0.5) * 2;
+      r = Math.floor(19 + s * 5);
+      g = Math.floor(22 + s * 6);
+      b = Math.floor(62 + s * 10);
+    }
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(0, y, W, 1);
+  }
+}
+
+// --- Stars ---
+function drawStars() {
+  for (const s of stars) {
+    const brightness = 0.4 + 0.6 * Math.abs(Math.sin(t * s.speed + s.phase));
+    if (brightness > 0.6) {
+      ctx.fillStyle = `rgba(208,212,240,${brightness})`;
+      ctx.fillRect(Math.floor(s.x), Math.floor(s.y), 1, 1);
+    }
+  }
+}
+
+// --- Moon ---
+function drawMoon() {
+  const mx = 240, my = 30, mr = 12;
+  // Glow
+  for (let r = 20; r >= 2; r -= 2) {
+    const alpha = 0.06 * (1 - r / 20);
+    drawCircle(mx, my, r, `rgba(245,240,208,${alpha})`);
+  }
+  // Moon body
+  for (let dy = -mr; dy <= mr; dy++) {
+    for (let dx = -mr; dx <= mr; dx++) {
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= mr) {
+        let c = C.moon;
+        // Craters
+        if (dist < mr - 1) {
+          const cx = dx + 3, cy = dy - 2;
+          if (cx * cx + cy * cy < 9) c = C.moonGlow;
+          const cx2 = dx - 4, cy2 = dy + 3;
+          if (cx2 * cx2 + cy2 * cy2 < 4) c = '#d0ccb0';
+        }
+        ctx.fillStyle = c;
+        ctx.fillRect(mx + dx, my + dy, 1, 1);
+      }
+    }
+  }
+  // Crescent shadow
+  for (let dy = -mr; dy <= mr; dy++) {
+    for (let dx = -mr; dx <= mr; dx++) {
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= mr && dist > mr - 2) {
+        if (dx > 2) {
+          ctx.fillStyle = 'rgba(10,14,42,0.3)';
+          ctx.fillRect(mx + dx, my + dy, 1, 1);
+        }
+      }
+    }
+  }
+}
+
+// --- Clouds ---
+function drawCloud(cloud) {
+  const { x, y, w } = cloud;
+  const blocks = [
+    { dx: 0, dy: 0, w: 8, h: 3 },
+    { dx: -4, dy: 1, w: 6, h: 3 },
+    { dx: 4, dy: 1, w: 6, h: 3 },
+    { dx: -2, dy: -1, w: 5, h: 2 },
+    { dx: 3, dy: -1, w: 5, h: 2 },
+    { dx: 1, dy: 0, w: 7, h: 3 },
+    { dx: -6, dy: 2, w: 5, h: 2 },
+    { dx: 5, dy: 2, w: 5, h: 2 },
+  ];
+  for (const b of blocks) {
+    const px = Math.floor(x + b.dx * (w / 20));
+    const py = Math.floor(y + b.dy * (w / 20));
+    const pw = Math.max(1, Math.floor(b.w * w / 20));
+    const ph = Math.max(1, Math.floor(b.h * w / 20));
+    // Edge shading
+    for (let by = 0; by < ph; by++) {
+      for (let bx = 0; bx < pw; bx++) {
+        const edge = (bx === 0 || bx === pw - 1 || by === 0 || by === ph - 1);
+        ctx.fillStyle = edge ? C.cloud3 : (Math.random() < 0.3 ? C.cloud2 : C.cloud1);
+        ctx.fillRect(px + bx, py + by, 1, 1);
+      }
+    }
+  }
+}
+
+// --- Sea ---
+function drawSea() {
+  // Base sea
+  for (let y = 150; y < H; y++) {
+    const t2 = (y - 150) / (H - 150);
+    let r, g, b;
+    if (t2 < 0.3) {
+      r = 10; g = 22; b = 40;
+    } else {
+      r = Math.floor(15 + (1 - t2) * 5);
+      g = Math.floor(30 + (1 - t2) * 8);
+      b = Math.floor(50 + (1 - t2) * 15);
+    }
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(0, y, W, 1);
+  }
+
+  // Wave lines
+  for (const wave of waves) {
+    for (let x = 0; x < W; x++) {
+      const wy = wave.y + Math.sin(x * 0.08 + t * wave.speed + wave.phase) * wave.amp;
+      const foam = Math.sin(x * 0.15 + t * wave.speed * 1.5 + wave.phase) > 0.7;
+      ctx.fillStyle = foam ? C.seaFoam : `rgba(21,46,80,${wave.alpha})`;
+      ctx.fillRect(x, Math.floor(wy), 1, 1);
+    }
+  }
+}
+
+// --- Rocks ---
+function drawRocks() {
+  const rockPoints = [
+    { x: 10, y: 145 }, { x: 20, y: 140 }, { x: 35, y: 135 },
+    { x: 50, y: 130 }, { x: 65, y: 125 }, { x: 75, y: 128 },
+    { x: 85, y: 122 }, { x: 95, y: 118 }, { x: 105, y: 120 },
+    { x: 110, y: 115 }, { x: 120, y: 110 }, { x: 130, y: 108 },
+    { x: 140, y: 110 }, { x: 145, y: 106 }, { x: 155, y: 105 },
+    { x: 165, y: 108 }, { x: 175, y: 110 }, { x: 185, y: 115 },
+    { x: 195, y: 112 }, { x: 205, y: 118 }, { x: 215, y: 122 },
+    { x: 225, y: 128 }, { x: 235, y: 130 }, { x: 245, y: 132 },
+    { x: 255, y: 135 }, { x: 265, y: 138 }, { x: 275, y: 140 },
+    { x: 285, y: 142 }, { x: 295, y: 144 }, { x: 310, y: 145 },
+  ];
+
+  // Fill rocks
+  for (let x = 0; x < W; x++) {
+    let baseY = 160;
+    for (let i = 0; i < rockPoints.length - 1; i++) {
+      if (x >= rockPoints[i].x && x < rockPoints[i + 1].x) {
+        const t2 = (x - rockPoints[i].x) / (rockPoints[i + 1].x - rockPoints[i].x);
+        baseY = rockPoints[i].y * (1 - t2) + rockPoints[i + 1].y * t2;
+        break;
+      }
+    }
+
+    for (let y = Math.floor(baseY); y < H; y++) {
+      const h = (y - baseY) / (H - baseY);
+      let r, g, b;
+      if (h < 0.2) {
+        r = 58; g = 58; b = 64; // rock3
+      } else if (h < 0.5) {
+        r = 48; g = 48; b = 54; // rock2
+      } else {
+        r = 30; g = 30; b = 34; // rock1
+      }
+      // Texture noise
+      const n = ((x * 7 + y * 13) % 5);
+      if (n === 0) { r -= 4; g -= 4; b -= 4; }
+      if (n === 1) { r += 3; g += 3; b += 3; }
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  // Rocky texture lines
+  for (let i = 0; i < 30; i++) {
+    const rx = 10 + (i * 11) % 290;
+    const ry = 120 + ((i * 7) % 30);
+    const rlen = 2 + (i % 3);
+    ctx.fillStyle = i % 2 === 0 ? '#1a1a20' : '#4a4a52';
+    ctx.fillRect(rx, ry, rlen, 1);
+    ctx.fillRect(rx + 1, ry - 1, 1, 1);
+  }
+
+  // Grass tufts on top
+  for (let x = 80; x < 210; x++) {
+    let baseY = 160;
+    for (let i = 0; i < rockPoints.length - 1; i++) {
+      if (x >= rockPoints[i].x && x < rockPoints[i + 1].x) {
+        const t2 = (x - rockPoints[i].x) / (rockPoints[i + 1].x - rockPoints[i].x);
+        baseY = rockPoints[i].y * (1 - t2) + rockPoints[i + 1].y * t2;
+        break;
+      }
+    }
+    if (x % 5 === 0) {
+      ctx.fillStyle = C.grass;
+      ctx.fillRect(x, Math.floor(baseY) - 2, 1, 2);
+      if (x % 10 === 0) {
+        ctx.fillStyle = C.grassLight;
+        ctx.fillRect(x, Math.floor(baseY) - 3, 1, 1);
+      }
+    }
+  }
+}
+
+// --- Lighthouse Tower ---
+function drawTower() {
+  const tx = 130, tw = 22, baseY = 110, topY = 38;
+
+  // Tower body (tapered)
+  for (let y = topY; y <= baseY; y++) {
+    const progress = (y - topY) / (baseY - topY);
+    const w = Math.floor(tw - progress * 6);
+    const x = tx - Math.floor(w / 2);
+
+    // Stripe pattern (alternating every ~12 pixels in y)
+    const stripePhase = Math.floor(y / 12) % 2;
+    for (let xx = 0; xx < w; xx++) {
+      const relX = xx / w;
+      const isStripe = stripePhase === 0;
+      let r, g, b;
+      if (isStripe) {
+        r = 139; g = 32; b = 32; // stripe
+        // Shading: darker on edges
+        if (relX < 0.15 || relX > 0.85) { r -= 20; g -= 8; b -= 8; }
+        if (relX > 0.4 && relX < 0.6) { r += 8; g += 4; b += 4; }
+      } else {
+        r = 216; g = 212; b = 192; // tower
+        if (relX < 0.15 || relX > 0.85) { r -= 30; g -= 32; b -= 24; }
+        if (relX > 0.4 && relX < 0.6) { r += 10; g += 8; b += 4; }
+      }
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x + xx, y, 1, 1);
+    }
+  }
+
+  // Door
+  drawRect(138, 100, 6, 10, C.windowDark);
+  drawRect(139, 101, 4, 3, '#4a3020');
+  // Door arch
+  ctx.fillStyle = C.windowDark;
+  ctx.fillRect(138, 100, 6, 1);
+  ctx.fillRect(137, 100, 1, 1);
+  ctx.fillRect(144, 100, 1, 1);
+
+  // Small window
+  drawRect(137, 65, 6, 7, C.windowDark);
+  drawRect(138, 66, 4, 5, C.window);
+  // Window cross
+  drawRect(139, 66, 2, 5, C.windowDark);
+  drawRect(138, 68, 4, 1, C.windowDark);
+}
+
+// --- Lantern Room ---
+function drawLantern() {
+  const lx = 126, ly = 24, lw = 30, lh = 16;
+
+  // Railing around top
+  ctx.fillStyle = '#4a4a50';
+  // Base rail
+  drawRect(lx - 2, ly - 2, lw + 4, 2, '#3a3a40');
+  // Posts
+  for (let px = 0; px < 5; px++) {
+    ctx.fillRect(lx - 2 + px * 7, ly - 6, 1, 4);
+  }
+  // Top rail
+  drawRect(lx - 2, ly - 6, lw + 4, 2, '#3a3a40');
+
+  // Lantern room walls (glass)
+  for (let y = ly; y < ly + lh; y++) {
+    for (let x = lx; x < lx + lw; x++) {
+      const relX = (x - lx) / lw;
+      // Glass with warm glow
+      let r = 200, g = 180, b = 80;
+      if (relX < 0.1 || relX > 0.9) { r = 60; g = 55; b = 40; } // frame
+      else {
+        // Inner glow
+        const glow = 0.7 + 0.3 * Math.sin(t * 3 + x * 0.3);
+        r = Math.floor(240 * glow);
+        g = Math.floor(200 * glow);
+        b = Math.floor(60 * glow);
+      }
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  // Lantern roof (dome)
+  const roofCX = lx + lw / 2, roofCY = ly;
+  for (let dy = -4; dy <= 0; dy++) {
+    const rowW = Math.floor(4 * Math.sqrt(1 - (dy * dy) / 16));
+    for (let dx = -rowW; dx <= rowW; dx++) {
+      const edge = Math.abs(dx) === rowW;
+      ctx.fillStyle = edge ? '#3a3020' : C.roof;
+      ctx.fillRect(roofCX + dx - 1, roofCY + dy, 1, 1);
+    }
+  }
+  // Dome top ornament
+  ctx.fillStyle = '#5a4a30';
+  ctx.fillRect(roofCX - 1, roofCY - 6, 3, 2);
+  ctx.fillStyle = '#7a6a40';
+  ctx.fillRect(roofCX, roofCY - 7, 1, 1);
+
+  // Light glow inside lantern
+  for (let r = 6; r >= 1; r--) {
+    const alpha = 0.15 * (1 - r / 6);
+    drawCircle(lx + lw / 2, ly + lh / 2, r, `rgba(255,224,128,${alpha})`);
+  }
+}
+
+// --- Light Beam ---
+function drawLightBeam() {
+  const cx = 126 + 15, cy = 24 + 8;
+  const angle = t * 0.5; // slow sweep
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  // Main beam (wide cone)
+  const beamLen = 180;
+  for (let i = 0; i < 12; i++) {
+    const spread = i * 0.04;
+    const len = beamLen - i * 8;
+    const alpha = 0.08 * (1 - i / 12);
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(len, -Math.floor(len * spread * 0.3));
+    ctx.lineTo(len, Math.floor(len * spread * 0.3));
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255,240,160,${alpha})`;
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Opposite beam
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle + Math.PI);
+
+  for (let i = 0; i < 12; i++) {
+    const spread = i * 0.04;
+    const len = beamLen - i * 8;
+    const alpha = 0.08 * (1 - i / 12);
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(len, -Math.floor(len * spread * 0.3));
+    ctx.lineTo(len, Math.floor(len * spread * 0.3));
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255,240,160,${alpha})`;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// --- Keeper's House ---
+function drawHouse() {
+  const hx = 88, hy = 108, hw = 28, hh = 22;
+
+  // Walls
+  for (let y = hy; y < hy + hh; y++) {
+    for (let x = hx; x < hx + hw; x++) {
+      const relX = (x - hx) / hw;
+      let r = 122, g = 112, b = 96;
+      if (relX < 0.08 || relX > 0.92) { r -= 24; g -= 24; b -= 24; }
+      if ((x + y) % 4 === 0) { r -= 3; g -= 3; b -= 3; } // brick texture
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  // Roof
+  const ry = hy - 8;
+  for (let dy = 0; dy < 8; dy++) {
+    const rowW = Math.floor((hw + 8) * (1 - dy / 8));
+    const startX = hx + hw / 2 - Math.floor(rowW / 2) - 2;
+    for (let dx = 0; dx < rowW; dx++) {
+      const edge = dx === 0 || dx === rowW - 1 || dy === 0;
+      ctx.fillStyle = edge ? '#3a2a1a' : '#6a4a3a';
+      ctx.fillRect(startX + dx, ry + 7 - dy, 1, 1);
+    }
+  }
+
+  // House window
+  drawRect(hx + 6, hy + 6, 8, 8, C.windowDark);
+  drawRect(hx + 7, hy + 7, 6, 6, C.window);
+  drawRect(hx + 9, hy + 7, 1, 6, C.windowDark);
+  drawRect(hx + 7, hy + 9, 6, 1, C.windowDark);
+
+  // House door
+  drawRect(hx + 18, hy + 12, 6, 10, C.windowDark);
+  drawRect(hx + 19, hy + 13, 4, 4, '#6a5030');
+}
+
+// --- Rain ---
+function drawRain() {
+  for (const drop of raindrops) {
+    // Main drop
+    ctx.fillStyle = C.rain;
+    ctx.fillRect(Math.floor(drop.x), Math.floor(drop.y), 1, drop.len);
+
+    // Brighter tip
+    if (drop.len > 3) {
+      ctx.fillStyle = C.rainSplash;
+      ctx.fillRect(Math.floor(drop.x), Math.floor(drop.y + drop.len - 1), 1, 1);
+    }
+  }
+}
+
+// --- Foam particles ---
+function drawFoam() {
+  for (const fp of foamParticles) {
+    const alpha = fp.life / fp.maxLife;
+    ctx.fillStyle = `rgba(180,210,230,${alpha * 0.6})`;
+    ctx.fillRect(Math.floor(fp.x), Math.floor(fp.y), 1, 1);
+    if (alpha > 0.3) {
+      ctx.fillStyle = `rgba(200,225,240,${alpha * 0.4})`;
+      ctx.fillRect(Math.floor(fp.x) - 1, Math.floor(fp.y), 1, 1);
+      ctx.fillRect(Math.floor(fp.x) + 1, Math.floor(fp.y), 1, 1);
+    }
+  }
+}
+
+// --- Wave break at rocks ---
+function drawWaveBreak() {
+  const breakX = 95 + Math.sin(t * 1.2) * 5;
+  const breakY = 122;
+
+  // Splash spray
+  for (let i = 0; i < 8; i++) {
+    const sx = breakX + Math.sin(t * 2 + i * 0.8) * 4;
+    const sy = breakY - i * 2 + Math.sin(t * 3 + i) * 1.5;
+    const alpha = 0.4 - i * 0.04;
+    ctx.fillStyle = `rgba(180,210,230,${alpha})`;
+    ctx.fillRect(Math.floor(sx), Math.floor(sy), 1 + (i % 2), 1);
+  }
+
+  // Foam line along rock edge
+  for (let x = 80; x < 150; x += 2) {
+    const foamY = 122 + Math.sin(x * 0.3 + t * 2) * 2;
+    const intensity = Math.sin(x * 0.5 + t * 1.5) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(160,200,220,${intensity * 0.5})`;
+    ctx.fillRect(x, Math.floor(foamY), 2, 1);
+  }
+}
+
+// --- Lightning flash (occasional) ---
+let lastFlash = -50;
+function drawFlash() {
+  if (t - lastFlash > 400 + Math.random() * 600) {
+    lastFlash = t;
+  }
+  if (t < lastFlash + 8 && t > lastFlash) {
+    ctx.fillStyle = `rgba(200,200,240,${0.06 * (1 - (t - lastFlash) / 8)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// --- Scene composition ---
+function drawScene() {
+  ctx.clearRect(0, 0, W, H);
+
+  drawSky();
+  drawStars();
+  drawMoon();
+
+  // Clouds (behind lighthouse)
+  for (const cloud of clouds) {
+    drawCloud(cloud);
+  }
+
+  drawSea();
+  drawRocks();
+  drawHouse();
+  drawTower();
+  drawLantern();
+  drawLightBeam();
+  drawWaveBreak();
+  drawFoam();
+  drawFlash();
+  drawRain();
+
+  // Clouds (some in front of lighthouse for depth)
+  for (let i = 3; i < clouds.length; i++) {
+    drawCloud(clouds[i]);
+  }
+}
+
+// --- Animation loop ---
+let lastTime = 0;
+function loop(timestamp) {
+  const dt = lastTime ? (timestamp - lastTime) / 16.67 : 1;
+  lastTime = timestamp;
+  t += dt * 0.02;
+
+  // Update clouds
+  for (const cloud of clouds) {
+    cloud.x += cloud.speed * dt;
+    if (cloud.x > W + 40) cloud.x = -40;
+  }
+
+  // Update rain
+  for (const drop of raindrops) {
+    drop.y += drop.speed * dt;
+    drop.x += 0.8 * dt; // wind angle
+    if (drop.y > H + 5) {
+      drop.y = -5;
+      drop.x = Math.random() * (W + 40) - 20;
+    }
+  }
+
+  // Update foam
+  for (const fp of foamParticles) {
+    fp.x += fp.vx * dt;
+    fp.y += fp.vy * dt;
+    fp.life += 0.01 * dt;
+    if (fp.life > fp.maxLife) {
+      fp.life = 0;
+      fp.x = 130 + Math.random() * 60;
+      fp.y = 140 + Math.random() * 8;
+    }
+  }
+
+  drawScene();
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Art Lighthouse at Night</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #050510;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scene-wrap {
+  width: min(100vw, 100vh * 1.6);
+  height: min(100vh, 100vw / 1.6);
+  position: relative;
+}
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -webkit-interpolation-mode: none;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+</style>
+</head>
+<body>
+<div class="scene-wrap">
+<canvas id="c"></canvas>
+</div>
+<script>
+/* ═══════════════════════════════════════════════════════════
+   PIXEL ART LIGHTHOUSE AT NIGHT
+   ═══════════════════════════════════════════════════════════ */
+
+const W = 160, H = 120;
+const canvas = document.getElementById('c');
+canvas.width = W;
+canvas.height = H;
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* ── Colour palette ── */
+const P = {
+  nightDeep: [10, 14, 55],    nightMid:  [22, 32, 72],  nightLight: [26, 42, 88],
+  moon:      [232, 228, 200], moonDark:[210, 205, 185], moonGlow:[240, 236, 208],
+  cloud1:    [35, 40, 62],    cloud2:  [50, 58, 86],   cloud3:  [68, 77, 110],
+  seaD:      [10, 40, 75],    sea1:    [16, 58, 100],  sea2:  [22, 74, 125],  sea3: [28, 90, 145],
+  wave:      [100, 165, 205], foam:    [195, 225, 238],
+  rkDeep:    [32, 28, 26],     rk1:     [48, 42, 38],   rk2:   [62, 55, 50],   rk3:  [82, 75, 68],
+  cliff:     [62, 54, 46],    cliff1:  [78, 68, 58],   cliff2:[92, 82, 72],
+  tWhite:    [224, 212, 195],  tWhiteN: [238, 230, 214],tWhiteS:[192, 182, 165],
+  tRed:      [138, 40, 28],    tRedN:   [164, 62, 42],  tRedS: [98, 28, 18],
+  iron:      [32, 30, 28],     lantern:[255, 224, 105],  lanternW:[255, 246, 200],
+  wall:      [118, 102, 76],   wallS:   [88, 72, 54],   wallN: [134, 118, 92],
+  roof:      [88, 40, 30],     roofS:   [68, 28, 20],   roofN: [106, 56, 42],
+  door:      [52, 38, 24],     window:  [255, 218, 88], windowN:[255, 238, 140],
+  trim:      [172, 162, 144],  ballCol: [62, 58, 52],
+  rain:      [90, 125, 160],   rainD:   [65, 95, 130],
+  star:      [236, 236, 250],  starW:   [255, 255, 255],
+  beamR: 80, beamG: 70, beamB: 20,   // beam color base
+};
+
+function setPx(x, y, c) { ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.fillRect(x|0, y|0, 1, 1); }
+function rect(x, y, w, h, c) { ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.fillRect(x|0, y|0, w, h); }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+/* ── Sky noise ── */
+const skyNoise = new Float32Array(W * 72);
+for (let y = 0; y < 72; y++)
+  for (let x = 0; x < W; x++)
+    skyNoise[y * W + x] = ((x * 13 + y * 7 + 3) % 31) / 31 * 2 - 1;
+
+/* ── Stars (seeded) ── */
+const stars = [];
+{ let s = 42; function rand() { s = (s * 16807) % 2147483647; return (s-1)/2147483646; }
+  for (let i = 0; i < 80; i++)
+    stars.push({ x: rand()*W|0, y: rand()*52|0, phase: rand()*6.28, sz: rand()<0.25?2:1 });
+}
+
+/* ── Clouds (seeded) ── */
+const clouds = [];
+{ let s = 137; function rand() { s = (s * 16807) % 2147483647; return (s-1)/2147483646; }
+  for (let i = 0; i < 14; i++) {
+    const pw = 6 + (rand()*16)|0;
+    const bumps = []; let bx = 0;
+    while (bx < pw) { const bw = Math.max(1,(rand()*4+2)|0); bumps.push({o:bx,w:Math.min(bw,pw-bx),h:(rand()*2+1)|0}); bx+=bw; }
+    clouds.push({x: rand()*(W+120)-60, y: rand()*18+6, pw, bumps,
+      speed: rand()*0.5+0.12, layer: (rand()*3)|0});
+  }
+}
+
+/* ── Rain (seeded) ── */
+const rainDrops = [];
+{ let s = 256; function rand() { s = (s * 16807) % 2147483647; return (s-1)/2147483646; }
+  for (let i = 0; i < 100; i++)
+    rainDrops.push({ x: rand()*(W+50)-25, y: rand()*(H+10)-5,
+      speed: rand()*3+3.5, len: (rand()*3+2)|0,
+      color: i%2===0 ? P.rain : P.rainD });
+}
+
+/* ── Foam (seeded) ── */
+const foamPoints = [];
+{ let s = 99; function rand() { s = (s * 16807) % 2147483647; return (s-1)/2147483646; }
+  for (let i = 0; i < 24; i++)
+    foamPoints.push({x: rand()*130+10, y: 67+rand()*4, phase: rand()*6.28});
+}
+
+/* ── Beam offscreen buffer ── */
+const beamCvs = document.createElement('canvas');
+beamCvs.width = W; beamCvs.height = H;
+const beamCtx = beamCvs.getContext('2d');
+
+/* ═══════════════════════════════════════════════════════════
+   DRAWING FUNCTIONS
+   ═══════════════════════════════════════════════════════════ */
+
+function drawSky() {
+  for (let y = 0; y < 68; y++) {
+    const t2 = y / 68;
+    let base = t2 < 0.3 ? P.nightDeep : (t2 < 0.7 ? P.nightMid : P.nightLight);
+    for (let x = 0; x < W; x++) {
+      const n = skyNoise[y * W + x] * 5;
+      setPx(x, y, [clamp(base[0]+n,0,255), clamp(base[1]+n,0,255), clamp(base[2]+n,0,255)]);
+    }
+  }
+}
+
+function drawStars(t) {
+  for (let i = 0; i < stars.length; i++) {
+    const s = stars[i];
+    const tw = Math.sin(t * 0.8 + s.phase) * 0.5 + 0.5;
+    if (tw < 0.3) continue;
+    setPx(s.x, s.y, P.star);
+    if (s.sz > 1 && tw > 0.7) setPx(s.x + 1, s.y, P.starW);
+  }
+}
+
+function drawMoon() {
+  const mx = 120, my = 18, r = 7;
+  for (let dy = -12; dy <= 12; dy++) {
+    for (let dx = -12; dx <= 12; dx++) {
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if (d > r && d <= 12 && (Math.sin(d*2.1)*0.3+0.5) < (1-d/12)*0.07)
+        setPx(mx+dx, my+dy, P.moonGlow);
+    }
+  }
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const d2 = dx*dx+dy*dy; if (d2 > r*r) continue;
+      const c1 = (dx-2)*(dx-2)+(dy+2)*(dy+2);
+      const c2 = (dx+1)*(dx+1)+(dy-3)*(dy-3);
+      setPx(mx+dx, my+dy, (c1<5||c2<4) ? P.moonDark : P.moon);
+    }
+  }
+  for (let a = 0; a < 360; a += 12) {
+    const rad = a * Math.PI / 180;
+    if (a < 200) setPx(mx + Math.cos(rad)*(r-1)|0, my + Math.sin(rad)*(r-1)|0, P.moonGlow);
+  }
+}
+
+function drawCloud(c, t) {
+  const cx = ((c.x + t * c.speed * 50) % (W + 140)) - 70;
+  const cy = c.y;
+  for (const bump of c.bumps) {
+    const bx = cx + bump.o;
+    for (let dy = 0; dy < bump.h + 1; dy++) {
+      for (let dx = 0; dx < bump.w; dx++) {
+        const eX = Math.min(dx, bump.w - dx - 1);
+        const eY = Math.min(dy, bump.h + 1 - dy - 1);
+        if (eX <= 0 || eY <= 0) continue;
+        if (dy === 0 && Math.cos((dx/Math.max(bump.w,1))*Math.PI)*0.5+0.5 < 0.2) continue;
+        let col = c.layer === 0 ? P.cloud3 : (c.layer === 1 ? P.cloud2 : P.cloud1);
+        if (dy === 0 && dx % 3 === 0) col = P.cloud2;
+        setPx(bx + dx, cy + dy, col);
+      }
+    }
+  }
+}
+
+function drawSea(t) {
+  for (let y = 72; y < H; y++) {
+    const f = (y - 72) / (H - 72);
+    let col = f < 0.25 ? P.seaD : (f < 0.5 ? P.sea1 : (f < 0.75 ? P.sea2 : P.sea3));
+    rect(0, y, W, 1, col);
+  }
+  // Wave crests
+  for (let i = 0; i < 6; i++) {
+    const baseY = 74 + i * 4.5;
+    const freq = 0.07 + i * 0.008;
+    const amp = 1.3 - i * 0.15;
+    const phase = t * (0.35 + i * 0.07);
+    for (let x = 0; x < W; x++) {
+      const wave = Math.sin(x * freq + phase);
+      if (wave > 0.55) setPx(x, (baseY + wave * amp) | 0, P.wave);
+      if ((x + i * 4) % 6 === 0 && i < 5) {
+        const wy2 = baseY + Math.sin(x * freq * 1.3 + phase * 0.8) * amp * 0.4;
+        setPx(x, (wy2 + 1) | 0, i % 2 === 0 ? P.wave : P.sea2);
+      }
+    }
+  }
+  // Texture
+  for (let i = 0; i < 8; i++) {
+    const baseY = 74 + i * 5;
+    const phase = t * 0.22 + i * 0.4;
+    for (let x = 0; x < W; x++)
+      if ((x + Math.sin(phase) * 2 + i * 3) % 4 < 2)
+        setPx(x, (baseY + Math.sin(x * 0.08 + phase) * 0.5) | 0, P.sea2);
+  }
+}
+
+function drawCliff() {
+  const prof = [];
+  for (let x = 0; x < W; x++) {
+    let top = 60, cx = x - 55;
+    if (cx < 0) top = 58 + Math.abs(cx)*0.25 + Math.sin(cx*0.8+1)*2.5 + Math.sin(cx*2.3)*0.8;
+    else if (cx < 30) top = 60 + Math.sin(cx*1.2)*1.5 + (cx<12?(cx-12)*0.35:(cx-12)*0.03);
+    else top = 62 + (cx-30)*0.02;
+    prof[x] = top | 0;
+  }
+  for (let x = 0; x < W; x++) {
+    const top = prof[x]; if (top < 0 || top >= H) continue;
+    for (let y = top; y < 78; y++) {
+      const d = y - top;
+      let col = d < 2 ? P.cliff2 : (d < 5 ? P.cliff1 : P.cliff);
+      const h = (x*7+y*13) % 17;
+      if (h === 0) col = P.cliff1; else if (h === 8) col = P.cliff2;
+      setPx(x, y, col);
+    }
+  }
+  for (let x = 20; x < 110; x++) rect(x, 75, 1, 2, P.rkDeep);
+}
+
+function drawRocks() {
+  const rocks = [{x:44,y:67,w:14,h:9},{x:60,y:69,w:9,h:6},{x:70,y:68,w:11,h:7},
+    {x:83,y:66,w:15,h:10},{x:99,y:65,w:12,h:11},{x:112,y:64,w:10,h:12},
+    {x:8,y:67,w:14,h:9},{x:24,y:68,w:11,h:7},{x:37,y:69,w:8,h:6}];
+  for (const rk of rocks) {
+    for (let dy = 0; dy < rk.h; dy++) {
+      const tap = 1 - Math.abs(dy/rk.h - 0.45) * 0.55;
+      const rw = (rk.w * tap) | 0, rx = rk.x + ((rk.w - rw) >> 1);
+      for (let dx = 0; dx < rw; dx++) {
+        const nx = dx/rw, ny = dy/rk.h;
+        if (Math.min(nx,1-nx)<0.08 || Math.min(ny,1-ny)<0.08) { setPx(rx+dx,rk.y+dy,P.rkDeep); continue; }
+        let col = P.rk3;
+        const h = (dx*3+dy*7+rk.x*5)%11;
+        if (h<3) col=P.rk2; else if (h===3) col=P.rk1;
+        if (dy===0||dy<=1&&Math.min(ny,1-ny)>0.3) col=P.rk2;
+        setPx(rx+dx, rk.y+dy, col);
+      }
+    }
+  }
+}
+
+function drawLighthouse(t) {
+  const cx = 55;
+  const tTop=16, tBot=62, tTopW=6, tBotW=13;
+
+  for (let y = tTop; y <= tBot; y++) {
+    const frac = (y-tTop)/(tBot-tTop), w = (tTopW+(tBotW-tTopW)*frac)|0, x0 = cx-(w>>1);
+    for (let dx = 0; dx < w; dx++) {
+      const nx = dx/w, stripe = ((y-tTop)>>2)%2;
+      let col;
+      if (dx===0||dx===w-1) col = stripe?P.tRedS:P.tWhiteS;
+      else if (stripe) col = nx<0.2||nx>0.8?P.tRedS:(nx<0.5?P.tRed:P.tRedN);
+      else col = nx<0.2||nx>0.8?P.tWhiteS:(nx<0.5?P.tWhite:P.tWhiteN);
+      setPx(x0+dx, y, col);
+    }
+  }
+  for (let dx = -1; dx <= tBotW+1; dx++) { setPx(cx+dx,tBot+1,P.trim); setPx(cx+dx,tBot+2,P.rkDeep); }
+  for (const wy of [22,35,48]) {
+    setPx(cx,wy,P.window); setPx(cx,wy-1,P.window);
+    setPx(cx-1,wy,P.iron); setPx(cx-1,wy-1,P.iron);
+    setPx(cx+1,wy,P.iron); setPx(cx+1,wy-1,P.iron);
+  }
+  rect(cx-2, tBot-4, 4, 4, P.door);
+  setPx(cx, tBot-5, P.trim); setPx(cx, tBot-6, P.trim);
+
+  const lTop = tTop-7, lW = 9, lX = cx-(lW>>1);
+  const railY = lTop-2;
+  for (let dx = -2; dx <= lW+1; dx++) setPx(lX+dx, railY, P.iron);
+  for (let dy = 0; dy <= 2; dy++) {
+    setPx(lX-2,railY+dy,P.iron); setPx(lX+(lW>>1),railY+dy,P.iron); setPx(lX+lW+1,railY+dy,P.iron);
+  }
+  for (let dx = -2; dx <= lW+1; dx++) setPx(lX+dx, railY-1, P.iron);
+
+  for (let dy = 0; dy < 6; dy++) {
+    for (let dx = 0; dx < lW; dx++) {
+      if (dx===0||dx===lW-1||dy===0||dy===5) { setPx(lX+dx,lTop+dy,P.iron); }
+      else {
+        const fl = Math.sin(t*6+dx*1.7+dy*2.3)*0.25+0.75;
+        setPx(lX+dx,lTop+dy,dx%2===0?P.lantern:[clamp(255*fl,0,255)|0,clamp(224*fl,0,255)|0,clamp(105*fl,0,255)|0]);
+      }
+    }
+  }
+
+  const roofY = lTop - 2;
+  for (let dx = -2; dx <= lW+1; dx++) {
+    const dist = Math.abs(dx-(lW>>1)), rh = Math.max(0,3-dist);
+    for (let dy = 0; dy <= rh; dy++) {
+      let col;
+      if (dy===rh&&rh>0) col=P.roofN; else if (dx<=-2||dx>=lW+1) col=P.roofS; else col=P.roof;
+      if (dx===(lW>>1)&&dy===rh) col=P.roofN;
+      setPx(lX+dx, roofY-rh+dy, col);
+    }
+  }
+  setPx(cx, roofY-4, P.ballCol); setPx(cx, roofY-5, P.ballCol); setPx(cx+1, roofY-5, P.rk3);
+
+  // House
+  const hX = cx-17, hY = 52, hW = 10, hH = 11;
+  for (let dy = 0; dy < hH; dy++)
+    for (let dx = 0; dx < hW; dx++) {
+      const onEdge = dy===0||dy===hH-1||dx===0||dx===hW-1;
+      let col = onEdge ? P.wallS : ((dx+dy*2)%4===0?P.wallS:P.wall);
+      setPx(hX+dx, hY+dy, col);
+    }
+  for (let dy = 0; dy < 5; dy++)
+    for (let dx = -2; dx < hW+2; dx++) {
+      const dist = Math.abs(dx-(hW>>1)+1), rh = 4-dist; if (rh<0) continue;
+      setPx(hX+dx, hY-4+dy, dy===rh?P.roofN:(dx<-1||dx>hW+1?P.roofS:P.roof));
+    }
+  setPx(hX+2,hY+3,P.window); setPx(hX+2,hY+4,P.window);
+  setPx(hX+3,hY+3,P.windowN); setPx(hX+3,hY+4,P.window);
+  setPx(hX+5,hY+3,P.window); setPx(hX+5,hY+4,P.window);
+  setPx(hX+6,hY+3,P.window); setPx(hX+6,hY+4,P.windowN);
+  setPx(hX+1,hY+3,P.door); setPx(hX+4,hY+3,P.door);
+  setPx(hX+1,hY+4,P.door); setPx(hX+4,hY+4,P.door);
+  setPx(hX+1,hY+5,P.door); setPx(hX+4,hY+5,P.door);
+  setPx(hX+2,hY+2,P.door); setPx(hX+5,hY+2,P.door);
+  rect(hX+8, hY+7, 2, 4, P.door); setPx(hX+8, hY+6, P.trim);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT BEAM - Properly visible, sweeping cone
+   ═══════════════════════════════════════════════════════════ */
+
+function drawLightBeam(t) {
+  const bx = 55, by = 9;
+  const angle = t * 0.35;  // slow sweep
+
+  beamCtx.clearRect(0, 0, W, H);
+
+  const beamLen = 80;
+  const halfAngle = 0.2;  // cone half-angle
+
+  for (let dir = 0; dir < 2; dir++) {
+    const baseAngle = angle + dir * Math.PI;
+
+    // Draw beam row by row for crisp pixel art look
+    for (let d = 2; d < beamLen; d++) {
+      const fade = 1 - d / beamLen;
+      const intensity = fade * fade;  // quadratic falloff
+      const beamHalfW = d * halfAngle + 1.5;  // add 1.5 for base width
+
+      // Draw perpendicular slice at this distance
+      for (let perp = -Math.ceil(beamHalfW); perp <= Math.ceil(beamHalfW); perp++) {
+        const perpF = 1 - Math.abs(perp) / (beamHalfW + 0.5);
+        if (perpF <= 0) continue;
+
+        const a = Math.atan2(perp, d);
+        if (Math.abs(a) > halfAngle * 2.5) continue;
+
+        const alpha = intensity * perpF * 0.55;  // 0.55 for good visibility
+        if (alpha < 0.008) continue;
+
+        // Rotate beam direction to world coords
+        const px2 = Math.cos(a) * d;
+        const py2 = Math.sin(a) * d;
+        const wx = bx + px2 * Math.cos(baseAngle) - py2 * Math.sin(baseAngle);
+        const wy = by + px2 * Math.sin(baseAngle) + py2 * Math.cos(baseAngle);
+        if (wx < 0 || wx >= W || wy < 0 || wy >= H) continue;
+
+        // Warm yellow beam color
+        const r = clamp(P.beamR * alpha * 3.5, 0, 255) | 0;
+        const g = clamp(P.beamG * alpha * 3.5 + alpha * 120, 0, 255) | 0;
+        const b = clamp(P.beamB * alpha * 3.5 + alpha * 80, 0, 255) | 0;
+
+        beamCtx.fillStyle = `rgba(${Math.max(r,20)},${Math.max(g,15)},${Math.max(b,8)},${alpha})`;
+        beamCtx.fillRect(wx | 0, wy | 0, 1, 1);
+      }
+    }
+  }
+
+  // Composite beam at moderate alpha so it's visible but not overwhelming
+  ctx.globalAlpha = 0.75;
+  ctx.drawImage(beamCvs, 0, 0);
+  ctx.globalAlpha = 1.0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RAIN - dense, angled
+   ═══════════════════════════════════════════════════════════ */
+
+function drawRain(dt) {
+  for (let i = 0; i < rainDrops.length; i++) {
+    const r = rainDrops[i];
+    r.y += r.speed * dt * 60;
+    r.x -= 0.7 * dt * 60;  // noticeable wind angle
+    if (r.y > H + 6) { r.y = -4; r.x = Math.random() * (W + 40) - 20; }
+    if (r.x < -25) { r.x = W + 22; r.y = Math.random() * H; }
+    for (let j = 0; j < r.len; j++) setPx(r.x, r.y + j, r.color);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FOAM
+   ═══════════════════════════════════════════════════════════ */
+
+function drawFoam(t) {
+  for (let i = 0; i < foamPoints.length; i++) {
+    const fp = foamPoints[i];
+    const splash = Math.sin(t * 2.0 + fp.phase) * 0.5 + 0.5;
+    if (splash > 0.55) {
+      const amount = (splash - 0.55) * 9;
+      for (let j = 0; j < amount; j++) {
+        const fx = fp.x + Math.sin(t * 2.2 + i + j * 0.4) * 2;
+        const fy = fp.y - j * 1.0 - splash * 2;
+        if (fx >= 0 && fx < W && fy >= 0 && fy < H) setPx(fx|0, fy|0, P.foam);
+      }
+    }
+  }
+  // Wave wash over rocks
+  for (let i = 0; i < 14; i++) {
+    const fx = 10 + Math.sin(t * 0.8 + i * 5.7) * 65 + 60;
+    const fy = 66 + Math.sin(t * 1.5 + i * 3.1) * 4;
+    if (fx >= 0 && fx < W && fy >= 0 && fy < 72 && Math.abs(Math.sin(t*2+i*3.7)) > 0.6)
+      setPx(fx|0, fy|0, P.foam);
+  }
+}
+
+function drawSparkles(t) {
+  for (let i = 0; i < 6; i++) {
+    const sx = (Math.sin(t*0.2+i*7.3)*0.5+0.5)*W;
+    const sy = 74 + (Math.sin(t*0.3+i*5.1)*0.5+0.5)*(H-76);
+    const br = Math.abs(Math.sin(t*1.2+i*4.7));
+    if (br > 0.85) { setPx(sx|0, sy|0, P.wave); if (br > 0.93) setPx((sx+1)|0, sy|0, P.foam); }
+  }
+}
+
+const lightning = { timer: 0, next: 12+Math.random()*12, flash: 0 };
+function updateLightning(dt) {
+  lightning.timer += dt;
+  if (lightning.timer > lightning.next && lightning.flash <= 0) {
+    lightning.flash = 1; lightning.timer = 0;
+    lightning.next = 12 + Math.random() * 18;
+  }
+  if (lightning.flash > 0) { lightning.flash -= dt * 5; if (lightning.flash < 0) lightning.flash = 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER PIPELINE
+   ═══════════════════════════════════════════════════════════ */
+
+function frame(ts) {
+  if (!frame.last) frame.last = ts;
+  const dt = Math.min((ts - frame.last) / 1000, 0.05);
+  frame.last = ts;
+  frame.t += dt;
+  const t = frame.t;
+
+  ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, W, H);
+
+  // Sky
+  drawSky();
+  drawStars(t);
+  drawMoon();
+
+  // Clouds far
+  for (let i = 0; i < clouds.length; i++)
+    if (clouds[i].layer <= 1) drawCloud(clouds[i], t);
+
+  // Rain (behind foreground)
+  drawRain(dt);
+
+  // Sea + beam
+  drawSea(t);
+  drawLightBeam(t);
+
+  drawSparkles(t);
+  drawCliff();
+  drawRocks();
+  drawFoam(t);
+  drawLighthouse(t);
+
+  // Clouds near (some will pass in front of moon/lighthouse)
+  for (let i = 0; i < clouds.length; i++)
+    if (clouds[i].layer === 2) drawCloud(clouds[i], t);
+
+  // Lightning
+  updateLightning(dt);
+  if (lightning.flash > 0) {
+    ctx.globalAlpha = lightning.flash * 0.12;
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1.0;
+  }
+
+  requestAnimationFrame(frame);
+}
+frame.t = 0;
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

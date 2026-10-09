@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Bonsai in Wind</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0e0e1a;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: monospace;
+  }
+
+  canvas {
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+/* ───────── dimensions & scale ───────── */
+const W = 160;
+const H = 200;
+const SCALE = Math.max(3, Math.min(
+  Math.floor(window.innerWidth / W),
+  Math.floor(window.innerHeight / H),
+  7
+));
+const CW = W * SCALE;
+const CH = H * SCALE;
+
+/* ───────── canvas setup ───────── */
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d');
+cvs.width = CW;
+cvs.height = CH;
+
+/* ───────── palette ───────── */
+const P = {
+  pot:        '#8b4420',
+  potLight:   '#b06630',
+  potDark:    '#602a10',
+  potRim:     '#c47a48',
+  potShadow:  '#723618',
+  soil:       '#3d2b1f',
+  soilLight:  '#5a3d2b',
+  bark:       '#5c3a1e',
+  barkLight:  '#7a5230',
+  barkDark:   '#3e2410',
+  branch:     '#6b4226',
+  branchDark: '#4a2e16',
+  leafLight:  '#5cb85c',
+  leafMid:    '#3a8a3a',
+  leafDark:   '#2a602a',
+  leafShadow: '#1e4a1e',
+  leafHigh:   '#7ed57e',
+  leafAccent: '#4aad4a',
+  wind:       'rgba(220,230,240,0.35)',
+  windBright: 'rgba(240,245,255,0.5)',
+  leafFall:   '#4aad4a',
+  leafFallDk: '#2a602a',
+  bg1:        '#0e0e1a',
+  bg2:        '#161628',
+  ground:     '#1a1a2a',
+  groundLight:'#252538',
+};
+
+/* ───────── off-screen buffer ───────── */
+const buf = document.createElement('canvas');
+buf.width = W;
+buf.height = H;
+const bctx = buf.getContext('2d');
+
+/* ───────── bonsai shape data ───────── */
+// Trunk: array of {x, y, w} per row (pixel column x, center, width in px)
+// This gives a curved, tapered trunk
+const trunkPath = [
+  { row: 155, cx: 70, w: 10 },
+  { row: 150, cx: 70, w: 10 },
+  { row: 145, cx: 70, w: 9  },
+  { row: 140, cx: 71, w: 9  },
+  { row: 135, cx: 72, w: 8  },
+  { row: 130, cx: 73, w: 8  },
+  { row: 125, cx: 74, w: 7  },
+  { row: 120, cx: 75, w: 7  },
+  { row: 115, cx: 76, w: 7  },
+  { row: 110, cx: 77, w: 6  },
+  { row: 105, cx: 78, w: 6  },
+  { row: 100, cx: 80, w: 6  },
+  { row: 95,  cx: 82, w: 5  },
+  { row: 90,  cx: 83, w: 5  },
+  { row: 85,  cx: 84, w: 5  },
+  { row: 80,  cx: 86, w: 5  },
+  { row: 75,  cx: 88, w: 4  },
+  { row: 70,  cx: 90, w: 4  },
+  { row: 65,  cx: 92, w: 4  },
+  { row: 60,  cx: 94, w: 3  },
+  { row: 55,  cx: 96, w: 3  },
+  { row: 50,  cx: 97, w: 3  },
+  { row: 45,  cx: 99, w: 3  },
+  { row: 40,  cx: 101, w: 2 },
+  { row: 35,  cx: 103, w: 2 },
+];
+
+// Branch definitions: {yStart, angle, length, thickness}
+// angles: 0 = up, positive = right, negative = left
+const branches = [
+  { y: 110, angle: -30, len: 22, thick: 2 },
+  { y: 100, angle: 25,  len: 26, thick: 2 },
+  { y: 90,  angle: -20, len: 18, thick: 2 },
+  { y: 78,  angle: 35,  len: 20, thick: 2 },
+  { y: 65,  angle: -25, len: 16, thick: 1 },
+  { y: 55,  angle: 20,  len: 14, thick: 1 },
+  { y: 48,  angle: -10, len: 12, thick: 1 },
+  { y: 120, angle: -45, len: 15, thick: 2 },
+  { y: 60,  angle: 40,  len: 16, thick: 1 },
+];
+
+// Foliage pads: {cx, cy, rx, ry, color, shadowOffset, phase}
+const foliagePads = [
+  // Main canopy pads
+  { cx: 55,  cy: 42,  rx: 18, ry: 14, shade: 0, phase: 0.0 },
+  { cx: 80,  cy: 35,  rx: 20, ry: 15, shade: 0, phase: 0.7 },
+  { cx: 105, cy: 38,  rx: 16, ry: 12, shade: 0, phase: 1.3 },
+  { cx: 60,  cy: 55,  rx: 22, ry: 16, shade: 0, phase: 0.3 },
+  { cx: 88,  cy: 48,  rx: 20, ry: 14, shade: 0, phase: 1.0 },
+  { cx: 110, cy: 50,  rx: 14, ry: 12, shade: 0, phase: 1.7 },
+  { cx: 45,  cy: 52,  rx: 14, ry: 12, shade: 0, phase: 2.2 },
+  // Secondary layer
+  { cx: 70,  cy: 28,  rx: 14, ry: 10, shade: 1, phase: 0.5 },
+  { cx: 95,  cy: 25,  rx: 12, ry: 9,  shade: 1, phase: 1.1 },
+  { cx: 50,  cy: 35,  rx: 12, ry: 9,  shade: 1, phase: 2.5 },
+  { cx: 100, cy: 28,  rx: 10, ry: 8,  shade: 1, phase: 0.9 },
+  { cx: 75,  cy: 58,  rx: 14, ry: 10, shade: 1, phase: 1.5 },
+  { cx: 115, cy: 42,  rx: 12, ry: 9,  shade: 1, phase: 2.0 },
+  { cx: 42,  cy: 60,  rx: 10, ry: 8,  shade: 1, phase: 2.8 },
+  // Top accent
+  { cx: 85,  cy: 22,  rx: 10, ry: 8,  shade: 2, phase: 0.2 },
+  { cx: 65,  cy: 20,  rx: 8,  ry: 7,  shade: 2, phase: 1.4 },
+  { cx: 95,  cy: 18,  rx: 8,  ry: 7,  shade: 2, phase: 0.8 },
+  { cx: 75,  cy: 15,  rx: 7,  ry: 6,  shade: 2, phase: 2.3 },
+];
+
+/* ───────── draw helpers ───────── */
+function pset(x, y, color) {
+  bctx.fillStyle = color;
+  bctx.fillRect(Math.floor(x), Math.floor(y), 1, 1);
+}
+
+function rect(x, y, w, h, color) {
+  bctx.fillStyle = color;
+  bctx.fillRect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h));
+}
+
+// Draw a filled pixel-ellipse (no anti-aliasing, crisp pixels)
+function pxEllipse(cx, cy, rx, ry, color) {
+  bctx.fillStyle = color;
+  // Use a scanline approach: for each row within the ellipse bounds,
+  // compute the horizontal span and fill it
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+    const dy = y - cy;
+    if (ry > 0) {
+      const dxMax = Math.floor(rx * Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry))));
+      const x1 = Math.floor(cx - dxMax);
+      const x2 = Math.ceil(cx + dxMax);
+      for (let x = x1; x <= x2; x++) {
+        bctx.fillStyle = color;
+        bctx.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+}
+
+// Draw a crisp pixel-art foliage pad with distinct light/shadow regions
+function foliagePad(pad, time) {
+  const sway = Math.sin(time * 0.9 + pad.phase) * (1.0 + pad.shade * 0.6);
+  const sx = Math.floor(pad.cx + sway);
+  const sy = pad.cy;
+  const rx = pad.rx;
+  const ry = pad.ry;
+  const shadeLevel = pad.shade;
+
+  const colors = [
+    { base: P.leafMid, light: P.leafLight, dark: P.leafDark, high: P.leafHigh, accent: P.leafAccent },
+    { base: P.leafDark, light: P.leafMid,  dark: P.leafShadow, high: P.leafMid, accent: P.leafDark },
+    { base: P.leafLight, light: P.leafHigh, dark: P.leafMid, high: '#a0e8a0', accent: P.leafLight },
+  ];
+  const c = colors[shadeLevel] || colors[0];
+
+  // Scanline fill: base color for all pixels in ellipse
+  for (let y = sy - ry; y <= sy + ry; y++) {
+    const dy = y - sy;
+    for (let x = sx - rx; x <= sx + rx; x++) {
+      if (ry > 0 && rx > 0 && (x - sx) * (x - sx) / (rx * rx) + dy * dy / (ry * ry) <= 1) {
+        // Determine highlight/shadow based on quadrant relative to center
+        const dx = x - sx;
+        let pixelColor = c.base;
+
+        // Top-left quadrant: lighter (sunlight)
+        if (dx <= 0 && dy <= 0) {
+          if (Math.random() < 0.55) pixelColor = c.light;
+          else if (Math.random() < 0.3) pixelColor = c.accent;
+        }
+        // Bottom-right quadrant: darker (shadow)
+        else if (dx >= 0 && dy >= 0) {
+          if (Math.random() < 0.5) pixelColor = c.dark;
+          else pixelColor = c.base;
+        }
+        // Edge pixels: slight dark outline
+        const onEdge = (Math.abs(dx) >= rx - 1 || Math.abs(dy) >= ry - 1);
+        if (onEdge && Math.random() < 0.35) pixelColor = c.dark;
+
+        pset(x, y, pixelColor);
+      }
+    }
+  }
+
+  // Bright highlight spots scattered in upper-left area
+  for (let i = 0; i < 5; i++) {
+    const a = Math.random() * Math.PI * 0.5 - Math.PI * 0.5; // upper-left quadrant
+    const d = Math.random() * Math.min(rx, ry) * 0.5;
+    pset(sx + Math.cos(a) * d, sy + Math.sin(a) * d, c.high);
+  }
+}
+
+/* ───────── draw functions ───────── */
+function drawBackground(time) {
+  // Night sky gradient (dithered for pixel look)
+  for (let y = 0; y < H; y++) {
+    const t = y / H;
+    const r = Math.floor(14 + t * 8);
+    const g = Math.floor(14 + t * 12);
+    const b = Math.floor(26 + t * 10);
+    for (let x = 0; x < W; x++) {
+      const noise = ((x * 31 + y * 17) % 7) < 3 ? 3 : 0;
+      pset(x, y, `rgb(${r + noise},${g + noise},${b + noise})`);
+    }
+  }
+
+  // Subtle moon (top-right)
+  const mx = 130, my = 22, mr = 10;
+  for (let dy = -mr; dy <= mr; dy++) {
+    for (let dx = -mr; dx <= mr; dx++) {
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d <= mr) {
+        const alpha = d <= mr - 2 ? 1 : 0.3;
+        const col = d <= mr - 2 ? 'rgba(240,235,220,0.9)' : 'rgba(240,235,220,0.2)';
+        pset(mx + dx, my + dy + Math.sin(time * 0.3) * 0.5, col);
+      }
+    }
+  }
+}
+
+function drawGround() {
+  // Ground line
+  rect(0, 168, W, 2, P.groundLight);
+  rect(0, 170, W, H - 170, P.ground);
+
+  // Ground texture (dithered)
+  for (let y = 170; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if ((x + y) % 3 === 0) {
+        pset(x, y, P.groundLight);
+      }
+    }
+  }
+
+  // Pot base shadow
+  rect(24, 167, 85, 3, P.potShadow);
+}
+
+function drawPot() {
+  const potLeft = 48, potRight = 115;
+  const potTop = 142, potBot = 168;
+  const rimTop = 138, rimBot = 143;
+  const rimLeft = potLeft - 6, rimRight = potRight + 6;
+
+  // Pot body (trapezoid: wider at top, narrower at base)
+  for (let y = potTop; y <= potBot; y++) {
+    const t = (y - potTop) / (potBot - potTop);
+    const left = potLeft + t * 10;  // inward 10px at base
+    const right = potRight - t * 10;
+
+    for (let x = Math.floor(left); x <= Math.ceil(right); x++) {
+      if (x === Math.floor(left) || x === Math.ceil(right)) {
+        pset(x, y, P.potDark);
+      } else if (x < (left + right) / 2) {
+        // Left side: lighter (facing light)
+        pset(x, y, ((x + y) % 4 < 2) ? P.pot : P.potLight);
+      } else {
+        // Right side: darker (shadow)
+        pset(x, y, ((x + y) % 4 < 2) ? P.pot : P.potDark);
+      }
+    }
+  }
+
+  // Pot rim (overhanging lip, 2 rows tall)
+  for (let y = rimTop; y <= rimBot; y++) {
+    for (let x = rimLeft; x <= rimRight; x++) {
+      const edge = x === rimLeft || x === rimRight;
+      const corner = (y === rimTop && (x === rimLeft || x === rimRight));
+      if (corner) {
+        pset(x, y, P.potRim);
+      } else if (edge) {
+        pset(x, y, P.potDark);
+      } else if (y === rimTop) {
+        // Top face of rim: lighter
+        pset(x, y, ((x + y) % 3 < 2) ? P.potRim : P.potLight);
+      } else {
+        // Front face of rim
+        const midX = (rimLeft + rimRight) / 2;
+        pset(x, y, Math.abs(x - midX) < (rimRight - rimLeft) / 4 ? P.pot : P.potShadow);
+      }
+    }
+  }
+
+  // Rim highlight (thin line along top edge)
+  for (let x = rimLeft + 1; x < rimRight; x++) {
+    pset(x, rimTop, '#d49060');
+  }
+
+  // Decorative band on pot body
+  const bandY = 154;
+  for (let x = Math.floor(potLeft + 8); x <= Math.ceil(potRight - 8); x++) {
+    pset(x, bandY, P.potDark);
+  }
+  // Accent dots on band
+  for (let x = potLeft + 12; x <= potRight - 12; x += 8) {
+    pset(x, bandY, P.potRim);
+  }
+
+  // Soil surface
+  const soilY = potTop;
+  for (let x = potLeft + 2; x <= potRight - 2; x++) {
+    for (let y = soilY; y < soilY + 3; y++) {
+      pset(x, y, ((x + y) % 2 === 0) ? P.soil : P.soilLight);
+    }
+  }
+}
+
+function drawTrunk(time) {
+  const sway = Math.sin(time * 0.8) * 1.2;
+
+  // Build a smooth quadratic bezier curve for the trunk centerline
+  // Base: (70, 155), Top: (103, 35), Control: shifted right for the S-curve
+  const baseX = 70, baseY = 155;
+  const topX = 103 + sway * 2, topY = 35;
+  const ctrlX = 55 + sway * 0.5, ctrlY = 100;
+
+  // For each row y, find where the trunk centerline is, then fill horizontally
+  for (let y = Math.floor(topY); y <= Math.floor(baseY); y++) {
+    const t = (y - ctrlY) / (baseY - ctrlY);
+
+    // Quadratic bezier: P(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+    const mt = 1 - t;
+    const cx = mt * mt * baseX + 2 * mt * t * ctrlX + t * t * topX;
+
+    // Width tapers from 6 at base to 2 at top
+    const widthAtRow = 2 + (1 - t) * 8;
+    const hw = Math.floor(widthAtRow / 2);
+
+    for (let dx = -hw; dx <= hw; dx++) {
+      const px = Math.floor(cx + dx);
+      const distFromCenter = Math.abs(dx) / (hw + 1);
+
+      // Bark coloring: darker edges, lighter center, with bark grain
+      let col;
+      if (Math.abs(dx) >= hw) {
+        col = P.barkDark;
+      } else if (distFromCenter < 0.3) {
+        col = ((px + y) % 5 < 3) ? P.bark : P.barkLight;
+      } else {
+        col = ((px + y) % 4 < 2) ? P.bark : P.barkDark;
+      }
+
+      // Add subtle bark grain / ring lines every few rows
+      if (y % 8 === 0 && Math.abs(dx) < hw - 1) {
+        col = P.barkDark;
+      }
+
+      pset(px, y, col);
+    }
+  }
+
+  // Draw root flare at base (roots spreading into soil)
+  const rootY = baseY;
+  const rootCX = baseX;
+  // Left roots
+  for (let i = 0; i < 5; i++) {
+    const rx = rootCX - i * 2 - 3;
+    for (let ry = rootY - 1; ry <= rootY + 1; ry++) {
+      if (rx >= 0 && rx < W) {
+        pset(rx, ry, P.barkDark);
+      }
+    }
+  }
+  // Right roots
+  for (let i = 0; i < 4; i++) {
+    const rx = rootCX + i * 2 + 3;
+    for (let ry = rootY - 1; ry <= rootY + 1; ry++) {
+      if (rx < W) {
+        pset(rx, ry, P.barkDark);
+      }
+    }
+  }
+}
+
+function drawBranch(time) {
+  const sway = Math.sin(time * 0.8) * 1.2;
+
+  for (const br of branches) {
+    // Find trunk cx at this y using bezier
+    const baseX = 70, baseY = 155;
+    const topX = 103 + sway * 2, topY = 35;
+    const ctrlX = 55 + sway * 0.5, ctrlY = 100;
+    const t = (br.y - ctrlY) / (baseY - ctrlY);
+    const mt = 1 - t;
+    const trunkCx = mt * mt * baseX + 2 * mt * t * ctrlX + t * t * topX;
+
+    const rad = br.angle * Math.PI / 180;
+    const dx = Math.cos(rad) * br.len;
+    const dy = -Math.sin(rad) * br.len;
+
+    // Draw branch with slight downward curve for realism
+    const steps = Math.floor(br.len);
+    for (let s = 0; s <= steps; s++) {
+      const t2 = s / steps;
+      const bx = trunkCx + dx * t2;
+      const by = br.y + dy * t2 + t2 * t2 * 3; // slight sag
+
+      for (let off = -br.thick; off <= br.thick; off++) {
+        const bpx = Math.floor(bx + off);
+        const bpy = Math.floor(by);
+        if (bpx < 0 || bpx >= W || bpy < 0 || bpy >= H) continue;
+
+        if (Math.abs(off) === br.thick) {
+          pset(bpx, bpy, P.branchDark);
+        } else {
+          pset(bpx, bpy, ((bpx + bpy) % 2) < 1 ? P.branch : P.branchDark);
+        }
+      }
+    }
+
+    // Branch tip highlight (s == steps is the last iteration)
+    const t2Last = 1;
+    const tipX = trunkCx + dx * t2Last;
+    const tipY = br.y + dy * t2Last + t2Last * t2Last * 3;
+    pset(Math.floor(tipX + sway * 0.3), Math.floor(tipY), P.barkLight);
+  }
+}
+
+/* ───────── wind particles ───────── */
+class LeafParticle {
+  constructor() { this.reset(true); }
+
+  reset(init) {
+    this.x = init ? Math.random() * W * 1.5 - W * 0.25 : -5 - Math.random() * 20;
+    this.y = 15 + Math.random() * 70;
+    this.size = 1 + Math.floor(Math.random() * 2);
+    this.speed = 0.8 + Math.random() * 1.2;
+    this.wobble = Math.random() * Math.PI * 2;
+    this.wobbleSpeed = 0.03 + Math.random() * 0.04;
+    this.wobbleAmp = 0.5 + Math.random() * 1.5;
+    this.color = Math.random() < 0.5 ? P.leafFall : P.leafFallDk;
+    this.alpha = 0.6 + Math.random() * 0.4;
+    this.life = 0;
+    this.maxLife = 120 + Math.random() * 180;
+  }
+
+  update() {
+    this.wobble += this.wobbleSpeed;
+    this.x += this.speed;
+    this.y += Math.sin(this.wobble) * this.wobbleAmp * 0.3;
+    this.life++;
+
+    if (this.x > W + 10 || this.life > this.maxLife) {
+      this.reset(false);
+    }
+  }
+
+  draw(ctx) {
+    const a = Math.max(0, this.alpha * (1 - this.life / this.maxLife));
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = this.color;
+
+    const rot = this.wobble;
+    for (let i = 0; i < this.size; i++) {
+      ctx.save();
+      ctx.translate(
+        Math.floor(this.x + i * 1.5),
+        Math.floor(this.y + i * 0.5)
+      );
+      ctx.rotate(rot);
+      ctx.fillRect(0, 0, 2, 1);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+}
+
+class WindStreak {
+  constructor() { this.reset(true); }
+
+  reset(init) {
+    this.x = init ? Math.random() * W * 1.2 : -30 - Math.random() * 40;
+    this.y = 5 + Math.random() * (H - 20);
+    this.len = 10 + Math.random() * 22;
+    this.speed = 2 + Math.random() * 3;
+    this.alpha = 0.12 + Math.random() * 0.22;
+    this.dY = 0.3 + Math.random() * 0.5; // diagonal: vertical drop per step
+  }
+
+  update() {
+    this.x += this.speed;
+    this.y += this.dY * 0.2; // subtle diagonal drift
+    if (this.x > W + this.len || this.y > H) {
+      this.reset(false);
+    }
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    // Draw as diagonal line: each pixel offset slightly down
+    for (let i = 0; i < this.len; i++) {
+      const px = Math.floor(this.x + i);
+      const py = Math.floor(this.y + i * this.dY * 0.3);
+      if (py < 0 || py >= H) continue;
+      ctx.fillStyle = i % 3 === 0 ? P.windBright : P.wind;
+      ctx.fillRect(px, py, 2, 1);
+    }
+    ctx.restore();
+  }
+}
+
+/* ───────── init particles ───────── */
+const leafParticles = Array.from({ length: 18 }, () => new LeafParticle());
+const windStreaks = Array.from({ length: 10 }, () => new WindStreak());
+
+/* ───────── draw tree silhouette (behind pot) ───────── */
+function drawTrunkShadow() {
+  // Shadow beneath pot
+  for (let x = 30; x < 130; x++) {
+    for (let y = 170; y < 175; y++) {
+      const dist = Math.abs(x - 75) / 50;
+      if (dist < 1 && (x + y) % 2 === 0) {
+        pset(x, y, 'rgba(0,0,0,0.15)');
+      }
+    }
+  }
+}
+
+/* ───────── main render loop ───────── */
+let startTime = null;
+
+function render(ts) {
+  if (!startTime) startTime = ts;
+  const t = (ts - startTime) / 1000;
+
+  // Clear buffer
+  bctx.clearRect(0, 0, W, H);
+
+  // Draw scene layers
+  drawBackground(t);
+  drawGround();
+  drawTrunkShadow();
+
+  // Foliage (behind trunk top)
+  const sortedForBehind = [...foliagePads]
+    .filter(p => p.shade === 2)
+    .sort((a, b) => a.cy - b.cy);
+  for (const pad of sortedForBehind) {
+    foliagePad(pad, t);
+  }
+
+  drawTrunk(t);
+  drawBranch(t);
+
+  // Main foliage pads
+  const mainPads = foliagePads.filter(p => p.shade < 2);
+  for (const pad of mainPads) {
+    foliagePad(pad, t);
+  }
+
+  drawPot();
+
+  // Wind particles
+  for (const leaf of leafParticles) {
+    leaf.update();
+    leaf.draw(bctx);
+  }
+  for (const streak of windStreaks) {
+    streak.update();
+    streak.draw(bctx);
+  }
+
+  // Draw buffer to screen
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(buf, 0, 0, W, H, 0, 0, CW, CH);
+
+  requestAnimationFrame(render);
+}
+
+requestAnimationFrame(render);
+
+/* ───────── handle resize ───────── */
+window.addEventListener('resize', () => {
+  const newScale = Math.max(3, Math.min(
+    Math.floor(window.innerWidth / W),
+    Math.floor(window.innerHeight / H),
+    7
+  ));
+  const newCW = W * newScale;
+  const newCH = H * newScale;
+  cvs.width = newCW;
+  cvs.height = newCH;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Bonsai — Wind Garden</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1117; }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 50% 40%, #16213e 0%, #0d1117 70%);
+  }
+  #scene {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
+    width: min(92vw, 92vh * 1.25, 720px);
+    height: auto;
+  }
+  #wind-label {
+    position: fixed; bottom: 12px; right: 16px;
+    color: rgba(255,255,255,0.15); font-size: 10px; letter-spacing: 3px;
+    font-family: monospace; user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="wind-label">WIND</div>
+<script>
+(() => {
+  "use strict";
+
+  /* ───────── constants ───────── */
+  const W = 160, H = 200;
+  const canvas = document.getElementById("scene");
+  const ctx = canvas.getContext("2d");
+  canvas.width = W; canvas.height = H;
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const rand  = (lo, hi) => lo + Math.random() * (hi - lo);
+
+  /* ───────── palette ───────── */
+  const P = {
+    skyTop:    [22, 33, 62],
+    skyBot:    [15, 52, 96],
+    potBody:   [139, 94, 60],
+    potDark:   [107, 66, 38],
+    potLight:  [168, 116, 79],
+    potRim:    [196, 144, 106],
+    potShadow: [90, 51, 24],
+    soil:      [61, 43, 31],
+    soilLite:  [90, 64, 48],
+    barkDark:  [62, 39, 35],
+    barkMid:   [93, 64, 55],
+    barkLight: [121, 85, 72],
+    barkHi:    [141, 110, 99],
+    barkShad:  [44, 26, 20],
+    lLite:     [102, 187, 106],
+    lMid:      [67,  160, 71],
+    lDark:     [46,  125, 50],
+    lShad:     [27,  94,  32],
+    lHi:       [174, 213, 129],
+    lAcc:      [124, 179, 66  ],
+    fLeaf1:    [129, 199, 132],
+    fLeaf2:    [165, 214, 167],
+    fLeaf3:    [67,  160, 71 ],
+    fLeaf4:    [124, 179, 66 ],
+    fLeaf5:    [102, 187, 106],
+    moon:      [232, 232, 208],
+    moonC:     [218, 218, 202],
+  };
+
+  /* ───────── state ───────── */
+  let T = 0;
+  const fallingLeaves = [];
+  const windStreaks   = [];
+  const dustParticles = [];
+
+  /* fixed foliage: pre-seeded noise grid for flicker-free rendering */
+  const foliageData = [
+    // { cx, cy, rx, ry, baseShade, seedOff }  baseShade 0=lit 1=mid 2=dark 3=shade 4=highlight
+    {cx:80, cy:92,  rx:12, ry:9, bs:1, s:1},
+    {cx:72, cy:98,  rx:10, ry:8, bs:2, s:2},
+    {cx:89, cy:96,  rx:10, ry:7, bs:2, s:3},
+    {cx:80, cy:84,  rx:9,  ry:7, bs:0, s:4},
+    {cx:75, cy:78,  rx:7,  ry:5, bs:4, s:5},
+    {cx:52, cy:112, rx:11, ry:9, bs:2, s:6},
+    {cx:42, cy:118, rx:8,  ry:7, bs:3, s:7},
+    {cx:48, cy:104, rx:7,  ry:5, bs:0, s:8},
+    {cx:58, cy:106, rx:7,  ry:5, bs:4, s:9},
+    {cx:108, cy:109, rx:12, ry:9, bs:2, s:10},
+    {cx:118, cy:114, rx:9,  ry:7, bs:3, s:11},
+    {cx:106, cy:102, rx:7,  ry:5, bs:0, s:12},
+    {cx:98,  cy:99,  rx:7,  ry:5, bs:4, s:13},
+    {cx:68,  cy:130, rx:12, ry:9, bs:2, s:14},
+    {cx:94,  cy:126, rx:11, ry:8, bs:2, s:15},
+    {cx:60,  cy:138, rx:8,  ry:6, bs:3, s:16},
+    {cx:102, cy:134, rx:8,  ry:6, bs:3, s:17},
+    {cx:65,  cy:122, rx:7,  ry:5, bs:0, s:18},
+    {cx:98,  cy:118, rx:6,  ry:5, bs:4, s:19},
+    {cx:85,  cy:116, rx:9,  ry:7, bs:1, s:20},
+    {cx:74,  cy:110, rx:8,  ry:6, bs:1, s:21},
+    {cx:92,  cy:108, rx:7,  ry:5, bs:1, s:22},
+  ];
+
+  /* ───────── simple hash for deterministic noise ───────── */
+  function hash(x, y, s) {
+    let h = (x * 374761393 + y * 668265263 + s * 1274126177) | 0;
+    h = ((h >> 13) ^ h) | 0;
+    h = (h * 1103515245 + 12345) | 0;
+    return (h & 0x7fffffff) / 0x7fffffff; // 0..1
+  }
+  function noise2D(x, y, s) {
+    return (hash(x, y, s) - 0.5) * 2; // -1..1
+  }
+
+  /* ───────── resize ───────── */
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    canvas.style.width  = r.width + "px";
+    canvas.style.height = r.height + "px";
+  }
+  resize();
+  window.addEventListener("resize", resize);
+
+  /* ───────── draw helpers ───────── */
+  function px(x, y, r, g, b, a) {
+    // x, y already floored by caller
+    if (a === undefined || a >= 1) {
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, y, 1, 1);
+    } else {
+      ctx.fillStyle = `rgba(${r},${g},${b},${a.toFixed(3)})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  function fillRect(x, y, w, h, r, g, b) {
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+  }
+  function rgba(r, g, b, a) { return `rgba(${r},${g},${b},${a.toFixed(3)})`; }
+
+  /* ───────── background ───────── */
+  function drawSky() {
+    for (let y = 0; y < H; y++) {
+      const t = y / H;
+      fillRect(0, y, W, 1, lerp(P.skyTop[0], P.skyBot[0], t), lerp(P.skyTop[1], P.skyBot[1], t), lerp(P.skyTop[2], P.skyBot[2], t));
+    }
+  }
+
+  /* ───────── stars ───────── */
+  const stars = [];
+  for (let i = 0; i < 35; i++) stars.push({x: rand(2, W - 2) | 0, y: rand(2, H * 0.4) | 0, s: Math.random() < 0.25 ? 2 : 1, b: rand(0.3, 0.8)});
+  function drawStars() {
+    for (const s of stars) {
+      const v = s.b * (0.55 + 0.45 * Math.sin(T * 1.5 + s.x * 5.3));
+      px(s.x, s.y, v * 255 | 0, v * 255 | 0, Math.min(255, v * 255 + 15) | 0);
+    }
+  }
+
+  /* ───────── moon ───────── */
+  const moonX = 128, moonY = 28, moonR = 10;
+  function drawMoon() {
+    // glow
+    for (let dy = -moonR - 5; dy <= moonR + 5; dy++) {
+      for (let dx = -moonR - 5; dx <= moonR + 5; dx++) {
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d <= moonR + 5) {
+          const a = Math.max(0, 1 - d / (moonR + 5)) * 0.07;
+          px(moonX + dx | 0, moonY + dy | 0, P.moon[0], P.moon[1], P.moon[2], a);
+        }
+      }
+    }
+    // body
+    for (let dy = -moonR; dy <= moonR; dy++) {
+      for (let dx = -moonR; dx <= moonR; dx++) {
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d <= moonR) {
+          const f = 1 - d / moonR;
+          const v = P.moon[0] - f * 16 | 0;
+          px(moonX + dx | 0, moonY + dy | 0, v, v, v + 8);
+        }
+      }
+    }
+    // craters
+    px(moonX - 3, moonY - 2, P.moonC[0], P.moonC[1], P.moonC[2]);
+    px(moonX + 4, moonY + 3, P.moonC[0], P.moonC[1], P.moonC[2]);
+    px(moonX + 1, moonY - 4, P.moonC[0], P.moonC[1], P.moonC[2]);
+    px(moonX - 2, moonY + 4, P.moonC[0], P.moonC[1], P.moonC[2]);
+  }
+
+  /* ───────── ground ───────── */
+  const groundY = 178;
+  function drawGround() {
+    for (let y = groundY; y < H; y++) {
+      const s = 0.88 + 0.12 * Math.sin(y * 0.35 + 1.7);
+      fillRect(0, y, W, 1, 22 * s | 0, 52 * s | 0, 36 * s | 0);
+    }
+    // grass blades
+    for (let x = 0; x < W; x += 2) {
+      const h = 1 + Math.floor(Math.abs(noise2D(x, 0, 42)) * 3);
+      for (let gy = 0; gy < h; gy++) {
+        px(x, groundY + gy, 28 + gy * 4, 72 + gy * 6, 44 + gy * 3);
+      }
+    }
+  }
+
+  /* ───────── pot ───────── */
+  const pot = { cx: 80, baseY: 180, topY: 163, w: 38, h: 17, rimW: 44, rimH: 4 };
+  function drawPot() {
+    const {cx, baseY, topY, w, h, rimW, rimH} = pot;
+    const x0 = cx - w / 2;
+    const x1 = cx + w / 2;
+    const rx0 = cx - rimW / 2;
+    const rx1 = cx + rimW / 2;
+
+    // Body (trapezoid)
+    for (let row = 0; row < h; row++) {
+      const t = row / h;
+      const lx = lerp(rx0 + 3, x0, t);
+      const rx = lerp(rx1 - 3, x1, t);
+      for (let x = lx | 0; x <= rx | 0; x++) {
+        const ct = (x - lx) / (rx - lx + 0.01);
+        let col = hash(x, row, 777);
+        let r, g, b;
+        if (ct < 0.12) { r = P.potShadow[0]; g = P.potShadow[1]; b = P.potShadow[2]; }
+        else if (ct < 0.35) { r = P.potDark[0]; g = P.potDark[1]; b = P.potDark[2]; }
+        else if (ct < 0.55) { r = P.potBody[0]; g = P.potBody[1]; b = P.potBody[2]; }
+        else if (ct < 0.78) { r = P.potLight[0]; g = P.potLight[1]; b = P.potLight[2]; }
+        else { r = P.potRim[0]; g = P.potRim[1]; b = P.potRim[2]; }
+        // texture
+        if (col < 0.04) { r = P.potDark[0]; g = P.potDark[1]; b = P.potDark[2]; }
+        if (col > 0.95) { r = P.potLight[0]; g = P.potLight[1]; b = P.potLight[2]; }
+        if (row < 2 || row > h - 2) { r = P.potShadow[0]; g = P.potShadow[1]; b = P.potShadow[2]; }
+        px(x, topY + row, r, g, b);
+      }
+    }
+
+    // Rim
+    for (let row = 0; row < rimH; row++) {
+      const t = row / rimH;
+      const lx = rx0 - 1 + t * 3;
+      const rx = rx1 + 1 - t * 3;
+      for (let x = lx | 0; x <= rx | 0; x++) {
+        const ct = (x - lx) / (rx - lx + 0.01);
+        let r, g, b;
+        if (row === 0) {
+          if (ct > 0.25 && ct < 0.75) { r = 212; g = 164; b = 122; }
+          else if (ct < 0.4) { r = P.potDark[0]; g = P.potDark[1]; b = P.potDark[2]; }
+          else if (ct < 0.6) { r = P.potLight[0]; g = P.potLight[1]; b = P.potLight[2]; }
+          else { r = P.potRim[0]; g = P.potRim[1]; b = P.potRim[2]; }
+        } else {
+          if (ct < 0.1) { r = P.potShadow[0]; g = P.potShadow[1]; b = P.potShadow[2]; }
+          else if (ct < 0.35) { r = P.potDark[0]; g = P.potDark[1]; b = P.potDark[2]; }
+          else if (ct < 0.55) { r = P.potBody[0]; g = P.potBody[1]; b = P.potBody[2]; }
+          else if (ct < 0.75) { r = P.potLight[0]; g = P.potLight[1]; b = P.potLight[2]; }
+          else { r = P.potRim[0]; g = P.potRim[1]; b = P.potRim[2]; }
+        }
+        px(x, topY - row - 1, r, g, b);
+      }
+    }
+
+    // Soil
+    const sy = topY - rimH + 1;
+    for (let x = cx - w / 2 + 3 | 0; x <= cx + w / 2 - 3 | 0; x++) {
+      for (let row = 0; row < 3; row++) {
+        let col = hash(x, row, 333);
+        let r = P.soil[0], g = P.soil[1], b = P.soil[2];
+        if (col > 0.85) { r = P.soilLite[0]; g = P.soilLite[1]; b = P.soilLite[2]; }
+        if (row === 0 && col > 0.5) { r = 72; g = 52; b = 38; }
+        px(x, sy + row, r, g, b);
+      }
+    }
+    // Pebbles
+    px(cx - 8, sy + 1, 107, 82, 64);
+    px(cx + 9, sy + 2, 74, 53, 37);
+  }
+
+  /* ───────── trunk ───────── */
+  // Pre-compute trunk shape
+  const trunkPts = [];
+  const trunkLen = 100;
+  for (let i = 0; i <= trunkLen; i++) {
+    const t = i / trunkLen;
+    const bendX = Math.sin(t * Math.PI * 0.65) * 14 + Math.sin(t * Math.PI * 2.3) * 3;
+    const bendY = -t * 82;
+    const taper = 1 - t * 0.6;
+    trunkPts.push({ x: pot.cx + bendX, y: pot.topY + bendY, hw: (2.5 + taper * 3) / 2, t });
+  }
+
+  function drawTrunk() {
+    for (const p of trunkPts) {
+      for (let dy = -p.hw - 1; dy <= p.hw + 1; dy++) {
+        if (Math.abs(dy) > p.hw + 1) continue;
+        const ct = (dy + p.hw) / (p.hw * 2);
+        let r, g, b;
+        if (ct < 0.15) { r = P.barkShad[0]; g = P.barkShad[1]; b = P.barkShad[2]; }
+        else if (ct < 0.35) { r = P.barkDark[0]; g = P.barkDark[1]; b = P.barkDark[2]; }
+        else if (ct < 0.55) { r = P.barkMid[0]; g = P.barkMid[1]; b = P.barkMid[2]; }
+        else if (ct < 0.75) { r = P.barkLight[0]; g = P.barkLight[1]; b = P.barkLight[2]; }
+        else { r = P.barkHi[0]; g = P.barkHi[1]; b = P.barkHi[2]; }
+        // bark texture
+        const n = noise2D(dy, p.t * 30 | 0, 99);
+        if (n > 0.7) { r = P.barkLight[0]; g = P.barkLight[1]; b = P.barkLight[2]; }
+        if (n < -0.6) { r = P.barkShad[0]; g = P.barkShad[1]; b = P.barkShad[2]; }
+        // slight irregular edge
+        const edge = noise2D(p.t * 50 | 0, dy, 88);
+        if (edge > 0.75 && Math.abs(dy) > p.hw - 1) continue;
+        px(p.x + dy | 0, p.y | 0, r, g, b);
+      }
+    }
+    // Roots
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 5 - 0.5) * Math.PI * 0.55;
+      let rx = 0, ry = 0;
+      for (let s = 0; s < 10; s++) {
+        rx += Math.cos(angle) * (1.2 + Math.sin(s * 2.1) * 0.4);
+        ry += Math.sin(angle) * 0.6 - s * 0.25;
+        const col = hash(rx | 0, ry | 0, 55);
+        if (col > 0.6) px(pot.cx + rx | 0, pot.baseY + ry | 0, P.barkMid[0], P.barkMid[1], P.barkMid[2]);
+        else px(pot.cx + rx | 0, pot.baseY + ry | 0, P.barkDark[0], P.barkDark[1], P.barkDark[2]);
+      }
+    }
+  }
+
+  /* ───────── branches ───────── */
+  const branchesDef = [
+    {from: 0.30, dirs: [[-3,-4],[-5,-2],[-7,-1],[-9,0],[-11,1],[-13,1]], sw: 2},
+    {from: 0.52, dirs: [[ 3,-3],[ 5,-5],[ 7,-5],[ 9,-4],[11,-2],[13, 0],[14, 2]], sw: 2},
+    {from: 0.42, dirs: [[ 3,-3],[ 4,-3],[ 6,-3],[ 8,-2],[10,-1]], sw: 1},
+    {from: 0.62, dirs: [[-3,-2],[-4,-3],[-6,-3],[-8,-2],[-10,-1]], sw: 1},
+    {from: 0.22, dirs: [[ 2,-2],[ 4,-1],[ 6, 0],[ 8, 1],[10, 2]], sw: 1},
+    {from: 0.78, dirs: [[-2,-2],[-3,-2],[-5,-1],[-7, 0]], sw: 1},
+    {from: 0.15, dirs: [[-2,-1],[-3, 0],[-5, 1],[-7, 2]], sw: 1},
+    {from: 0.88, dirs: [[ 2,-1],[ 3, 0],[ 4, 1],[ 5, 2]], sw: 1},
+  ];
+
+  function drawBranches() {
+    for (const br of branchesDef) {
+      const idx = Math.min(br.from * trunkLen | 0, trunkLen);
+      let cx = trunkPts[idx].x | 0;
+      let cy = trunkPts[idx].y | 0;
+
+      for (let si = 0; si < br.dirs.length; si++) {
+        const [ddx, ddy] = br.dirs[si];
+        const st = si / br.dirs.length;
+        const sw = Math.max(1, br.sw * (1 - st * 0.6) | 0);
+        const steps = Math.max(Math.abs(ddx), Math.abs(ddy), 2);
+        for (let s = 0; s <= steps; s++) {
+          const t = steps ? s / steps : 0;
+          const px2 = cx + ddx * t | 0;
+          const py2 = cy + ddy * t | 0;
+          for (let dy = -sw; dy <= sw; dy++) {
+            const ct = (dy + sw) / (sw * 2 + 1);
+            let r, g, b;
+            if (ct < 0.3) { r = P.barkDark[0]; g = P.barkDark[1]; b = P.barkDark[2]; }
+            else if (ct < 0.55) { r = P.barkMid[0]; g = P.barkMid[1]; b = P.barkMid[2]; }
+            else if (ct < 0.8) { r = P.barkLight[0]; g = P.barkLight[1]; b = P.barkLight[2]; }
+            else { r = P.barkHi[0]; g = P.barkHi[1]; b = P.barkHi[2]; }
+            px(px2 + dy, py2, r, g, b);
+          }
+        }
+        cx += ddx; cy += ddy;
+      }
+    }
+  }
+
+  /* ───────── foliage ───────── */
+  // Each pad has a precomputed noise value for stable pixel color
+  function drawFoliage() {
+    for (let pi = 0; pi < foliageData.length; pi++) {
+      const pad = foliageData[pi];
+      // Sway: pads further from trunk sway more
+      const distFromCenter = Math.abs(pad.cx - pot.cx);
+      const heightFactor = clamp((pot.topY - pad.cy) / 80, 0, 1);
+      const swayX = Math.sin(T * 1.1 + pi * 0.7 + distFromCenter * 0.04) * distFromCenter * 0.055 * heightFactor
+                  + Math.sin(T * 1.7 + pi * 1.1) * distFromCenter * 0.025 * heightFactor;
+      const swayY = Math.sin(T * 0.8 + pi * 1.3) * 0.25 * heightFactor;
+      const sx = pad.cx + swayX | 0;
+      const sy = pad.cy + swayY | 0;
+
+      // Draw ellipse pad
+      for (let py = sy - pad.ry - 1; py <= sy + pad.ry + 1; py++) {
+        for (let px2 = sx - pad.rx - 1; px2 <= sx + pad.rx + 1; px2++) {
+          const ndx = (px2 - pad.cx - swayX) / (pad.rx + 0.4);
+          const ndy = (py - pad.cy - swayY) / (pad.ry + 0.4);
+          if (ndx * ndx + ndy * ndy > 1) continue;
+
+          // Distance from pad center (edge darkening)
+          const dist = Math.sqrt(ndx * ndx + ndy * ndy);
+          const edgeFade = 1 - dist * 0.3;
+
+          // Per-pixel noise
+          const n = noise2D(px2, py, pad.s * 7 + pi * 31);
+
+          // Light from upper-left
+          const lightAngle = Math.atan2(ndy, ndx);
+          const lightDot = (Math.cos(lightAngle - Math.PI * 0.75) * 0.5 + 0.5);
+
+          let r, g, b;
+          const bs = pad.bs;
+          if (bs === 0) { // light base
+            r = P.lLite[0] * lightDot + P.lHi[0] * (1 - lightDot) | 0;
+            g = P.lLite[1] * lightDot + P.lHi[1] * (1 - lightDot) | 0;
+            b = P.lLite[2] * lightDot + P.lHi[2] * (1 - lightDot) | 0;
+          } else if (bs === 1) { // mid base
+            r = P.lMid[0] * lightDot + P.lLite[0] * (1 - lightDot) | 0;
+            g = P.lMid[1] * lightDot + P.lLite[1] * (1 - lightDot) | 0;
+            b = P.lMid[2] * lightDot + P.lLite[2] * (1 - lightDot) | 0;
+          } else if (bs === 2) { // dark base
+            r = P.lDark[0] * lightDot + P.lMid[0] * (1 - lightDot) | 0;
+            g = P.lDark[1] * lightDot + P.lMid[1] * (1 - lightDot) | 0;
+            b = P.lDark[2] * lightDot + P.lMid[2] * (1 - lightDot) | 0;
+          } else if (bs === 3) { // shadow
+            r = P.lShad[0]; g = P.lShad[1]; b = P.lShad[2];
+          } else { // highlight
+            r = P.lHi[0] * (0.6 + 0.4 * lightDot) | 0;
+            g = P.lHi[1] * (0.6 + 0.4 * lightDot) | 0;
+            b = P.lHi[2] * (0.6 + 0.4 * lightDot) | 0;
+          }
+
+          // Noise variation
+          if (n > 0.5 && bs < 3) { r += 12; g += 18; b += 8; }
+          if (n < -0.6 && bs < 3) { r -= 10; g -= 12; b -= 5; }
+
+          // Edge darkening
+          if (dist > 0.7) { r = r * 0.7 | 0; g = g * 0.7 | 0; b = b * 0.7 | 0; }
+
+          // Clamp
+          r = clamp(r, 0, 255); g = clamp(g, 0, 255); b = clamp(b, 0, 255);
+
+          px(px2, py, r, g, b);
+        }
+      }
+    }
+  }
+
+  /* ───────── falling leaves ───────── */
+  function spawnLeaf() {
+    return {
+      x: rand(20, 140), y: rand(50, 130),
+      vx: rand(0.4, 1.0), vy: rand(0.1, 0.35),
+      rot: rand(0, 6.28), rotSpd: rand(-0.04, 0.04),
+      sz: Math.random() < 0.5 ? 1 : 2,
+      col: [P.fLeaf1[0], P.fLeaf1[1], P.fLeaf1[2]][Math.floor(Math.random() * 5)],
+      life: 0, maxLife: 150 + Math.random() * 200 | 0,
+    };
+  }
+  function pickLeafColor() {
+    const c = [[P.fLeaf1[0],P.fLeaf1[1],P.fLeaf1[2]],[P.fLeaf2[0],P.fLeaf2[1],P.fLeaf2[2]],[P.fLeaf3[0],P.fLeaf3[1],P.fLeaf3[2]],[P.fLeaf4[0],P.fLeaf4[1],P.fLeaf4[2]],[P.fLeaf5[0],P.fLeaf5[1],P.fLeaf5[2]]];
+    return c[Math.floor(Math.random() * c.length)];
+  }
+
+  function updateLeaves() {
+    if (fallingLeaves.length < 20 && Math.random() < 0.1) {
+      const l = spawnLeaf();
+      l.col = pickLeafColor();
+      fallingLeaves.push(l);
+    }
+    for (let i = fallingLeaves.length - 1; i >= 0; i--) {
+      const lf = fallingLeaves[i];
+      lf.life++;
+      if (lf.life > lf.maxLife || lf.x > W + 10 || lf.y > H + 10) { fallingLeaves.splice(i, 1); continue; }
+      // wind gusts
+      const gust = Math.sin(T * 0.9 + i * 1.7) * 0.6 + 1.0;
+      lf.x += lf.vx * gust + Math.sin(T * 2.1 + i * 2.3) * 0.25;
+      lf.y += lf.vy + Math.sin(T * 1.3 + i * 1.8) * 0.15;
+      lf.rot += lf.rotSpd;
+      lf.vy += 0.003;
+
+      // Draw as crisp cross/diamond shape at integer coordinates (no rotation to keep pixels sharp)
+      const fx = lf.x | 0, fy = lf.y | 0;
+      const {col} = lf;
+      if (lf.sz === 1) {
+        px(fx, fy - 1, ...col);
+        px(fx - 1, fy, ...col);
+        px(fx, fy, ...col);
+        px(fx + 1, fy, ...col);
+        if (lf.life < lf.maxLife - 10) px(fx, fy + 1, ...col);
+        if (lf.life < 15) { const f = lf.life / 15; px(fx, fy - 2, col[0] * f | 0, col[1] * f | 0, col[2] * f | 0); }
+      } else {
+        px(fx, fy - 1, ...col); px(fx - 1, fy, ...col); px(fx, fy, ...col);
+        px(fx + 1, fy, ...col); px(fx, fy + 1, ...col);
+        px(fx - 1, fy - 1, ...col); px(fx + 1, fy - 1, ...col);
+        px(fx, fy - 2, ...col); px(fx, fy + 2, ...col);
+        px(fx - 2, fy, ...col); px(fx + 2, fy, ...col);
+      }
+    }
+  }
+
+  /* ───────── wind streaks ───────── */
+  function updateWindStreaks() {
+    if (windStreaks.length < 10 && Math.random() < 0.12) {
+      windStreaks.push({ x: -12, y: rand(15, 160), len: 4 + Math.random() * 10 | 0, spd: 2 + Math.random() * 3.5, a: rand(0.04, 0.12) });
+    }
+    for (let i = windStreaks.length - 1; i >= 0; i--) {
+      const w = windStreaks[i];
+      w.x += w.spd;
+      if (w.x > W + 20) { windStreaks.splice(i, 1); continue; }
+      for (let j = 0; j < w.len; j++) {
+        const px2 = w.x + j | 0;
+        const py2 = w.y + Math.sin(j * 0.7 + T * 2) * 1.5 | 0;
+        const fade = 1 - j / w.len;
+        px(px2, py2, 255, 255, 255, w.a * fade);
+      }
+    }
+  }
+
+  /* ───────── dust / pollen ───────── */
+  function updateDust() {
+    if (dustParticles.length < 12 && Math.random() < 0.06) {
+      dustParticles.push({ x: rand(0, W), y: rand(0, H), vx: rand(0.15, 0.4), vy: rand(-0.05, 0.05), a: rand(0.08, 0.2) });
+    }
+    for (let i = dustParticles.length - 1; i >= 0; i--) {
+      const d = dustParticles[i];
+      d.x += d.vx + Math.sin(T + d.y * 0.1) * 0.15;
+      d.y += d.vy;
+      if (d.x > W + 3) { d.x = -2; d.y = rand(0, H); }
+      // small dot
+      const a2 = d.a * (0.7 + 0.3 * Math.sin(T * 3 + d.x));
+      px(d.x | 0, d.y | 0, 200, 200, 180, a2);
+    }
+  }
+
+  /* ───────── wind lines on the left ───────── */
+  function drawWindFlow() {
+    const strength = Math.sin(T * 0.5) * 0.5 + 0.5;
+    const count = (strength * 2.5 + 0.5) | 0;
+    for (let i = 0; i < count; i++) {
+      const by = 40 + i * 38 + Math.sin(T + i * 1.5) * 4;
+      const sx2 = 5 + Math.sin(T * 0.6 + i * 2.1) * 6;
+      const len = 12 + strength * 12 | 0;
+      for (let j = 0; j < len; j++) {
+        const x = sx2 + j * 1.5;
+        if (x > W - 2) break;
+        const wave = Math.sin(j * 0.4 + T * 2.5 + i) * 1.5;
+        const alpha = 0.04 * (1 - j / len);
+        px(x | 0, (by + wave) | 0, 255, 255, 255, alpha);
+      }
+    }
+  }
+
+  /* ───────── MAIN DRAW ───────── */
+  function draw() {
+    drawSky();
+    drawStars();
+    drawMoon();
+    drawGround();
+    drawWindFlow();
+    updateWindStreaks();
+    updateDust();
+    drawPot();
+    drawTrunk();
+    drawBranches();
+    drawFoliage();
+    updateLeaves();
+  }
+
+  /* ───────── LOOP ───────── */
+  let last = 0;
+  function loop(ts) {
+    const dt = Math.min((ts - last) / 1000, 0.05);
+    last = ts;
+    T += dt * 2.0;
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
