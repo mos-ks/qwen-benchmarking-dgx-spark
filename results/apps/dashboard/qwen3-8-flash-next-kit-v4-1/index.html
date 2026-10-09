@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Money — Personal Finance Dashboard</title>
+<style>
+  /* ---------- Tokens ---------- */
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #f1f3f6;
+    --surface-3: #e6e9ee;
+    --border: #e4e7ec;
+    --fg: #101828;
+    --fg-muted: #475467;
+    --fg-subtle: #667085;
+    --accent: #1e40af;
+    --accent-soft: #e0eaff;
+    --positive: #067647;
+    --positive-bg: #ecfdf3;
+    --negative: #b42318;
+    --negative-bg: #fef3f2;
+    --neutral-delta: #475467;
+    --grid: #e4e7ec;
+    --track: #e4e7ec;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+    --tooltip-bg: #101828;
+    --tooltip-fg: #f9fafb;
+    /* Categorical series — Okabe-Ito, colorblind-safe */
+    --cat-housing:     #0072B2;
+    --cat-food:        #E69F00;
+    --cat-transport:   #D55E00;
+    --cat-leisure:     #CC79A7;
+    --cat-health:      #009E73;
+    --cat-shopping:    #56B4E9;
+    --cat-subscriptions: #6B4EFF;
+    --income:   #0a8a4f;
+    --spending: #d4562a;
+    /* Spacing scale (4pt) */
+    --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+    /* Type scale */
+    --text-xs: 12px; --text-sm: 13px; --text-base: 14px;
+    --text-md: 16px; --text-lg: 18px; --text-xl: 24px;
+    /* Radii */
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 999px;
+    --dur: 220ms;
+    --ease: cubic-bezier(.22,.61,.36,1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0e14;
+      --surface: #12161f;
+      --surface-2: #1a1f2b;
+      --surface-3: #242b3a;
+      --border: #242b38;
+      --fg: #e6e9ef;
+      --fg-muted: #98a2b3;
+      --fg-subtle: #7b869a;
+      --accent: #8fb0f5;
+      --accent-soft: #1c2a4a;
+      --positive: #3dd68c;
+      --positive-bg: rgba(61,214,140,.10);
+      --negative: #f97066;
+      --negative-bg: rgba(249,112,102,.10);
+      --neutral-delta: #98a2b3;
+      --grid: #232a37;
+      --track: #242b38;
+      --shadow: 0 1px 2px rgba(0,0,0,.4);
+      --tooltip-bg: #e6e9ef;
+      --tooltip-fg: #101828;
+      --cat-housing:     #5fb4e8;
+      --cat-food:        #f0b13f;
+      --cat-transport:   #ef8b52;
+      --cat-leisure:     #e29cc4;
+      --cat-health:      #3fc79a;
+      --cat-shopping:    #85ccf2;
+      --cat-subscriptions: #9c86ff;
+      --income:   #35c97e;
+      --spending: #ef8b52;
+    }
+  }
+
+  /* ---------- Base ---------- */
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 400 var(--text-base)/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  h1, h2, p { margin: 0; }
+  button { font: inherit; color: inherit; }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 var(--sp-4); }
+  @media (min-width: 768px) { .wrap { padding: 0 var(--sp-6); } }
+
+  /* ---------- Header ---------- */
+  .site-header {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .site-header .wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--sp-3); min-height: 62px; padding-block: var(--sp-3);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand svg { display: block; }
+  .brand h1 { font-size: var(--text-md); font-weight: 650; letter-spacing: -.01em; }
+  .brand .who {
+    display: none; font-size: var(--text-sm); color: var(--fg-subtle);
+    border-left: 1px solid var(--border); padding-left: 10px; margin-left: 2px;
+  }
+  @media (min-width: 768px) { .brand .who { display: block; } }
+
+  .month-picker { display: flex; align-items: center; gap: var(--sp-2); }
+  .month-picker .label {
+    font-size: var(--text-sm); font-weight: 600; color: var(--fg-subtle);
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  @media (max-width: 440px) { .month-picker .label { display: none; } }
+  .seg {
+    display: inline-flex; align-items: center; gap: 2px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--r-full); padding: 3px;
+  }
+  .nav-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border: 0; border-radius: var(--r-full);
+    background: transparent; color: var(--fg-muted); cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .nav-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--fg); }
+  .nav-btn:disabled { opacity: .35; cursor: default; }
+  .month-btn {
+    min-width: 132px; min-height: 36px; padding: 0 var(--sp-4);
+    border: 0; border-radius: var(--r-full); background: transparent;
+    font-size: var(--text-base); font-weight: 600; cursor: pointer;
+    transition: background var(--dur) var(--ease);
+  }
+  .month-btn:hover { background: var(--surface-3); }
+
+  /* ---------- Layout ---------- */
+  main { padding-block: var(--sp-5) var(--sp-7); }
+  @media (min-width: 768px) { main { padding-block: var(--sp-6) var(--sp-7); } }
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-4);
+  }
+  @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 440px) { .kpi-grid { grid-template-columns: 1fr; } }
+  .grid-2 {
+    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--sp-4); margin-top: var(--sp-4);
+  }
+  .grid-2.eq { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 900px) {
+    .grid-2, .grid-2.eq { grid-template-columns: 1fr; }
+    .grid-2 > *, .grid-2.eq > * { min-width: 0; }
+  }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-lg); box-shadow: var(--shadow);
+    padding: var(--sp-5);
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+  .card-head h2 { font-size: var(--text-md); font-weight: 650; letter-spacing: -.01em; }
+  .card-sub { font-size: var(--text-sm); color: var(--fg-subtle); }
+
+  /* ---------- KPI cards ---------- */
+  .kpi { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-4) var(--sp-5); }
+  .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+  .kpi-label { font-size: var(--text-sm); font-weight: 600; color: var(--fg-subtle); }
+  .kpi-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: var(--r-sm);
+    background: var(--accent-soft); color: var(--accent); flex: none;
+  }
+  .kpi-value {
+    font-size: clamp(22px, 2.6vw, var(--text-xl)); font-weight: 675;
+    letter-spacing: -.02em; line-height: 1.15;
+  }
+  .kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 22px; }
+  .delta {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: var(--text-xs); font-weight: 650;
+    padding: 2px 8px; border-radius: var(--r-full);
+    background: var(--surface-2); color: var(--neutral-delta);
+  }
+  .delta .vs { font-weight: 500; color: var(--fg-subtle); }
+  .delta.pos { background: var(--positive-bg); color: var(--positive); }
+  .delta.neg { background: var(--negative-bg); color: var(--negative); }
+  .spark { display: block; }
+  .delta-none { font-size: var(--text-xs); color: var(--fg-subtle); padding-left: 2px; }
+
+  /* ---------- Chart shared ---------- */
+  .chart-body { position: relative; margin-top: var(--sp-3); }
+  svg.chart { display: block; width: 100%; height: auto; }
+  .tooltip {
+    position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none;
+    display: flex; flex-direction: column; gap: 3px;
+    background: var(--tooltip-bg); color: var(--tooltip-fg);
+    font-size: var(--text-xs); line-height: 1.45;
+    padding: 8px 10px; border-radius: var(--r-sm);
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    opacity: 0; transform: translate(-50%, calc(-100% - 10px)) scale(.96);
+    transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+    white-space: nowrap;
+  }
+  .tooltip.below { transform: translate(-50%, 10px) scale(.96); }
+  .tooltip.show { opacity: 1; transform: translate(-50%, calc(-100% - 10px)) scale(1); }
+  .tooltip.below.show { transform: translate(-50%, 10px) scale(1); }
+  .tt-title { font-weight: 650; margin-bottom: 2px; }
+  .tt-row { display: flex; align-items: center; gap: 7px; }
+  .tt-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+
+  /* Donut */
+  .slice {
+    cursor: pointer;
+    transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  }
+  .slice.dim { opacity: .35; }
+  .slice.active { transform: scale(1.035); transform-origin: center; }
+  .center-label { font-size: 11px; fill: var(--fg-subtle); font-weight: 600; letter-spacing: .06em; }
+  .center-value { font-size: 23px; font-weight: 675; fill: var(--fg); letter-spacing: -.02em; }
+  .legend {
+    list-style: none; margin: var(--sp-4) 0 0; padding: 0;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px var(--sp-4);
+  }
+  @media (max-width: 420px) { .legend { grid-template-columns: 1fr; } }
+  .legend li {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    background: none; border: 0; padding: 5px 6px; border-radius: var(--r-sm);
+    font-size: var(--text-sm); cursor: pointer; text-align: left;
+    transition: background var(--dur) var(--ease);
+  }
+  .legend li:hover, .legend li.active { background: var(--surface-2); }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .legend .nm { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend .pc { margin-left: auto; color: var(--fg-subtle); font-size: var(--text-xs); }
+
+  /* Bar chart */
+  .hit { fill: transparent; cursor: pointer; }
+  .hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .bar { transition: opacity var(--dur) var(--ease); }
+  .bar-group.dim .bar { opacity: .4; }
+  .axis-line { stroke: var(--border); }
+  .gridline { stroke: var(--grid); }
+  .tick-label { fill: var(--fg-subtle); font-size: 11px; }
+  .tick-label.month { fill: var(--fg-muted); font-size: 11.5px; font-weight: 600; }
+  .legend-inline { display: flex; gap: var(--sp-4); }
+  .legend-inline span { display: inline-flex; align-items: center; gap: 7px; font-size: var(--text-sm); color: var(--fg-muted); }
+  .legend-inline i { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* ---------- Transactions ---------- */
+  .txns { list-style: none; margin: var(--sp-3) 0 0; padding: 0; }
+  .txn {
+    display: flex; align-items: center; gap: var(--sp-3);
+    padding: 11px 4px; border-top: 1px solid var(--border);
+    min-width: 0; flex-wrap: nowrap;
+  }
+  .txn:first-child { border-top: 0; }
+  .txn-ic {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: var(--r-full); flex: 0 0 auto;
+    color: var(--cat); background: color-mix(in srgb, var(--cat) 13%, transparent);
+  }
+  .txn-ic svg { display: block; }
+  .txn-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .txn-desc { font-size: var(--text-base); font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .txn-meta { font-size: var(--text-xs); color: var(--fg-subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .txn-amt { flex: 0 0 auto; margin-left: auto; font-weight: 650; white-space: nowrap; }
+  .txn-amt.inc { color: var(--positive); }
+
+  /* ---------- Budgets ---------- */
+  .budget-list { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+  .budget-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; }
+  .budget-head { grid-column: 2 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); margin-bottom: 6px; }
+  .budget-name { font-size: var(--text-sm); font-weight: 600; }
+  .budget-vals { font-size: var(--text-xs); color: var(--fg-subtle); white-space: nowrap; }
+  .budget-vals .spent { color: var(--fg); font-weight: 600; }
+  .bar-track {
+    grid-column: 2 / -1; height: 8px; border-radius: var(--r-full);
+    background: var(--track); overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; border-radius: inherit; background: var(--cat);
+    transition: width 420ms var(--ease), background var(--dur) var(--ease);
+  }
+  .budget-row.warn .bar-fill { background: #d97706; }
+  .budget-row.over .bar-fill { background: var(--negative); }
+  .status {
+    font-size: 11px; font-weight: 700; letter-spacing: .03em;
+    padding: 2px 8px; border-radius: var(--r-full); white-space: nowrap;
+    background: var(--surface-2); color: var(--fg-subtle);
+  }
+  .status.warn { background: rgba(217,119,6,.13); color: #b45309; }
+  .status.over { background: var(--negative-bg); color: var(--negative); }
+  @media (prefers-color-scheme: dark) { .status.warn { color: #f5b04c; } }
+  .budget-ic {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: var(--r-sm); flex: none;
+    color: var(--cat); background: color-mix(in srgb, var(--cat) 13%, transparent);
+  }
+  .budget-ic svg { display: block; }
+  .budget-foot {
+    margin-top: var(--sp-5); padding-top: var(--sp-3); border-top: 1px solid var(--border);
+    font-size: var(--text-sm); color: var(--fg-subtle); display: flex; justify-content: space-between; gap: var(--sp-3);
+  }
+  .budget-foot strong { color: var(--fg); font-weight: 650; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<a class="sr-only" href="#main">Skip to main content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="25" height="25" rx="7.5" fill="var(--accent)"/>
+        <path d="M8 18.5v-4M12 18.5v-7.5M16 18.5v-5M20 18.5v-9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+      <h1>Money</h1>
+      <span class="who">Maya Chen · Checking ••4821</span>
+    </div>
+    <nav class="month-picker" aria-label="Choose month">
+      <span class="label">Month</span>
+      <div class="seg">
+        <button class="nav-btn" id="prev" aria-label="Previous month">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3.5 5.5 8 10 12.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="month-btn num" id="monthBtn" aria-live="polite">—</button>
+        <button class="nav-btn" id="next" aria-label="Next month">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <section class="kpi-grid" id="kpis" aria-label="Key metrics"></section>
+
+  <section class="grid-2">
+    <div class="card">
+      <div class="card-head">
+        <h2 id="donutTitle">Spending by category</h2>
+        <span class="card-sub" id="donutSub"></span>
+      </div>
+      <div class="chart-body" id="donutBody"></div>
+      <ul class="legend" id="donutLegend" aria-label="Spending categories"></ul>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>Income vs spending</h2>
+        <div class="legend-inline" aria-hidden="true">
+          <span><i style="background:var(--income)"></i>Income</span>
+          <span><i style="background:var(--spending)"></i>Spending</span>
+        </div>
+      </div>
+      <div class="chart-body" id="barBody"></div>
+    </div>
+  </section>
+
+  <section class="grid-2 eq">
+    <div class="card">
+      <div class="card-head">
+        <h2>Recent transactions</h2>
+        <span class="card-sub" id="txnSub"></span>
+      </div>
+      <ul class="txns" id="txnList"></ul>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>Budgets</h2>
+        <span class="card-sub" id="budgetSub"></span>
+      </div>
+      <ul class="budget-list" id="budgetList"></ul>
+      <div class="budget-foot" id="budgetFoot"></div>
+    </div>
+  </section>
+</main>
+
+<div class="tooltip" id="tip" role="status" aria-hidden="true"></div>
+<div class="sr-only" id="srSummary" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ================= Data ================= */
+
+  var MONTHS = [
+    { y: 2026, m: 4 }, { y: 2026, m: 5 }, { y: 2026, m: 6 },
+    { y: 2026, m: 7 }, { y: 2026, m: 8 }, { y: 2026, m: 9 }
+  ];
+  var MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  var LAST_LABEL = "Sep 2026";
+
+  var CATEGORIES = {
+    income:        { label: "Income",        varName: "--positive" },
+    housing:       { label: "Housing",       varName: "--cat-housing" },
+    food:          { label: "Food & dining", varName: "--cat-food" },
+    transport:     { label: "Transport",     varName: "--cat-transport" },
+    leisure:       { label: "Leisure",       varName: "--cat-leisure" },
+    health:        { label: "Health",        varName: "--cat-health" },
+    shopping:      { label: "Shopping",      varName: "--cat-shopping" },
+    subscriptions: { label: "Subscriptions", varName: "--cat-subscriptions" }
+  };
+  var SPEND_ORDER = ["housing", "food", "transport", "leisure", "health", "shopping", "subscriptions"];
+
+  var BUDGETS = {
+    food: 600, transport: 280, leisure: 260, health: 200, shopping: 450, subscriptions: 80
+  };
+
+  function t(monthIndex, day, desc, category, amount) {
+    return { month: monthIndex, day: day, desc: desc, category: category, amount: amount };
+  }
+
+  var RAW = [
+    [0, 1, "Salary — Northwind Labs", "income", 4850],
+    [0, 1, "Rent — Parkside Apartments", "housing", -1750],
+    [0, 1, "Reliable Power — electricity", "housing", -121.4],
+    [0, 1, "City Water & Sewer", "housing", -58.2],
+    [0, 1, "Comcast Xfinity — internet", "housing", -69.99],
+    [0, 1, "Progressive — auto insurance", "housing", -96.5],
+    [0, 1, "Whole Foods #214", "food", -128.75],
+    [0, 2, "Trader Joe's", "food", -86.32],
+    [0, 3, "Blue Bottle Coffee", "food", -6.75],
+    [0, 4, "Sweetgreen — salad bowl", "food", -14.9],
+    [0, 5, "Sculpt Fitness — monthly", "health", -45],
+    [0, 7, "Raglan Barber Co.", "health", -40],
+    [0, 7, "Chipotle", "food", -16.4],
+    [0, 8, "Rideshare — downtown", "transport", -23.5],
+    [0, 9, "Whole Foods #214", "food", -104.6],
+    [0, 10, "Chevron — fill-up", "transport", -52.3],
+    [0, 11, "Trader Joe's", "food", -72.18],
+    [0, 12, "Spotify Premium", "subscriptions", -11.99],
+    [0, 12, "Netflix Standard", "subscriptions", -15.49],
+    [0, 12, "Apple iCloud+", "subscriptions", -2.99],
+    [0, 12, "NYT Digital", "subscriptions", -8],
+    [0, 13, "Corner Bakery", "food", -11.6],
+    [0, 14, "Rideshare — airport", "transport", -48.75],
+    [0, 15, "Amazon — headphones case", "shopping", -34.99],
+    [0, 16, "Trader Joe's", "food", -91.44],
+    [0, 17, "Theater — Two Nights", "leisure", -96],
+    [0, 18, "Rideshare — evening", "transport", -18.25],
+    [0, 19, "Chipotle", "food", -15.1],
+    [0, 21, "Whole Foods #214", "food", -117.35],
+    [0, 22, "CVS Pharmacy", "health", -23.84],
+    [0, 23, "Rideshare — midtown", "transport", -21.1],
+    [0, 24, "Amazon — desk lamp", "shopping", -42.5],
+    [0, 25, "Cinema — two tickets", "leisure", -29],
+    [0, 26, "Trader Joe's", "food", -67.83],
+    [0, 27, "Rideshare — home", "transport", -16.75],
+    [0, 28, "Bistro Margot — date night", "food", -88.4],
+    [0, 29, "Bonus — Q3 sales", "income", 450],
+    [0, 30, "Side project — invoice #24", "income", 380],
+
+    [1, 1, "Salary — Northwind Labs", "income", 4850],
+    [1, 1, "Rent — Parkside Apartments", "housing", -1750],
+    [1, 1, "Reliable Power — electricity", "housing", -121.4],
+    [1, 1, "City Water & Sewer", "housing", -58.2],
+    [1, 1, "Comcast Xfinity — internet", "housing", -69.99],
+    [1, 1, "Progressive — auto insurance", "housing", -96.5],
+    [1, 1, "Whole Foods #214", "food", -128.75],
+    [1, 2, "Trader Joe's", "food", -86.32],
+    [1, 3, "Blue Bottle Coffee", "food", -6.75],
+    [1, 4, "Sweetgreen — salad bowl", "food", -14.9],
+    [1, 5, "Sculpt Fitness — monthly", "health", -45],
+    [1, 7, "Raglan Barber Co.", "health", -40],
+    [1, 7, "Chipotle", "food", -16.4],
+    [1, 8, "Rideshare — downtown", "transport", -23.5],
+    [1, 9, "Whole Foods #214", "food", -104.6],
+    [1, 10, "Chevron — fill-up", "transport", -52.3],
+    [1, 11, "Trader Joe's", "food", -72.18],
+    [1, 12, "Spotify Premium", "subscriptions", -11.99],
+    [1, 12, "Netflix Standard", "subscriptions", -15.49],
+    [1, 12, "Apple iCloud+", "subscriptions", -2.99],
+    [1, 12, "NYT Digital", "subscriptions", -8],
+    [1, 13, "Corner Bakery", "food", -11.6],
+    [1, 14, "Rideshare — airport", "transport", -48.75],
+    [1, 15, "Amazon — headphones case", "shopping", -34.99],
+    [1, 16, "Trader Joe's", "food", -91.44],
+    [1, 17, "Theater — Two Nights", "leisure", -96],
+    [1, 18, "Rideshare — evening", "transport", -18.25],
+    [1, 19, "Chipotle", "food", -15.1],
+    [1, 21, "Whole Foods #214", "food", -117.35],
+    [1, 22, "CVS Pharmacy", "health", -23.84],
+    [1, 23, "Rideshare — midtown", "transport", -21.1],
+    [1, 24, "Amazon — desk lamp", "shopping", -42.5],
+    [1, 25, "Cinema — two tickets", "leisure", -29],
+    [1, 26, "Trader Joe's", "food", -67.83],
+    [1, 26, "Delta — weekend flight", "leisure", -214],
+    [1, 27, "Rideshare — home", "transport", -16.75],
+    [1, 28, "Bistro Margot — date night", "food", -88.4],
+    [1, 29, "Bonus — Q3 sales", "income", 450],
+    [1, 29, "Weekend market", "food", -44.8],
+    [1, 30, "Side project — invoice #24", "income", 380],
+    [1, 30, "Client project — invoice #22", "income", 700],
+
+    [2, 1, "Salary — Northwind Labs", "income", 4850],
+    [2, 1, "Rent — Parkside Apartments", "housing", -1750],
+    [2, 1, "Reliable Power — electricity", "housing", -121.4],
+    [2, 1, "City Water & Sewer", "housing", -58.2],
+    [2, 1, "Comcast Xfinity — internet", "housing", -69.99],
+    [2, 1, "Progressive — auto insurance", "housing", -96.5],
+    [2, 1, "Whole Foods #214", "food", -128.75],
+    [2, 2, "Trader Joe's", "food", -86.32],
+    [2, 3, "Blue Bottle Coffee", "food", -6.75],
+    [2, 4, "Sweetgreen — salad bowl", "food", -14.9],
+    [2, 5, "Sculpt Fitness — monthly", "health", -45],
+    [2, 7, "Raglan Barber Co.", "health", -40],
+    [2, 7, "Chipotle", "food", -16.4],
+    [2, 8, "Rideshare — downtown", "transport", -23.5],
+    [2, 9, "Whole Foods #214", "food", -104.6],
+    [2, 10, "Chevron — fill-up", "transport", -52.3],
+    [2, 11, "Trader Joe's", "food", -72.18],
+    [2, 12, "Spotify Premium", "subscriptions", -11.99],
+    [2, 12, "Netflix Standard", "subscriptions", -15.49],
+    [2, 12, "Apple iCloud+", "subscriptions", -2.99],
+    [2, 12, "NYT Digital", "subscriptions", -8],
+    [2, 13, "Corner Bakery", "food", -11.6],
+    [2, 14, "Rideshare — airport", "transport", -48.75],
+    [2, 15, "Amazon — headphones case", "shopping", -34.99],
+    [2, 16, "Trader Joe's", "food", -91.44],
+    [2, 17, "Theater — Two Nights", "leisure", -96],
+    [2, 18, "Rideshare — evening", "transport", -18.25],
+    [2, 19, "Chipotle", "food", -15.1],
+    [2, 21, "Whole Foods #214", "food", -117.35],
+    [2, 22, "CVS Pharmacy", "health", -23.84],
+    [2, 23, "Rideshare — midtown", "transport", -21.1],
+    [2, 24, "Amazon — desk lamp", "shopping", -42.5],
+    [2, 25, "Cinema — two tickets", "leisure", -29],
+    [2, 27, "Rideshare — home", "transport", -16.75],
+    [2, 28, "Bistro Margot — date night", "food", -88.4],
+    [2, 29, "Bonus — Q3 sales", "income", 450],
+    [2, 30, "Side project — invoice #24", "income", 380],
+    [2, 20, "REI — hiking gear", "shopping", -238],
+    [2, 22, "Trader Joe's — pantry reset", "food", -96.15],
+    [2, 28, "Concert — The Lark", "leisure", -95],
+    [2, 30, "Freelance — invoice #23", "income", 600],
+
+    [3, 1, "Salary — Northwind Labs", "income", 4850],
+    [3, 1, "Rent — Parkside Apartments", "housing", -1750],
+    [3, 1, "Reliable Power — electricity", "housing", -121.4],
+    [3, 1, "City Water & Sewer", "housing", -58.2],
+    [3, 1, "Comcast Xfinity — internet", "housing", -69.99],
+    [3, 1, "Progressive — auto insurance", "housing", -96.5],
+    [3, 1, "Whole Foods #214", "food", -128.75],
+    [3, 2, "Trader Joe's", "food", -86.32],
+    [3, 3, "Blue Bottle Coffee", "food", -6.75],
+    [3, 4, "Sweetgreen — salad bowl", "food", -14.9],
+    [3, 5, "Sculpt Fitness — monthly", "health", -45],
+    [3, 7, "Raglan Barber Co.", "health", -40],
+    [3, 7, "Chipotle", "food", -16.4],
+    [3, 8, "Rideshare — downtown", "transport", -23.5],
+    [3, 9, "Whole Foods #214", "food", -104.6],
+    [3, 10, "Chevron — fill-up", "transport", -52.3],
+    [3, 11, "Trader Joe's", "food", -72.18],
+    [3, 12, "Spotify Premium", "subscriptions", -11.99],
+    [3, 12, "Netflix Standard", "subscriptions", -15.49],
+    [3, 12, "Apple iCloud+", "subscriptions", -2.99],
+    [3, 12, "NYT Digital", "subscriptions", -8],
+    [3, 13, "Corner Bakery", "food", -11.6],
+    [3, 14, "Rideshare — airport", "transport", -48.75],
+    [3, 15, "Amazon — headphones case", "shopping", -34.99],
+    [3, 16, "Trader Joe's", "food", -91.44],
+    [3, 17, "Theater — Two Nights", "leisure", -96],
+    [3, 18, "Rideshare — evening", "transport", -18.25],
+    [3, 19, "Chipotle", "food", -15.1],
+    [3, 21, "Whole Foods #214", "food", -117.35],
+    [3, 22, "CVS Pharmacy", "health", -23.84],
+    [3, 23, "Rideshare — midtown", "transport", -21.1],
+    [3, 24, "Amazon — desk lamp", "shopping", -42.5],
+    [3, 25, "Cinema — two tickets", "leisure", -29],
+    [3, 26, "Trader Joe's", "food", -67.83],
+    [3, 27, "Rideshare — home", "transport", -16.75],
+    [3, 28, "Bistro Margot — date night", "food", -88.4],
+    [3, 29, "Bonus — Q3 sales", "income", 450],
+    [3, 30, "Side project — invoice #24", "income", 380],
+    [3, 6, "Emergency vet visit", "health", -312.6],
+    [3, 14, "Brunch with friends", "food", -58.6],
+    [3, 21, "Amazon — running shoes", "shopping", -131],
+    [3, 27, "Wine bar — tasting", "leisure", -44],
+
+    [4, 1, "Salary — Northwind Labs", "income", 4850],
+    [4, 1, "Rent — Parkside Apartments", "housing", -1750],
+    [4, 1, "Reliable Power — electricity", "housing", -121.4],
+    [4, 1, "City Water & Sewer", "housing", -58.2],
+    [4, 1, "Comcast Xfinity — internet", "housing", -69.99],
+    [4, 1, "Progressive — auto insurance", "housing", -96.5],
+    [4, 1, "Whole Foods #214", "food", -128.75],
+    [4, 2, "Trader Joe's", "food", -86.32],
+    [4, 3, "Blue Bottle Coffee", "food", -6.75],
+    [4, 4, "Sweetgreen — salad bowl", "food", -14.9],
+    [4, 5, "Sculpt Fitness — monthly", "health", -45],
+    [4, 7, "Raglan Barber Co.", "health", -40],
+    [4, 7, "Chipotle", "food", -16.4],
+    [4, 8, "Rideshare — downtown", "transport", -23.5],
+    [4, 9, "Whole Foods #214", "food", -104.6],
+    [4, 10, "Chevron — fill-up", "transport", -52.3],
+    [4, 11, "Trader Joe's", "food", -72.18],
+    [4, 12, "Spotify Premium", "subscriptions", -11.99],
+    [4, 12, "Netflix Standard", "subscriptions", -15.49],
+    [4, 12, "Apple iCloud+", "subscriptions", -2.99],
+    [4, 12, "NYT Digital", "subscriptions", -8],
+    [4, 13, "Corner Bakery", "food", -11.6],
+    [4, 14, "Rideshare — airport", "transport", -48.75],
+    [4, 15, "Amazon — headphones case", "shopping", -34.99],
+    [4, 16, "Trader Joe's", "food", -91.44],
+    [4, 17, "Theater — Two Nights", "leisure", -96],
+    [4, 18, "Rideshare — evening", "transport", -18.25],
+    [4, 19, "Chipotle", "food", -15.1],
+    [4, 21, "Whole Foods #214", "food", -117.35],
+    [4, 22, "CVS Pharmacy", "health", -23.84],
+    [4, 23, "Rideshare — midtown", "transport", -21.1],
+    [4, 24, "Amazon — desk lamp", "shopping", -42.5],
+    [4, 25, "Cinema — two tickets", "leisure", -29],
+    [4, 26, "Trader Joe's", "food", -67.83],
+    [4, 27, "Rideshare — home", "transport", -16.75],
+    [4, 28, "Bistro Margot — date night", "food", -88.4],
+    [4, 29, "Bonus — Q3 sales", "income", 450],
+    [4, 30, "Side project — invoice #24", "income", 380],
+    [4, 5, "Cabin weekend — rental", "leisure", -184],
+    [4, 12, "Costco run", "food", -142.3],
+    [4, 19, "Trader Joe's", "food", -88.76],
+    [4, 26, "Amazon — summer linens", "shopping", -86.9],
+    [4, 28, "Road trip — gas", "transport", -61.2],
+
+    [5, 1, "Salary — Northwind Labs", "income", 4850],
+    [5, 1, "Rent — Parkside Apartments", "housing", -1750],
+    [5, 1, "Reliable Power — electricity", "housing", -121.4],
+    [5, 1, "City Water & Sewer", "housing", -58.2],
+    [5, 1, "Comcast Xfinity — internet", "housing", -69.99],
+    [5, 1, "Progressive — auto insurance", "housing", -96.5],
+    [5, 1, "Whole Foods #214", "food", -128.75],
+    [5, 2, "Trader Joe's", "food", -86.32],
+    [5, 3, "Blue Bottle Coffee", "food", -6.75],
+    [5, 4, "Sweetgreen — salad bowl", "food", -14.9],
+    [5, 5, "Sculpt Fitness — monthly", "health", -45],
+    [5, 7, "Raglan Barber Co.", "health", -40],
+    [5, 7, "Chipotle", "food", -16.4],
+    [5, 8, "Rideshare — downtown", "transport", -23.5],
+    [5, 9, "Whole Foods #214", "food", -104.6],
+    [5, 10, "Chevron — fill-up", "transport", -52.3],
+    [5, 11, "Trader Joe's", "food", -72.18],
+    [5, 12, "Spotify Premium", "subscriptions", -11.99],
+    [5, 12, "Netflix Standard", "subscriptions", -15.49],
+    [5, 12, "Apple iCloud+", "subscriptions", -2.99],
+    [5, 12, "NYT Digital", "subscriptions", -8],
+    [5, 13, "Corner Bakery", "food", -11.6],
+    [5, 14, "Rideshare — airport", "transport", -48.75],
+    [5, 15, "Amazon — headphones case", "shopping", -34.99],
+    [5, 16, "Trader Joe's", "food", -91.44],
+    [5, 17, "Theater — Two Nights", "leisure", -96],
+    [5, 18, "Rideshare — evening", "transport", -18.25],
+    [5, 19, "Chipotle", "food", -15.1],
+    [5, 21, "Whole Foods #214", "food", -117.35],
+    [5, 22, "CVS Pharmacy", "health", -23.84],
+    [5, 23, "Rideshare — midtown", "transport", -21.1],
+    [5, 24, "Amazon — desk lamp", "shopping", -42.5],
+    [5, 25, "Cinema — two tickets", "leisure", -29],
+    [5, 26, "Trader Joe's", "food", -67.83],
+    [5, 27, "Rideshare — home", "transport", -16.75],
+    [5, 28, "Bistro Margot — date night", "food", -88.4],
+    [5, 29, "Bonus — Q3 sales", "income", 450],
+    [5, 30, "Side project — invoice #24", "income", 380],
+    [5, 8, "Concert — The Lark", "leisure", -85],
+    [5, 11, "Amazon — office chair", "shopping", -168.4],
+    [5, 15, "Client project — invoice #25", "income", 500],
+    [5, 19, "Whole Foods #214", "food", -139.6],
+    [5, 24, "Rideshare — late night", "transport", -34.8]
+  ];
+  var TXNS = RAW.map(function (r) { return t(r[0], r[1], r[2], r[3], r[4]); });
+
+  /* ================= Aggregation ================= */
+
+  function monthTotals(mi) {
+    var total = { income: 0, spending: 0 }, byCat = {};
+    TXNS.forEach(function (tx) {
+      if (tx.month !== mi) return;
+      if (tx.category === "income") total.income += tx.amount;
+      else { total.spending += -tx.amount; byCat[tx.category] = (byCat[tx.category] || 0) + -tx.amount; }
+    });
+    return { total: total, byCat: byCat, net: total.income - total.spending };
+  }
+  function allTotals() { return MONTHS.map(function (_, mi) { return monthTotals(mi); }); }
+  function monthLabel(mi) { return MONTH_NAMES[MONTHS[mi].m - 1] + " " + MONTHS[mi].y; }
+  function dateOf(tx) { return new Date(MONTHS[tx.month].y, MONTHS[tx.month].m - 1, tx.day); }
+
+  function fmtMoney(v, cents) {
+    var sign = v < 0 ? "-" : "";
+    var abs = Math.abs(v);
+    var s = abs.toLocaleString("en-US", { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
+    return sign + "$" + s;
+  }
+  function fmtCompact(v) {
+    var sign = v < 0 ? "-" : "";
+    var abs = Math.abs(v);
+    if (abs >= 1000) {
+      var k = abs / 1000;
+      return sign + "$" + (k >= 100 ? Math.round(k) : (Math.round(k * 10) / 10)).toString().replace(/\.0$/, "") + "k";
+    }
+    return sign + "$" + Math.round(abs);
+  }
+
+  /* ================= Icons ================= */
+
+  var ICON_PATHS = {
+    income: ["M12 2v20", "M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"],
+    housing: ["M3 10.5 12 3l9 7.5", "M5.5 9.5V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.5", "M10 21v-6h4v6"],
+    food: ["M4 3v7a3 3 0 0 0 3 3v8", "M7 3v7", "M10 3v7a3 3 0 0 1-3 3", "M18.5 3c-1.7 0-3 2.2-3 5.5 0 2.4 1.1 4 2.5 4.4V21"],
+    transport: ["M5 17H3.6a.6.6 0 0 1-.6-.6v-4.9L4.8 6A2 2 0 0 1 6.7 4.6h10.6A2 2 0 0 1 19.2 6l1.8 5.5v4.9a.6.6 0 0 1-.6.6H19", "M5 12h14", "M7.5 17h9", "M6.5 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z", "M17.5 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"],
+    leisure: ["M9 18 19 5.5", "M9 18l-3.5-3.5L16 4l4 4Z", "M9.5 13.5 6 17", "M13 17l3-3", "M4 21l2-2"],
+    health: ["M19 14c1.5-1.5 3-3.3 3-5.5A4.5 4.5 0 0 0 17.5 4c-1.8 0-3 .9-3.9 2.1L12 7.8l-1.6-1.7A4.7 4.7 0 0 0 6.5 4 4.5 4.5 0 0 0 2 8.5c0 2.2 1.5 4 3 5.5l7 7 7-7Z", "M3.5 12h4l1.5-3 2.5 5 1.5-3h4"],
+    shopping: ["M6 7h12l1 13H5L6 7Z", "M9 7V6a3 3 0 0 1 6 0v1"],
+    subscriptions: ["M4.5 9a7.5 7.5 0 0 1 12.8 4.6", "M17 7.5 17.5 14 11 13", "M19.5 15a7.5 7.5 0 0 1-12.8-4.6", "M7 16.5 6.5 10 13 11"],
+    wallet: ["M3 8a2 2 0 0 1 2-2h12.5a1.5 1.5 0 0 1 0 3H5", "M3 8v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3.5", "M3 8V7a2 2 0 0 1 2-2", "M16 14.5h6v5h-6a2.5 2.5 0 0 1 0-5Z"],
+    trendDown: ["M3 7l6.5 6.5 4-4L21 17", "M15 17h6v-6"],
+    arrowDown: ["M12 4v13", "M6.5 11.5 12 17l5.5-5.5"],
+    arrowUp: ["M12 20V7", "M6.5 12.5 12 7l5.5 5.5"]
+  };
+  function icon(name, size) {
+    var paths = ICON_PATHS[name] || [];
+    var d = paths.map(function (p) { return '<path d="' + p + '"/>'; }).join("");
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
+  }
+  function catColor(cat) { return "var(" + CATEGORIES[cat].varName + ")"; }
+
+  /* ================= Tooltip ================= */
+
+  var tip = document.getElementById("tip");
+  function showTip(html, cx, cy) {
+    tip.innerHTML = html;
+    tip.classList.add("show");
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var below = cy < th + 18;
+    tip.classList.toggle("below", below);
+    var left = Math.min(Math.max(cx, tw / 2 + 6), window.innerWidth - tw / 2 - 6);
+    tip.style.left = left + "px";
+    tip.style.top = cy + "px";
+  }
+  function hideTip() { tip.classList.remove("show"); }
+
+  /* ================= Sparkline ================= */
+
+  function sparkline(values, color, W, H) {
+    var pad = 3, max = Math.max.apply(null, values), min = Math.min.apply(null, values);
+    var n = values.length;
+    function x(i) { return pad + i * ((W - 2 * pad) / (n - 1)); }
+    function y(v) { return H - pad - (max === min ? (H - 2 * pad) / 2 : ((v - min) / (max - min)) * (H - 2 * pad)); }
+    var pts = values.map(function (v, i) { return x(i).toFixed(1) + "," + y(v).toFixed(1); }).join(" ");
+    var lastX = x(n - 1), lastY = y(values[n - 1]);
+    return '<svg class="spark" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" aria-hidden="true">' +
+      '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>' +
+      '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="2.7" fill="' + color + '"/></svg>';
+  }
+
+  /* ================= KPI cards ================= */
+
+  var KPI_DEFS = [
+    { key: "balance", label: "Balance", ic: "wallet" },
+    { key: "income", label: "Income", ic: "arrowUp" },
+    { key: "spending", label: "Spending", ic: "arrowDown" },
+    { key: "rate", label: "Savings rate", ic: "arrowUp" }
+  ];
+
+  function deltaChip(cur, prev, invert) {
+    var d = cur - prev;
+    var cls = d === 0 ? "" : ((d > 0) !== invert ? "pos" : "neg");
+    var arrow = d === 0 ? "" : (d > 0 ? icon("arrowUp", 12) : icon("arrowDown", 12));
+    var pct = prev === 0 ? "—" : Math.abs(Math.round(d / prev * 100)) + "%";
+    return '<span class="delta ' + cls + '">' + arrow + pct + '<span class="vs">vs last month</span></span>';
+  }
+
+  function renderKPIs(mi, all) {
+    var cur = all[mi], prev = mi > 0 ? all[mi - 1] : null;
+    var cum = 0;
+    for (var i = 0; i <= mi; i++) cum += all[i].net;
+    var rate = cur.total.income > 0 ? Math.max(0, cur.net) / cur.total.income * 100 : 0;
+    var prevRate = prev && prev.total.income > 0 ? Math.max(0, prev.net) / prev.total.income * 100 : 0;
+
+    var values = {
+      balance: fmtMoney(cum, false),
+      income: fmtMoney(cur.total.income, false),
+      spending: fmtMoney(cur.total.spending, false),
+      rate: rate.toFixed(1) + "%"
+    };
+    var sparks = {
+      balance: sparkline(all.map(function (_, i) { var s = 0; for (var j = 0; j <= i; j++) s += all[j].net; return s; }), "var(--accent)", 84, 28),
+      income: sparkline(all.map(function (x) { return x.total.income; }), "var(--positive)", 84, 28),
+      spending: sparkline(all.map(function (x) { return x.total.spending; }), "var(--spending)", 84, 28),
+      rate: sparkline(all.map(function (x) { return x.total.income > 0 ? Math.max(0, x.net) / x.total.income * 100 : 0; }), "var(--accent)", 84, 28)
+    };
+
+    var html = "";
+    KPI_DEFS.forEach(function (def) {
+      var d;
+      if (def.key === "balance") d = prev ? deltaChip(cum, cum - prev.net, false) : '<span class="delta-none">first month of history</span>';
+      else if (def.key === "income") d = prev ? deltaChip(cur.total.income, prev.total.income, false) : "";
+      else if (def.key === "spending") d = prev ? deltaChip(cur.total.spending, prev.total.spending, true) : "";
+      else d = prev ? deltaChip(rate, prevRate, false) : "";
+      html += '<article class="card kpi">' +
+        '<div class="kpi-top"><span class="kpi-label">' + def.label + "</span>" +
+        '<span class="kpi-icon">' + icon(def.ic, 16) + "</span></div>" +
+        '<div class="kpi-value num">' + values[def.key] + "</div>" +
+        '<div class="kpi-foot">' + d + sparks[def.key] + "</div></article>";
+    });
+    document.getElementById("kpis").innerHTML = html;
+
+    document.getElementById("srSummary").textContent =
+      monthLabel(mi) + ": balance " + values.balance + ", income " + values.income +
+      ", spending " + values.spending + ", savings rate " + values.rate + ".";
+  }
+
+  /* ================= Donut (spending by category) ================= */
+
+  function polar(cx, cy, r, ang) {
+    var rad = (ang - 90) * Math.PI / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  }
+  function annulusPath(cx, cy, rO, rI, a0, a1) {
+    if (a1 - a0 >= 359.9) a1 = a0 + 359.99;
+    var O0 = polar(cx, cy, rO, a0), O1 = polar(cx, cy, rO, a1);
+    var I1 = polar(cx, cy, rI, a1), I0 = polar(cx, cy, rI, a0);
+    var large = (a1 - a0) > 180 ? 1 : 0;
+    function p(pt) { return pt[0].toFixed(2) + " " + pt[1].toFixed(2); }
+    return "M" + p(O0) + " A" + rO + " " + rO + " 0 " + large + " 1 " + p(O1) +
+      " L" + p(I1) + " A" + rI + " " + rI + " 0 " + large + " 0 " + p(I0) + " Z";
+  }
+
+  var donutState = { slices: [], cx: 0, cy: 0 };
+
+  function renderDonut(mi, all) {
+    var cur = all[mi];
+    var cats = SPEND_ORDER.filter(function (c) { return cur.byCat[c] > 0; })
+      .sort(function (a, b) { return cur.byCat[b] - cur.byCat[a]; });
+    var total = cur.total.spending;
+
+    document.getElementById("donutSub").textContent = monthLabel(mi);
+    document.getElementById("donutTitle").textContent = "Spending by category";
+
+    var RO = 106, RI = 78, VB = 240, C = VB / 2;
+    donutState = { slices: [], cx: C, cy: C };
+    var svg = '<svg class="chart" viewBox="0 0 ' + VB + " " + VB + '" role="img" aria-label="Spending by category, ' +
+      monthLabel(mi) + ", total " + fmtMoney(total, false) + '">';
+    svg += '<circle cx="' + C + '" cy="' + C + '" r="' + ((RO + RI) / 2) + '" fill="none" stroke="var(--surface-2)" stroke-width="' + (RO - RI) + '"/>';
+
+    var angle = 0;
+    var centerHtml = '<text class="center-label" x="' + C + '" y="' + (C - 12) + '" text-anchor="middle">TOTAL SPENT</text>' +
+      '<text class="center-value num" x="' + C + '" y="' + (C + 14) + '" text-anchor="middle">' + fmtMoney(total, false) + "</text>";
+
+    cats.forEach(function (cat) {
+      var v = cur.byCat[cat];
+      var sweep = total > 0 ? v / total * 360 : 0;
+      if (sweep > 0.4) {
+        var a0 = angle + 0.7, a1 = angle + sweep - 0.7;
+        if (a1 <= a0) a1 = a0 + 0.4;
+        svg += '<path class="slice" data-cat="' + cat + '" d="' + annulusPath(C, C, RO, RI, a0, a1) +
+          '" fill="' + catColor(cat) + '" tabindex="0" role="button" aria-label="' +
+          CATEGORIES[cat].label + ": " + fmtMoney(v, false) + ", " + Math.round(v / total * 100) + ' percent"></path>';
+        donutState.slices.push({ cat: cat, mid: angle + sweep / 2, value: v });
+      }
+      angle += sweep;
+    });
+    svg += centerHtml + "</svg>";
+    document.getElementById("donutBody").innerHTML = svg;
+
+    var legend = "";
+    cats.forEach(function (cat) {
+      var v = cur.byCat[cat];
+      legend += '<li><button data-cat="' + cat + '" aria-label="' + CATEGORIES[cat].label + ", " + fmtMoney(v, false) +
+        ', ' + Math.round(v / total * 100) + ' percent"><span class="sw" style="background:' + catColor(cat) +
+        '"></span><span class="nm">' + CATEGORIES[cat].label + '</span><span class="pc num">' +
+        Math.round(v / total * 100) + "% · " + fmtMoney(v, false) + "</span></button></li>";
+    });
+    document.getElementById("donutLegend").innerHTML = legend;
+
+    var paths = Array.prototype.slice.call(document.querySelectorAll(".slice"));
+    var btns = Array.prototype.slice.call(document.querySelectorAll("#donutLegend button"));
+
+    function highlight(cat) {
+      paths.forEach(function (p) {
+        var on = p.getAttribute("data-cat") === cat;
+        p.classList.toggle("active", on);
+        p.classList.toggle("dim", !on && cat !== null);
+      });
+      btns.forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-cat") === cat); });
+    }
+    function tipFor(cat, px, py) {
+      var v = cur.byCat[cat];
+      showTip('<span class="tt-title">' + CATEGORIES[cat].label + "</span>" +
+        '<span class="tt-row"><span class="tt-swatch" style="background:' + catColor(cat) + '"></span>' +
+        fmtMoney(v, false) + " · " + Math.round(v / total * 100) + "% of spending</span>", px, py);
+    }
+    function slicePoint(cat) {
+      var s = donutState.slices.filter(function (x) { return x.cat === cat; })[0];
+      if (!s) return null;
+      var box = document.getElementById("donutBody").getBoundingClientRect();
+      var pt = polar(donutState.cx, donutState.cy, (RO + RI) / 2, s.mid);
+      return [box.left + pt[0] * (box.width / VB), box.top + pt[1] * (box.height / VB)];
+    }
+    paths.forEach(function (p) {
+      var cat = p.getAttribute("data-cat");
+      p.addEventListener("mousemove", function (e) { highlight(cat); tipFor(cat, e.clientX, e.clientY); });
+      p.addEventListener("mouseleave", function () { highlight(null); hideTip(); });
+      p.addEventListener("focus", function () {
+        highlight(cat);
+        var pt = slicePoint(cat);
+        if (pt) tipFor(cat, pt[0], pt[1]);
+      });
+      p.addEventListener("blur", function () { highlight(null); hideTip(); });
+      p.addEventListener("click", function (e) {
+        e.stopPropagation();
+        highlight(cat);
+        tipFor(cat, e.clientX, e.clientY - 12);
+      });
+    });
+    btns.forEach(function (b) {
+      var cat = b.getAttribute("data-cat");
+      b.addEventListener("mouseenter", function () { highlight(cat); });
+      b.addEventListener("mouseleave", function () { highlight(null); });
+      b.addEventListener("focus", function () {
+        highlight(cat);
+        var pt = slicePoint(cat);
+        if (pt) tipFor(cat, pt[0], pt[1]);
+      });
+      b.addEventListener("blur", function () { highlight(null); hideTip(); });
+      b.addEventListener("click", function () {
+        var pt = slicePoint(cat);
+        if (pt) tipFor(cat, pt[0], pt[1]);
+      });
+    });
+  }
+
+  /* ================= Bars (income vs spending) ================= */
+
+  function niceMax(rawMax) {
+    if (rawMax <= 0) return 100;
+    var mag = Math.pow(10, Math.floor(Math.log(rawMax) / Math.LN10));
+    var steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+    for (var i = 0; i < steps.length; i++) if (steps[i] * mag >= rawMax) return steps[i] * mag;
+    return 10 * mag;
+  }
+
+  function renderBars(all, mi) {
+    var W = 680, H = 300, mL = 50, mR = 12, mT = 14, mB = 34;
+    var iw = W - mL - mR, ih = H - mT - mB;
+    var max = niceMax(Math.max.apply(null, all.map(function (x) { return Math.max(x.total.income, x.total.spending); })));
+    var n = all.length, step = iw / n, bw = Math.min(22, step * 0.26);
+
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Income versus spending, ' +
+      monthLabel(0) + " to " + monthLabel(n - 1) + '">';
+
+    var ticks = 4;
+    for (var i = 0; i <= ticks; i++) {
+      var v = max / ticks * i, y = mT + ih - (v / max) * ih;
+      if (i > 0) svg += '<line class="gridline" x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (W - mR) + '" y2="' + y.toFixed(1) + '"/>';
+      svg += '<text class="tick-label num" x="' + (mL - 8) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + fmtCompact(v) + "</text>";
+    }
+    svg += '<line class="axis-line" x1="' + mL + '" y1="' + (mT + ih) + '" x2="' + (W - mR) + '" y2="' + (mT + ih) + '"/>';
+
+    all.forEach(function (x, i) {
+      var cx = mL + step * i + step / 2;
+      var hInc = (x.total.income / max) * ih, hSp = (x.total.spending / max) * ih;
+      var active = i === mi;
+      svg += '<g class="bar-group" data-i="' + i + '"' + (active ? ' data-active="1"' : "") + ">" +
+        '<rect class="hit" x="' + (mL + step * i).toFixed(1) + '" y="' + mT + '" width="' + step.toFixed(1) + '" height="' + ih +
+        '" tabindex="0" role="button" aria-label="' + monthLabel(i) + ", income " + fmtMoney(x.total.income, false) +
+        ", spending " + fmtMoney(x.total.spending, false) + '"/>';
+      if (active) {
+        svg += '<rect x="' + (cx - step / 2 + 5).toFixed(1) + '" y="' + mT + '" width="' + (step - 10).toFixed(1) +
+          '" height="' + ih + '" rx="10" fill="var(--surface-2)"/>';
+      }
+      svg += '<rect class="bar" x="' + (cx - bw - 3).toFixed(1) + '" y="' + (mT + ih - hInc).toFixed(1) +
+        '" width="' + bw.toFixed(1) + '" height="' + Math.max(2, hInc).toFixed(1) + '" rx="4" fill="var(--income)"/>' +
+        '<rect class="bar" x="' + (cx + 3).toFixed(1) + '" y="' + (mT + ih - hSp).toFixed(1) +
+        '" width="' + bw.toFixed(1) + '" height="' + Math.max(2, hSp).toFixed(1) + '" rx="4" fill="var(--spending)"/>' +
+        '<text class="tick-label month' + (active ? "" : '" style="opacity:.75') + '" x="' + cx.toFixed(1) + '" y="' +
+        (mT + ih + 20) + '" text-anchor="middle">' + MONTH_SHORT[MONTHS[i].m - 1] + "</text></g>";
+    });
+    svg += "</svg>";
+    var body = document.getElementById("barBody");
+    body.innerHTML = svg;
+
+    var groups = Array.prototype.slice.call(body.querySelectorAll(".bar-group"));
+    function paint(activeIdx) {
+      groups.forEach(function (g) {
+        var on = +g.getAttribute("data-i") === activeIdx;
+        g.classList.toggle("dim", activeIdx !== null && !on);
+      });
+    }
+    function tipAt(i, px, py) {
+      var x = all[i];
+      showTip('<span class="tt-title">' + monthLabel(i) + "</span>" +
+        '<span class="tt-row"><span class="tt-swatch" style="background:var(--income)"></span>Income ' + fmtMoney(x.total.income, false) + "</span>" +
+        '<span class="tt-row"><span class="tt-swatch" style="background:var(--spending)"></span>Spending ' + fmtMoney(x.total.spending, false) + "</span>",
+        px, py);
+    }
+    groups.forEach(function (g) {
+      var i = +g.getAttribute("data-i");
+      var hit = g.querySelector(".hit");
+      hit.addEventListener("mousemove", function (e) { paint(i); tipAt(i, e.clientX, e.clientY); });
+      hit.addEventListener("mouseleave", function () { paint(null); hideTip(); });
+      hit.addEventListener("focus", function () {
+        paint(i);
+        var r = hit.getBoundingClientRect();
+        tipAt(i, r.left + r.width / 2, r.top + r.height * 0.25);
+      });
+      hit.addEventListener("blur", function () { paint(null); hideTip(); });
+      hit.addEventListener("click", function (e) {
+        e.stopPropagation();
+        paint(i);
+        tipAt(i, e.clientX, e.clientY - 12);
+      });
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { paint(null); hideTip(); }
+    });
+  }
+
+  /* ================= Transactions ================= */
+
+  function renderTxns(mi) {
+    var items = TXNS.filter(function (tx) { return tx.month === mi; })
+      .map(function (tx) { return { tx: tx, date: dateOf(tx) }; })
+      .sort(function (a, b) { return b.date - a.date || a.tx.desc.localeCompare(b.tx.desc); })
+      .slice(0, 8);
+
+    document.getElementById("txnSub").textContent = "Last " + items.length + " · " + monthLabel(mi);
+    var html = "";
+    items.forEach(function (it) {
+      var tx = it.tx;
+      var income = tx.category === "income";
+      var amt = (income ? "+" : "−") + fmtMoney(Math.abs(tx.amount), true);
+      html += '<li class="txn">' +
+        '<span class="txn-ic" style="--cat:' + catColor(tx.category) + '">' + icon(tx.category, 17) + "</span>" +
+        '<span class="txn-main"><span class="txn-desc">' + tx.desc + "</span>" +
+        '<span class="txn-meta">' + CATEGORIES[tx.category].label + " · " +
+        DAY_NAMES[it.date.getDay()] + ", " + MONTH_SHORT[MONTHS[mi].m - 1] + " " + tx.day + "</span></span>" +
+        '<span class="txn-amt num' + (income ? " inc" : "") + '">' + amt + "</span></li>";
+    });
+    document.getElementById("txnList").innerHTML = html;
+  }
+
+  /* ================= Budgets ================= */
+
+  function renderBudgets(mi, all) {
+    var cur = all[mi];
+    document.getElementById("budgetSub").textContent = monthLabel(mi);
+    var html = "", totalSpent = 0, totalBudget = 0, overCount = 0;
+
+    SPEND_ORDER.forEach(function (cat) {
+      if (!(BUDGETS[cat] > 0)) return;
+      var spent = cur.byCat[cat] || 0, budget = BUDGETS[cat];
+      var pct = spent / budget * 100;
+      var state = pct > 100 ? "over" : (pct >= 80 ? "warn" : "ok");
+      var statusTxt = state === "over" ? "Over by " + fmtMoney(spent - budget, false)
+        : state === "warn" ? "Near limit" : "On track";
+      totalSpent += spent; totalBudget += budget;
+      if (state === "over") overCount++;
+      html += '<li class="budget-row ' + state + '" style="--cat:' + catColor(cat) + '">' +
+        '<span class="budget-ic">' + icon(cat, 15) + "</span>" +
+        '<div class="budget-head"><span class="budget-name">' + CATEGORIES[cat].label + "</span>" +
+        '<span class="budget-vals num"><span class="spent">' + fmtMoney(spent, false) + "</span> of " + fmtMoney(budget, false) +
+        ' · ' + Math.round(pct) + "%</span></div>" +
+        '<div class="bar-track" role="progressbar" aria-valuenow="' + Math.round(pct) + '" aria-valuemin="0" aria-valuemax="100" aria-label="' + CATEGORIES[cat].label + ' budget ' + Math.round(pct) + ' percent used">' +
+        '<div class="bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div>' +
+        '<span class="status ' + (state === "ok" ? "" : state) + '">' + statusTxt + "</span></li>";
+    });
+    document.getElementById("budgetList").innerHTML = html;
+
+    var left = totalBudget - totalSpent;
+    document.getElementById("budgetFoot").innerHTML =
+      "<span>Budgeted spending</span><span class=\"num\"><strong>" + fmtMoney(totalSpent, false) + "</strong> of " +
+      fmtMoney(totalBudget, false) + " · " + (left >= 0 ? fmtMoney(left, false) + " left" : fmtMoney(-left, false) + " over") +
+      (overCount ? " · " + overCount + (overCount === 1 ? " category over" : " categories over") : "") + "</span>";
+  }
+
+  /* ================= Render all ================= */
+
+  var currentMi = MONTHS.length - 1;
+
+  function render(mi) {
+    currentMi = mi;
+    var all = allTotals();
+    document.getElementById("monthBtn").textContent = monthLabel(mi);
+    document.getElementById("prev").disabled = mi === 0;
+    document.getElementById("next").disabled = mi === MONTHS.length - 1;
+    renderKPIs(mi, all);
+    renderDonut(mi, all);
+    renderBars(all, mi);
+    renderTxns(mi);
+    renderBudgets(mi, all);
+  }
+
+  document.getElementById("prev").addEventListener("click", function () {
+    if (currentMi > 0) render(currentMi - 1);
+  });
+  document.getElementById("next").addEventListener("click", function () {
+    if (currentMi < MONTHS.length - 1) render(currentMi + 1);
+  });
+
+  window.addEventListener("resize", function () { hideTip(); });
+  document.addEventListener("scroll", function () { hideTip(); }, { passive: true });
+
+  render(currentMi);
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = { TXNS: TXNS, MONTHS: MONTHS, CATEGORIES: CATEGORIES, BUDGETS: BUDGETS, allTotals: allTotals, monthLabel: monthLabel };
+  }
+  window.__FINANCE__ = { TXNS: TXNS, MONTHS: MONTHS, CATEGORIES: CATEGORIES, BUDGETS: BUDGETS, allTotals: allTotals, monthLabel: monthLabel };
+})();
+</script>
+</body>
+</html>

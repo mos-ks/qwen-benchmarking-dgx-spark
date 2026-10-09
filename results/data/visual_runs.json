@@ -306,5 +306,27 @@
   "score": 6.5,
   "outcome": "done",
   "note": "striped tower, lantern with a sweeping beam, moon behind clouds, slanted rain, splash on the rocks, edge to edge; small tower on a flat cliff band"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 kit v4 \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v4",
+  "attempt": "#1",
+  "minutes": 25.5,
+  "score": 5.0,
+  "outcome": "done",
+  "note": "brick tower with window, door and turning sails, a canal; the tulips are blocky stacked bars on a bare diagonal path, an empty purple corner"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 kit v4 \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v4",
+  "attempt": "#1",
+  "minutes": 45.0,
+  "score": 7.0,
+  "outcome": "timeout",
+  "note": "KPI cards with sparklines, oversized donut, income vs spending bars; legend chips run together, half-empty panel; spent the whole 45 min on its own Playwright check script"
  }
 ]

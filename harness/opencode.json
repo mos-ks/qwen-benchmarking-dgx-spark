@@ -26,7 +26,14 @@
   "enabled_providers": ["spark"],
   "permission": {
     "question": "deny",
-    "external_directory": "deny",
+    "external_directory": {
+      "*": "deny",
+      "~/.agents/skills/**": "allow"
+    },
+    "edit": {
+      "*": "allow",
+      "~/.agents/skills/**": "deny"
+    },
     "doom_loop": "deny"
   },
   "share": "disabled",

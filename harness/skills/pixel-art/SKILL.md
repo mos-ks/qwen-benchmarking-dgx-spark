@@ -1,6 +1,6 @@
 ---
 name: pixel-art
-description: Use before drawing any pixel-art scene, sprite, icon or animation in a browser (canvas or CSS). Gives the rendering setup, palette ramps, shading rules, shape rasterizers and animation patterns that make pixel art look crafted instead of blurry blobs.
+description: Use before drawing any pixel-art scene, sprite, icon or animation in a browser (canvas or CSS). Gives the rendering setup, palette ramps, shading rules, shape rasterizers and animation patterns that make pixel art look crafted instead of blurry blobs. Ships pixel-kit.js, a tested drawing library to copy into the project.
 license: MIT
 ---
 
@@ -10,43 +10,65 @@ Pixel art is a low-resolution image where every pixel is a deliberate choice, sh
 hard edges. Two things make it look amateur: blur (antialiasing or non-integer scaling) and flat
 single-color shapes. Avoid both from the first line of code.
 
-## 1. Render setup (do exactly this)
+## 1. Start from pixel-kit.js (do exactly this)
 
-- Draw into a small logical canvas, for example 160x120 or 192x128. The whole scene lives in that
-  grid; never draw at screen resolution.
-- Scale by an integer: `scale = Math.max(1, Math.floor(Math.min(innerWidth / W, innerHeight / H)))`,
-  then `canvas.style.width = W * scale + "px"` (same for height), center it with flexbox, and set
-  `image-rendering: pixelated` on the canvas. Recompute on `resize`.
-- Keep `ctx.imageSmoothingEnabled = false`. Do not use `ctx.arc`, `ctx.ellipse`, `bezierCurveTo`
-  or `lineWidth` strokes for the art: at low resolution they antialias into soft half-transparent
-  edges. Rasterize shapes yourself with `fillRect(x, y, 1, 1)` (helpers below).
-- Use a seeded random generator so the art is identical every frame (no flicker):
+This skill ships a tested helper library. Copy it into the project and build the scene from it;
+do not write your own rasterizers, scaling code or particle loops.
 
-```js
-function mulberry32(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-const rand = mulberry32(42);
+```bash
+cp "{{SKILLS_DIR}}/pixel-art/pixel-kit.js" ./pixel-kit.js
 ```
 
-## 2. Pixel helpers
-
-```js
-const px = (x, y, c) => { ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), 1, 1); };
-function disc(cx, cy, r, c) { for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x*x + y*y <= r*r + r*0.8) px(cx + x, cy + y, c); }
-function ellipse(cx, cy, rx, ry, c) { for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) if ((x*x)/(rx*rx) + (y*y)/(ry*ry) <= 1.0) px(cx + x, cy + y, c); }
-// Tapered stroke along a quadratic curve: thick at the start, thin at the end (trunks, branches, tails, hair).
-function taper(x0, y0, cx, cy, x1, y1, w0, w1, c) {
-  const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0)) * 2;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps, u = 1 - t;
-    const x = u*u*x0 + 2*u*t*cx + t*t*x1, y = u*u*y0 + 2*u*t*cy + t*t*y1;
-    disc(x, y, Math.max(0, Math.round((w0 + (w1 - w0) * t) / 2)), c);
-  }
-}
-const dither = (x, y) => (x + y) % 2 === 0; // checkerboard for 2-tone gradients
+```html
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>  <!-- a plain local file: no module, works from file:// -->
+<script>
+const R = PK.ramps;
+let bg, rain = PK.drift({ n: 60, area: [0, 0, 1, 1], vx: [-12, -8], vy: [70, 90], len: [3, 5] });
+// fit() sizes the canvas to cover the whole viewport at an integer scale and calls the
+// callback right away and on every resize: declare your state BEFORE calling it.
+const view = PK.fit(document.getElementById("c"), 140, (v) => {
+  bg = PK.layer(v.W, v.H, () => { /* static scenery: sky, rocks, trunk, buildings */ });
+  rain.setArea([0, -8, v.W, v.H]);
+});
+PK.loop((t, dt) => {           // t, dt in seconds; reduced motion is handled
+  PK.blit(bg);                 // static layer first
+  /* moving parts: sway, beams, water, particles */
+  rain.step(dt); rain.streaks(["#3a4a7a", "#8aa0d0"]);
+});
+</script>
 ```
 
-Draw a lit shape in passes: the dark outline/shadow version first, then the mid tone shifted 1px
-toward the light, then highlights on the light-facing edge. That alone gives volume.
+Lay everything out from `view.W` and `view.H` (they change with the viewport: landscape on a
+desktop, portrait on a phone), anchored to a ground line such as `Math.round(view.H * 0.8)`.
+The second argument of `fit` is the logical size of the short side (120-160): the subject should
+be about 40-60% of it.
+
+| Call | Draws |
+|---|---|
+| `PK.px / rect / disc / ellipse / line / poly(points)` | hard-edged pixels, filled circle, ellipse, Bresenham line, filled polygon |
+| `PK.sprite(rows, palette, x, y, flipX)` | a hand-drawn sprite from strings, `.` = empty: use for anything that needs an exact silhouette (pot, house, lantern room, animal, window, sign) |
+| `PK.gradient(x0, y0, x1, y1, colors)` | banded sky or water gradient with ordered dither between bands |
+| `PK.glow(cx, cy, r, color, strength)` | dithered halo (moon, lamp, fire) |
+| `PK.beam(x, y, angle, len, spread, [faint, mid, bright], alpha)` | light beam wedge, bright on axis and near the source |
+| `PK.limb(x0, y0, cx, cy, x1, y1, w0, w1, ramp, seed)` | shaded trunk or branch along a curve, wide to narrow; returns the points |
+| `PK.pad(cx, cy, rx, ry, ramp, {seed})` | foliage pad: shaded clumps, flat bottom |
+| `PK.rock(x, baseY, w, h, ramp, {profile: "mound" or "cliff", seed})` | jagged faceted rock or cliff; returns `{ top(x) }` so things can stand on it |
+| `PK.sea(x0, y0, x1, y1, t, ramp)` / `PK.foam(x0, x1, y, t)` | rolling sea with moving crests / foam surging against rock or sand |
+| `PK.stars(x0, y0, x1, y1, n, t)` | twinkling star field |
+| `PK.drift({n, area, vx, vy, len})` | particles: `.setArea(a)` in the fit callback, `.step(dt)` then `.streaks(colors)` (rain, wind) or `.dots(colors)` (snow, leaves, sparks) |
+| `PK.ramps.*`, `PK.skies.*` | 5-shade ramps dark to light: foliage, pine, bark, stone, nightStone, sand, water, nightWater, snow, fire, warmLight, brickRed, whitePaint, clay, glaze, fur; skies: night, dusk, day, dawn |
+
+Before writing code, list every object the brief names with its silhouette in a few words and its
+size in logical pixels, and pick the call that draws it. Anything with a specific outline (a pot, a
+house, a lantern room, an animal) is a `PK.sprite`, not a pile of discs.
+
+## 2. Without the kit
+
+If you cannot use the file, keep the same rules by hand: a small logical canvas scaled by an
+integer with `image-rendering: pixelated`, `imageSmoothingEnabled = false`, no `arc`, `ellipse`,
+`bezierCurveTo` or stroked lines for the art (they antialias), shapes rasterized with
+`fillRect(x, y, 1, 1)`, and a seeded random generator so nothing flickers.
 
 ## 3. Palette
 
@@ -75,16 +97,13 @@ toward the light, then highlights on the light-facing edge. That alone gives vol
 
 ## 5. Organic shapes that read correctly
 
-- Trees: trunk = `taper` from base (wide) to top (narrow) along a curve; add root flare at the base
-  (2-3 short tapers spreading sideways); branches = shorter tapers leaving the trunk at alternating
-  sides, getting thinner. Foliage = clusters of 5-12 overlapping `disc`s per pad, flatter at the
-  bottom (cut the bottom rows or use `ellipse` with rx > ry), shaded in 3 passes (shadow, mid,
-  highlight discs offset toward the light). Several separate pads at different heights, not one
-  blob, with sky visible between them.
-- Rocks and cliffs: polygons with jagged top edges (random steps of 1-3 px), a light top face, a
-  darker vertical face, and cracks as 1px dark lines.
-- Water: horizontal bands of the water ramp, short 1-3px highlight dashes that move, foam as
-  clusters of near-white pixels where water meets rocks.
+- Trees: trunk = `PK.limb` from base (wide) to top (narrow) along a curve; root flare = 2-3 short
+  limbs spreading sideways at the base; branches = thinner limbs leaving the trunk at alternating
+  sides. Foliage = several `PK.pad`s at different heights at the branch tips, not one blob, with sky
+  visible between them.
+- Rocks and cliffs: `PK.rock` with `profile: "cliff"` for a cliff, `"mound"` for boulders; stand
+  buildings on `rock.top(x)`. Add 2-4 smaller rocks around the base so it reads as rocky.
+- Water: `PK.sea` for the body, `PK.foam` along every line where water meets rock or shore.
 - Buildings: hard rectangles; windows as 2x2 or 3x3 lit squares; roofs one ramp darker on the
   shadow side.
 
