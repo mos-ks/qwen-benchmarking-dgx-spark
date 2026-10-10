@@ -173,43 +173,30 @@
 
   // ---- gradients and light -----------------------------------------------------------------
 
-  // Vertical banded gradient through `colors`: solid bands with a short ordered-dither seam at each
-  // boundary. Dithering whole bands reads as a checkerboard once scaled up; crafted skies band.
-  function gradient(x0, y0, x1, y1, colors, seam = 3) {
+  // Vertical banded gradient through `colors`, ordered-dithered at each band edge.
+  function gradient(x0, y0, x1, y1, colors) {
     const n = colors.length - 1;
-    const h = Math.max(1, y1 - y0);
     for (let y = Math.round(y0); y < y1; y++) {
-      const f = ((y - y0) / h) * (n + 1);
-      const i = Math.min(n, Math.floor(f));
-      const into = (f - i) * (h / (n + 1)); // rows into this band
-      const seamRow = i < n ? Math.floor(h / (n + 1) - into) : seam + 1; // rows left before the next band
-      if (seamRow > seam) {
-        rect(x0, y, x1 - x0, 1, colors[i]);
+      const f = ((y - y0) / Math.max(1, y1 - y0 - 1)) * n;
+      const i = Math.min(n - 1, Math.floor(f));
+      const frac = f - i;
+      if (frac < 0.07 || frac > 0.93 || n === 0) {
+        rect(x0, y, x1 - x0, 1, colors[frac > 0.93 ? i + 1 : i]);
         continue;
       }
-      const t = 1 - seamRow / (seam + 1); // 0..1 across the seam
-      for (let x = Math.round(x0); x < x1; x++) px(x, y, bayer(x, y) < t * 0.75 ? colors[i + 1] : colors[i]);
+      for (let x = Math.round(x0); x < x1; x++) px(x, y, bayer(x, y) < frac ? colors[i + 1] : colors[i]);
     }
   }
-  // Round glow (sun, moon halo, lantern, fire): concentric bands of rising opacity, hard-edged pixels.
-  // Banding instead of an ordered dither: a dithered halo reads as a dotted grid when scaled up.
-  function glow(cx, cy, r, c, strength = 0.6, bands = 4) {
-    cx = Math.round(cx);
-    cy = Math.round(cy);
-    ctx.save();
-    ctx.fillStyle = c;
+  // Round dithered glow (moon halo, lantern, fire): dense at the center, sparse at the rim.
+  function glow(cx, cy, r, c, strength = 0.6) {
     for (let y = -r; y <= r; y++)
       for (let x = -r; x <= r; x++) {
         const d = Math.sqrt(x * x + y * y) / r;
-        if (d >= 1) continue;
-        const band = Math.ceil((1 - d) * bands) / bands;
-        ctx.globalAlpha = Math.min(1, band * band * strength);
-        ctx.fillRect(cx + x, cy + y, 1, 1);
+        if (d < 1 && bayer(cx + x, cy + y) < (1 - d) * strength) px(cx + x, cy + y, c);
       }
-    ctx.restore();
   }
   // Light beam: a wedge from (x, y) at `angle` (radians, 0 = right), brightest on its axis and
-  // near its source, fading in opacity bands. colors = [faint, mid, bright].
+  // near its source, fading by ordered dither. colors = [faint, mid, bright].
   function beam(x, y, angle, len, spread, colors, alpha = 0.55) {
     const ca = Math.cos(angle);
     const sa = Math.sin(angle);
@@ -224,10 +211,8 @@
         const half = along * Math.tan(spread) + 1;
         if (across > half) continue;
         const k = (1 - across / half) ** 0.6 * (1 - (along / len) ** 1.5);
-        const band = Math.ceil(k * 4) / 4; // banded falloff: hard pixels, no dotted dither
-        if (band <= 0) continue;
-        ctx.globalAlpha = alpha * band;
-        px(x + i, y + j, colors[Math.min(colors.length - 1, Math.floor(band * colors.length * 0.999))]);
+        if (bayer(x + i, y + j) >= k * 1.4) continue;
+        px(x + i, y + j, colors[Math.min(colors.length - 1, Math.floor(k * colors.length * 1.2))]);
       }
     ctx.restore();
   }

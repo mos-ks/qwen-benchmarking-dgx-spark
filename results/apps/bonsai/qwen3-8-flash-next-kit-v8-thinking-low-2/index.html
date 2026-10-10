@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #6aa6dc; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps;
+
+  // ---- wind particles: declared before fit() so they survive resizes -------------------------
+  const wind = PK.drift({ n: 22, seed: 41, area: [0, 0, 1, 1], vx: [-46, -28], vy: [-1.5, 2], len: [4, 9] });
+  const leaves = PK.drift({ n: 34, seed: 77, area: [0, 0, 1, 1], vx: [-20, -9], vy: [5, 15], len: [1, 3] });
+  const leafColors = ["#2f5d34", "#4a8a3c", "#78b84a", "#c8764a", "#d65a40", "#f2a33a"];
+  const FOL = ["#16301f", "#2c5230", "#4a8a3c", "#82c24e", "#c4ec78"]; // high-contrast foliage ramp
+
+  let W, H, cx, groundY, unit;
+  let padDefs = [];
+  let grassDefs = [];
+  let bgLayer = null;
+
+  function build(v) {
+    W = v.W; H = v.H; unit = Math.min(W, H);
+    cx = Math.round(W / 2);
+    groundY = Math.round(H * 0.78);
+
+    const footH = Math.max(1, Math.round(unit * 0.02));
+    const potH = Math.round(unit * 0.12);
+    const potW = Math.round(unit * 0.34);
+    const rimH = Math.max(2, Math.round(unit * 0.035));
+    const rimOver = Math.max(1, Math.round(unit * 0.015));
+    const potBottom = groundY - footH;
+    const potTop = potBottom - potH;
+    const soilY = potTop;
+    const trunkH = Math.round(unit * 0.46);
+    const w0 = Math.max(4, Math.round(unit * 0.085));
+    const wMid = Math.max(2, Math.round(unit * 0.05));
+    const wTip = Math.max(1, Math.round(unit * 0.022));
+    const apexX = cx + Math.round(unit * 0.02);
+    const apexY = soilY - trunkH;
+
+    const pads = [
+      { bx: cx - Math.round(unit * 0.20), by: soilY - Math.round(trunkH * 0.50), rx: Math.round(unit * 0.13), ry: Math.round(unit * 0.075), seed: 3, phase: 0.0, speed: 1.1 },
+      { bx: cx + Math.round(unit * 0.19), by: soilY - Math.round(trunkH * 0.54), rx: Math.round(unit * 0.12), ry: Math.round(unit * 0.070), seed: 11, phase: 2.1, speed: 1.0 },
+      { bx: cx - Math.round(unit * 0.11), by: soilY - Math.round(trunkH * 0.82), rx: Math.round(unit * 0.105), ry: Math.round(unit * 0.064), seed: 23, phase: 1.0, speed: 1.3 },
+      { bx: apexX, by: apexY, rx: Math.round(unit * 0.10), ry: Math.round(unit * 0.060), seed: 31, phase: 2.8, speed: 1.4 },
+    ];
+    const canopyTop = apexY - pads[3].ry;
+    for (const p of pads) p.hf = Math.max(0.15, (groundY - p.by) / Math.max(1, groundY - canopyTop));
+    padDefs = pads.slice().sort((a, b) => b.by - a.by);
+
+    const gcols = [R.foliage[1], R.foliage[2]];
+    const grass = [];
+    for (let i = 0; i < 7; i++) {
+      const side = i < 4 ? -1 : 1;
+      const gx = cx + side * Math.round(unit * (0.20 + 0.05 * (i % 3)) + (i % 2) * 2);
+      const bh = Math.round(unit * (0.06 + 0.04 * ((i * 37 % 10) / 10)));
+      grass.push({ x: gx, h: bh, lean: side * Math.round(unit * 0.02) + ((i % 2) ? 2 : -2), c: gcols[i % 2], phase: i * 0.9 });
+    }
+    grassDefs = grass;
+
+    wind.setArea([0, Math.round(H * 0.10), W, Math.round(H * 0.74)]);
+    leaves.setArea([0, 0, W, H]);
+
+    bgLayer = PK.layer(W, H, () => {
+      PK.gradient(0, 0, W, H, PK.skies.day);
+      // sun: in-frame key light, upper-right behind the canopy
+      const sx = cx + Math.round(unit * 0.16);
+      const sy = Math.round(H * 0.26);
+      const sr = Math.max(3, Math.round(unit * 0.065));
+      PK.glow(sx, sy, Math.round(sr * 2.4), R.warmLight[3], 0.5);
+      PK.glow(sx, sy, Math.round(sr * 1.4), R.warmLight[4], 0.55);
+      PK.disc(sx, sy, sr, R.warmLight[2]);
+      PK.disc(sx - Math.round(sr * 0.25), sy - Math.round(sr * 0.25), Math.round(sr * 0.7), R.warmLight[3]);
+      PK.disc(sx - Math.round(sr * 0.4), sy - Math.round(sr * 0.4), Math.round(sr * 0.35), R.warmLight[4]);
+      cloud(W * 0.22, H * 0.20, unit * 0.09);
+      cloud(W * 0.80, H * 0.34, unit * 0.07);
+      hill();
+      // ground
+      PK.gradient(0, groundY, W, H, ["#3c5a3c", "#2f4a30", "#243a26"]);
+      PK.rect(0, groundY, W, 1, "#4c6e4c");
+      const rnd = PK.rng(9);
+      for (let i = 0; i < unit * 2; i++) {
+        const gx = Math.floor(rnd() * W), gy = groundY + 2 + Math.floor(rnd() * (H - groundY - 2));
+        PK.px(gx, gy, rnd() < 0.5 ? "#2a422b" : "#456842");
+      }
+      PK.ellipse(cx + Math.round(potW * 0.28), groundY + 1, Math.round(potW * 0.62), Math.max(2, Math.round(unit * 0.03)), "#1e3120");
+      drawPot(potW, potH, rimH, rimOver, potTop, potBottom, footH);
+      drawBonsai(soilY, trunkH, w0, wMid, wTip, apexX, apexY);
+    });
+  }
+
+  function cloud(x, y, r) {
+    x = Math.round(x); y = Math.round(y); r = Math.max(3, Math.round(r));
+    const body = "#b9d3ea", top = "#d8eaf6";
+    PK.disc(x, y, r, body);
+    PK.disc(x - r, y + 1, Math.round(r * 0.7), body);
+    PK.disc(x + r, y + 1, Math.round(r * 0.8), body);
+    PK.disc(x - Math.round(r * 0.3), y - Math.round(r * 0.3), Math.round(r * 0.6), top);
+    PK.disc(x + Math.round(r * 0.4), y - Math.round(r * 0.1), Math.round(r * 0.45), top);
+  }
+
+  function hill() {
+    const hy = Math.round(groundY - unit * 0.06);
+    const top = (x) => Math.round(hy - unit * 0.05 * Math.sin((x / W) * Math.PI * 1.2 + 0.3) - unit * 0.02 * Math.sin((x / W) * 7));
+    const pts = [[0, groundY]];
+    for (let x = 0; x <= W; x += Math.max(2, Math.round(W / 16))) pts.push([x, top(x)]);
+    pts.push([W, top(W)], [W, groundY]);
+    PK.poly(pts, "#8ea9b6");
+    for (let x = 0; x <= W; x++) PK.px(x, top(x), "#a9c2cd");
+  }
+
+  function drawPot(potW, potH, rimH, rimOver, potTop, potBottom, footH) {
+    const topHalf = Math.round(potW / 2);
+    const botHalf = Math.round(potW * 0.42);
+    PK.poly([[cx - topHalf, potTop], [cx + topHalf, potTop], [cx + botHalf, potBottom], [cx - botHalf, potBottom]], R.clay[2]);
+    for (let y = potTop; y <= potBottom; y++) {
+      const f = (y - potTop) / Math.max(1, potBottom - potTop);
+      const half = Math.round(topHalf + (botHalf - topHalf) * f);
+      for (let x = cx - half; x <= cx + half; x++) {
+        const t = (x - (cx - half)) / Math.max(1, half * 2);
+        let c = R.clay[2];
+        if (t < 0.16) c = R.clay[3];
+        if (t < 0.05) c = R.clay[4];
+        if (t > 0.72) c = R.clay[1];
+        if (t > 0.94) c = R.clay[0];
+        if (y >= potBottom - 1) c = R.clay[0];
+        PK.px(x, y, c);
+      }
+    }
+    const rnd = PK.rng(5);
+    for (let i = 0; i < 6; i++) {
+      const x = cx - Math.round(topHalf * (0.35 + rnd() * 0.3));
+      const y = potTop + 2 + Math.floor(rnd() * (potH - 3));
+      PK.px(x, y, R.clay[4]);
+    }
+    // rim lip
+    const rimTop = potTop - rimH + 1;
+    const rimHalf = topHalf + rimOver;
+    PK.poly([[cx - rimHalf, rimTop], [cx + rimHalf, rimTop], [cx + topHalf, potTop + 1], [cx - topHalf, potTop + 1]], R.clay[2]);
+    for (let x = cx - rimHalf; x <= cx + rimHalf; x++) {
+      const t = (x - (cx - rimHalf)) / Math.max(1, rimHalf * 2);
+      let c = R.clay[2];
+      if (t < 0.2) c = R.clay[3];
+      if (t < 0.07) c = R.clay[4];
+      if (t > 0.75) c = R.clay[1];
+      if (t > 0.95) c = R.clay[0];
+      PK.px(x, rimTop, R.clay[4]);
+      PK.px(x, rimTop + rimH - 1, R.clay[0]);
+      PK.px(x, rimTop + 1, c);
+    }
+    // soil
+    PK.ellipse(cx, potTop + 1, topHalf - 2, Math.max(1, Math.round(unit * 0.012)), "#3a2a1c");
+    PK.ellipse(cx - Math.round(topHalf * 0.2), potTop, Math.round(topHalf * 0.4), Math.max(1, Math.round(unit * 0.008)), "#4a3624");
+    // feet
+    const footW = Math.max(2, Math.round(potW * 0.10));
+    PK.rect(cx - botHalf + 1, potBottom, footW, footH, R.clay[1]);
+    PK.rect(cx + botHalf - footW - 1, potBottom, footW, footH, R.clay[1]);
+  }
+
+  function drawBonsai(soilY, trunkH, w0, wMid, wTip, apexX, apexY) {
+    PK.limb(cx, soilY, cx - unit * 0.05, soilY + 2, cx - unit * 0.09, soilY + 3, Math.round(w0 * 0.6), 1, R.bark, 101);
+    PK.limb(cx, soilY, cx + unit * 0.05, soilY + 2, cx + unit * 0.09, soilY + 3, Math.round(w0 * 0.6), 1, R.bark, 202);
+    PK.limb(cx, soilY, cx, soilY + 3, cx + Math.round(unit * 0.01), soilY + 4, Math.round(w0 * 0.5), 1, R.bark, 303);
+    const kneeX = cx + Math.round(unit * 0.04);
+    const kneeY = soilY - Math.round(trunkH * 0.72);
+    PK.limb(cx, soilY, cx - Math.round(unit * 0.05), soilY - Math.round(trunkH * 0.45), kneeX, kneeY, w0, wMid, R.bark, 11);
+    PK.limb(kneeX, kneeY, cx + Math.round(unit * 0.09), soilY - Math.round(trunkH * 0.86), apexX, apexY, wMid, wTip, R.bark, 22);
+    const b1x = cx - Math.round(unit * 0.20), b1y = soilY - Math.round(trunkH * 0.50);
+    const b2x = cx + Math.round(unit * 0.19), b2y = soilY - Math.round(trunkH * 0.54);
+    const b3x = cx - Math.round(unit * 0.11), b3y = soilY - Math.round(trunkH * 0.82);
+    PK.limb(cx - Math.round(unit * 0.02), soilY - Math.round(trunkH * 0.42), cx - Math.round(unit * 0.13), soilY - Math.round(trunkH * 0.40), b1x, b1y, Math.max(2, Math.round(wMid * 0.7)), 1, R.bark, 31);
+    PK.limb(cx + Math.round(unit * 0.04), soilY - Math.round(trunkH * 0.58), cx + Math.round(unit * 0.13), soilY - Math.round(trunkH * 0.50), b2x, b2y, Math.max(2, Math.round(wMid * 0.7)), 1, R.bark, 32);
+    PK.limb(kneeX, soilY - Math.round(trunkH * 0.80), cx - Math.round(unit * 0.08), soilY - Math.round(trunkH * 0.86), b3x, b3y, Math.max(2, Math.round(wMid * 0.55)), 1, R.bark, 33);
+    PK.limb(kneeX, kneeY, cx + Math.round(unit * 0.02), soilY - Math.round(trunkH * 0.92), apexX, apexY, Math.max(2, Math.round(wMid * 0.5)), 1, R.bark, 34);
+  }
+
+  PK.fit(document.getElementById("c"), 150, build);
+
+  PK.loop((t, dt) => {
+    wind.step(dt);
+    leaves.step(dt);
+    if (bgLayer) PK.blit(bgLayer);
+    for (const p of padDefs) {
+      const off = Math.round(Math.sin(t * p.speed + p.phase) * Math.max(1, unit * 0.018) * p.hf);
+      PK.pad(p.bx + off, p.by, p.rx, p.ry, R.foliage, { seed: p.seed });
+    }
+    const ap = padDefs[padDefs.length - 1];
+    if (ap) {
+      const off = Math.round(Math.sin(t * ap.speed + ap.phase) * Math.max(1, unit * 0.018) * ap.hf);
+      PK.px(ap.bx + off - Math.round(ap.rx * 0.4), ap.by - 1, "#d65a40");
+      PK.px(ap.bx + off + Math.round(ap.rx * 0.2), ap.by + 1, "#f2a33a");
+      PK.px(ap.bx + off - 1, ap.by + Math.round(ap.ry * 0.5), "#d65a40");
+    }
+    for (const g of grassDefs) {
+      const flick = Math.round(Math.sin(t * 3 + g.phase) * 2);
+      PK.taper(g.x, groundY, g.x + g.lean * 0.4, groundY - g.h * 0.6, g.x + g.lean + flick, groundY - g.h, 2, 1, g.c);
+    }
+    wind.streaks(["#9ec2e0", "#e6f3fb"]);
+    for (const p of leaves.particles) {
+      const c = leafColors[Math.floor(p.k * leafColors.length)];
+      const wob = Math.round(Math.sin(t * 4 + p.k * 20));
+      PK.px(p.x, p.y, c);
+      if (p.len >= 2) PK.px(p.x + 1, p.y + wob, leafColors[Math.floor(p.k * 3)]);
+      if (p.len >= 3) PK.px(p.x - 1, p.y + 1, leafColors[Math.floor(p.k * 3)]);
+    }
+  });
+})();
+</script>
+</body>
+</html>

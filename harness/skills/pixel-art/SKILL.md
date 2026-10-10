@@ -69,7 +69,7 @@ be about 40-60% of it.
 | `PK.px / rect / disc / ellipse / line / poly(points)` | hard-edged pixels, filled circle, ellipse, Bresenham line, filled polygon |
 | `PK.sprite(rows, palette, x, y, flipX)` | a hand-drawn sprite from strings, `.` = empty: use for anything that needs an exact silhouette (pot, house, lantern room, animal, window, sign) |
 | `PK.gradient(x0, y0, x1, y1, colors)` | banded sky or water gradient with ordered dither between bands |
-| `PK.glow(cx, cy, r, color, strength)` | dithered halo (moon, lamp, fire) |
+| `PK.glow(cx, cy, r, color, strength)` | soft banded halo (sun, moon, lamp, fire); draw it before the disc it surrounds |
 | `PK.beam(x, y, angle, len, spread, [faint, mid, bright], alpha)` | light beam wedge, bright on axis and near the source |
 | `PK.limb(x0, y0, cx, cy, x1, y1, w0, w1, ramp, seed)` | shaded trunk or branch along a curve, wide to narrow; returns the points |
 | `PK.pad(cx, cy, rx, ry, ramp, {seed})` | foliage pad: shaded clumps, flat bottom |

@@ -779,5 +779,27 @@
   "score": 7.5,
   "outcome": "done",
   "note": "big striped tower with glowing lantern and strong sweeping beam, keeper's house on a massive faceted cliff, foamed outcrops, rain; the cliff fills most of the frame, dotted moon halo"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8, thinking low \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8, thinking low",
+  "attempt": "#2",
+  "minutes": 24.9,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "large tree filling the frame, five shaded pads, terracotta pot, grass tufts, sun behind the canopy, clouds; lumpy knotted trunk, dotted sun halo, checker-dithered sky"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8, thinking low \u00b7 #2",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8, thinking low",
+  "attempt": "#2",
+  "minutes": 26.2,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "tall striped tower with an ornate glowing lantern, keeper's house, cliff, moon, clouds, rain; a foam band is drawn straight across the middle of the cliff, dotted halos"
  }
 ]
