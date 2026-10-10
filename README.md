@@ -16,12 +16,21 @@ brief, which no harness change was tuned on, in Opus's time (17.8 vs 17.7 minute
 
 ## Headline results
 
-| Brief | Opus 5.5 (reference) | Best local run | Gap |
+One configuration, all four briefs: the shipped setup is a single harness and kit version, so it
+is judged as one, not as the best run any version ever produced on each brief.
+
+| Brief | Opus 5.5 (reference) | Shipped config: Qwen3.8-Flash-Next + OpenCode + kit v7, thinking low | Gap |
 |---|---|---|---|
-| Pixel-art bonsai with wind | 9.0 in 14 min | 7.5 in 10.9 min (Qwen3.8-Flash-Next + kit v3) | -1.5 |
-| Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 8.0 in 15.0 min (Qwen3.8-Flash-Next + kit v7, thinking medium) | -1.0 |
-| Pixel-art windmill in a tulip field (held out from every kit change) | 9.0 in 17.7 min | 8.0 in 17.8 min (Qwen3.8-Flash-Next + kit v5, thinking low) | -1.0 |
-| Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 17.9 min (Qwen3.6-35B-A3B + kit v3) and 7.5 in 21.7 min (Qwen3.8-Flash-Next + kit v5.1); 8.0 in 26.7 min, just over budget (Flash-Next + kit v5.1) | -2.0 in budget |
+| Pixel-art bonsai with wind | 9.0 in 14 min | 7.5 in 13.6 min | -1.5 |
+| Pixel-art lighthouse at night (held out) | 9.0 in 24.5 min | 7.5 in 27.3 min | -1.5 |
+| Pixel-art windmill in a tulip field (held out from every kit change) | 9.0 in 17.7 min | 7.0 in 16.9 min | -2.0 |
+| Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 26.1 min (3 min over budget) | -2.0 |
+| Mean | 9.1 | 7.4 | -1.7 |
+
+Current goal: one configuration that reaches at least 8.5 on the bonsai and the lighthouse without
+losing ground on the windmill and the dashboard. In progress: the same kit in three other harnesses
+(Qwen Code, Pi, oh-my-pi), then kit v8. Every other configuration is in
+[Flash-Next configurations side by side](#flash-next-configurations-side-by-side).
 
 **[Open the results viewer](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/)**: Opus's page
 on the left, every local run on a slider on the right, per brief.

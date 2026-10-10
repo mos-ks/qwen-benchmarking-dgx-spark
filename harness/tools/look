@@ -118,7 +118,8 @@ def measure(shots: list[Path], facts: dict) -> str:
     """Deterministic facts a small vision model misjudges: a blank page, a frozen animation, overflow."""
     desktop = [Image.open(f).convert("RGB") for f in shots if f.name.startswith("desktop")]
     lum = ImageStat.Stat(desktop[-1].convert("L"))
-    blank = lum.stddev[0] < 4 or len(desktop[-1].getcolors(1 << 16) or range(9)) < 8
+    # One flat colour is blank; a minimal page (a red square on black) has two and is not.
+    blank = lum.stddev[0] < 0.5 or len(desktop[-1].getcolors(1 << 16) or range(2)) < 2
     parts = [f"blank page: {'YES' if blank else 'no'}"]
     if len(desktop) > 1:
         diff = ImageChops.difference(desktop[0], desktop[-1]).convert("L").point(lambda v: 255 if v > 8 else 0)
