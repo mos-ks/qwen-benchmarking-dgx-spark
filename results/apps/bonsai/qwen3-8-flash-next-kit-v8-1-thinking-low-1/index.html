@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bonsai — a quiet breeze</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #a8825f; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+"use strict";
+const R = PK.ramps;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// ---- warm key light: top-left (matches PK.light) -------------------------------------------
+const wall = ["#d8c3a0", "#cfb58e", "#c3a67e", "#b5946b", "#a8825f"];
+const sun = { x: 0.24, y: 0.14, glow: "#ffe7b5", core: "#fff5cf" };
+const beamCols = ["#f6e3b4", "#ffe9bf", "#fff7d8"];
+const shelfShadow = "#6e4d30";
+const shelfLip = "#f4e2a8";
+const soilCol = "#3a291a", soilSpeck = "#5a4230";
+const shadowCol = "#6b4a2c";
+
+// leaf palettes [main, shade] — a few golden for an autumn accent
+const leafPal = [
+  ["#78b84a", "#2f5d34"],
+  ["#b8e070", "#4a8a3c"],
+  ["#5a9a44", "#22401f"],
+  ["#e0b24a", "#9a6e28"],
+];
+
+let scene = null;
+const leaves = PK.drift({ n: 34, seed: 21, area: [0, 0, 1, 1], vx: [12, 27], vy: [3, 10], len: [2, 3] });
+const streaks = PK.drift({ n: 22, seed: 7, area: [0, 0, 1, 1], vx: [46, 86], vy: [-2, 2], len: [4, 9] });
+
+// ---- static scenery (wall, sun, shelf, pot, trunk) -----------------------------------------
+function buildStatic(view, S) {
+  const { W, H } = view;
+  return PK.layer(W, H, () => {
+    // wall
+    PK.gradient(0, 0, W, S.shelfTopY + 1, wall);
+    // sun glow + disc (upper-left, the key light)
+    const sx = Math.round(W * sun.x), sy = Math.round(H * sun.y);
+    const r = Math.round(Math.min(W, H) * 0.26);
+    PK.glow(sx, sy, r, sun.glow, 0.5, 5);
+    PK.glow(sx, sy, Math.round(r * 0.5), sun.glow, 0.5, 4);
+    PK.disc(sx, sy, Math.max(2, Math.round(2.6 * S.U)), sun.core);
+    // soft god-rays from the sun
+    PK.beam(sx, sy, 1.02, H * 0.9, 0.10, beamCols, 0.13);
+    PK.beam(sx, sy, 1.28, H * 0.9, 0.07, beamCols, 0.10);
+
+    // wood shelf / ledge
+    PK.rect(0, S.shelfTopY, W, H - S.shelfTopY, R.sand[2]);
+    for (let y = S.shelfTopY; y < H; y++) {
+      const d = (y - S.shelfTopY) / Math.max(1, H - S.shelfTopY);
+      const c = d > 0.6 ? R.sand[1] : R.sand[2];
+      PK.rect(0, y, W, 1, c);
+    }
+    // wall shadow seam + crisp lit shelf lip
+    PK.rect(0, S.shelfTopY - 2, W, 2, shelfShadow);
+    PK.rect(0, S.shelfTopY, W, 1, shelfLip);
+    // plank seams (a few darker rows)
+    const rnd = PK.rng(101);
+    for (let k = 0; k < 4; k++) {
+      const y = S.shelfTopY + 3 + Math.floor(rnd() * (H - S.shelfTopY - 4));
+      if (y <= S.shelfTopY + 1) continue;
+      for (let x = 0; x < W; x++) if (rnd() < 0.7) PK.px(x, y, R.bark[1]);
+    }
+
+    // contact shadow under the pot
+    PK.ellipse(S.ox, S.shelfTopY, S.topHalf + Math.round(4 * S.U), Math.max(2, Math.round(2 * S.U)), shadowCol);
+
+    // ---- pot (shallow unglazed ceramic) ----
+    for (let y = S.bodyTopY; y <= S.bodyBotY; y++) {
+      const t = (y - S.bodyTopY) / Math.max(1, S.bodyBotY - S.bodyTopY);
+      const half = Math.round(lerp(S.topHalf, S.botHalf, t));
+      const left = S.ox - half, right = S.ox + half;
+      for (let x = left; x <= right; x++) {
+        const u = (x - left) / Math.max(1, right - left);
+        let c = R.clay[2];
+        if (u < 0.28) c = R.clay[3];
+        else if (u > 0.7) c = R.clay[1];
+        if (y - S.bodyTopY < 1) c = u < 0.6 ? R.clay[3] : R.clay[2];
+        if (S.bodyBotY - y < 1) c = R.clay[0];
+        if (x === right) c = R.clay[0]; else if (x === left) c = R.clay[1];
+        PK.px(x, y, c);
+      }
+    }
+    // foot
+    for (let y = S.bodyBotY; y <= S.footBotY; y++) {
+      const half = S.footHalf, left = S.ox - half, right = S.ox + half;
+      for (let x = left; x <= right; x++) {
+        let c = R.clay[1];
+        if (y === S.bodyBotY) c = R.clay[2];
+        if (y === S.footBotY) c = R.clay[0];
+        if (x === left || x === right) c = R.clay[0];
+        PK.px(x, y, c);
+      }
+    }
+    // soil mound (sits inside the pot, pokes above the rim)
+    PK.ellipse(S.ox, S.rimTopY, S.topHalf - Math.max(1, S.U), Math.max(2, Math.round(2.4 * S.U)), soilCol);
+    for (let i = 0; i < Math.round(S.topHalf * 1.2); i++) {
+      const a = rnd() * 6.283, d = Math.sqrt(rnd());
+      const x = S.ox + Math.cos(a) * d * (S.topHalf - 2);
+      const y = S.rimTopY - 1 - Math.abs(Math.sin(a)) * d * Math.round(1.6 * S.U);
+      PK.px(x, y, rnd() < 0.22 ? "#4a8a3c" : soilSpeck);
+    }
+    // rim (over the soil bottom + body top), overhanging lip
+    for (let y = S.rimTopY; y <= S.rimBotY; y++) {
+      const half = S.topHalf + 1, left = S.ox - half, right = S.ox + half;
+      for (let x = left; x <= right; x++) {
+        const u = (x - left) / Math.max(1, right - left);
+        let c = R.clay[2];
+        if (y === S.rimTopY) c = u > 0.72 ? R.clay[2] : R.clay[4];
+        else if (u > 0.74) c = R.clay[1];
+        else if (u < 0.24) c = R.clay[3];
+        if (y === S.rimBotY) c = u < 0.6 ? R.clay[2] : R.clay[1];
+        if (x === right) c = R.clay[0]; else if (x === left) c = R.clay[1];
+        PK.px(x, y, c);
+      }
+    }
+    // glaze sheen speckles
+    for (let i = 0; i < Math.round(S.topHalf * 0.6); i++) {
+      const x = S.ox - Math.round(S.topHalf * 0.7) + Math.floor(rnd() * (S.topHalf * 0.7));
+      const y = S.bodyTopY + Math.floor(rnd() * Math.max(1, S.bodyBotY - S.bodyTopY));
+      PK.px(x, y, rnd() < 0.6 ? R.clay[3] : R.clay[4]);
+    }
+
+    // pebbles flanking the pot (foreground detail)
+    PK.rock(S.ox - S.topHalf - Math.round(8 * S.U), S.shelfTopY, Math.round(6 * S.U) + 2, Math.round(3 * S.U) + 1, R.stone, { profile: "mound", seed: 5, rough: 2 });
+    PK.rock(S.ox + S.topHalf + Math.round(4 * S.U), S.shelfTopY, Math.round(5 * S.U) + 2, Math.round(2.4 * S.U) + 1, R.stone, { profile: "mound", seed: 8, rough: 2 });
+    // a couple of fallen leaves resting by the base
+    PK.px(S.ox - S.topHalf - 3, S.shelfTopY - 1, "#b8905a");
+    PK.px(S.ox - S.topHalf - 2, S.shelfTopY - 1, "#4a8a3c");
+    PK.px(S.ox + S.topHalf + 4, S.shelfTopY - 1, "#78b84a");
+
+    // ---- trunk: nebari (root flare) + pronounced S-curve (tapered, bark ramp) ----
+    const bark = R.bark;
+    // nebari: the trunk flares wider the lower it goes, gripping the soil at the base
+    PK.limb(S.X(0), S.Y(7), S.X(0), S.Y(4), S.X(0), S.Y(1), Math.max(4, Math.round(9 * S.U)), Math.max(6, Math.round(13 * S.U)), bark, 1);
+    // buttress roots splaying radially out onto the soil surface (kept above the rim)
+    PK.limb(S.X(-2), S.Y(3), S.X(-6), S.Y(2), S.X(-11), S.Y(1), Math.max(3, Math.round(3.5 * S.U)), Math.max(1, Math.round(1.3 * S.U)), bark, 2);
+    PK.limb(S.X(2), S.Y(3), S.X(6), S.Y(2), S.X(11), S.Y(1), Math.max(3, Math.round(3.5 * S.U)), Math.max(1, Math.round(1.3 * S.U)), bark, 3);
+    PK.limb(S.X(-1), S.Y(2), S.X(-4), S.Y(2), S.X(-7), S.Y(1), Math.max(2, Math.round(2.6 * S.U)), Math.max(1, Math.round(1.2 * S.U)), bark, 4);
+    PK.limb(S.X(1), S.Y(2), S.X(4), S.Y(2), S.X(7), S.Y(1), Math.max(2, Math.round(2.6 * S.U)), Math.max(1, Math.round(1.2 * S.U)), bark, 12);
+    // main lower trunk (wide -> narrow) bulging right, then upper trunk bulging left to the apex: a clear S
+    PK.limb(S.X(0), S.Y(0), S.X(5), S.Y(15), S.X(-3), S.Y(30), Math.max(6, Math.round(10 * S.U)), Math.max(3, Math.round(5 * S.U)), bark, 5);
+    PK.limb(S.X(-3), S.Y(30), S.X(-9), S.Y(44), S.X(2), S.Y(58), Math.max(3, Math.round(5 * S.U)), Math.max(2, Math.round(3 * S.U)), bark, 6);
+    // crown stub
+    PK.limb(S.X(2), S.Y(58), S.X(3), S.Y(62), S.X(4), S.Y(66), Math.max(2, Math.round(3 * S.U)), Math.max(1, Math.round(1.8 * S.U)), bark, 7);
+  });
+}
+
+// ---- foliage branches / pads (drawn each frame so they sway) --------------------------------
+const BRANCH_DEFS = [
+  { a: [-1, 14], c: [-9, 16], tip: [-18, 18], tipdy: 18, amp: 2.2, freq: 1.10, phase: 0.9, limb: true,
+    pads: [{ dx: -19, dy: 19, rx: 9.5, ry: 5.0, ramp: R.pine, seed: 11 }] },
+  { a: [-2, 42], c: [-9, 44], tip: [-15, 46], tipdy: 46, amp: 2.2, freq: 1.25, phase: 3.4, limb: true,
+    pads: [{ dx: -16, dy: 46, rx: 8.0, ry: 4.6, ramp: R.pine, seed: 41 }] },
+  { a: [-1, 28], c: [8, 30], tip: [15, 32], tipdy: 32, amp: 2.0, freq: 1.00, phase: 2.1, limb: true,
+    pads: [{ dx: 16, dy: 32, rx: 8.5, ry: 5.0, ramp: R.foliage, seed: 21 }] },
+  { a: [0, 50], c: [7, 51], tip: [11, 53], tipdy: 53, amp: 2.2, freq: 1.15, phase: 1.2, limb: true,
+    pads: [{ dx: 12, dy: 53, rx: 6.0, ry: 4.0, ramp: R.foliage, seed: 51 }] },
+  { pads: [{ dx: -5, dy: 11, rx: 7.0, ry: 4.5, ramp: R.foliage, seed: 31 }], tipdy: 12, amp: 2.0, freq: 1.05, phase: 0.3 },
+  { pads: [{ dx: -8, dy: 38, rx: 6.0, ry: 4.0, ramp: R.foliage, seed: 71 }], tipdy: 38, amp: 2.1, freq: 1.10, phase: 2.7 },
+  { tipdy: 66, amp: 2.6, freq: 0.95, phase: 0.2,
+    pads: [
+      { dx: -6, dy: 61, rx: 6.5, ry: 4.2, ramp: R.foliage, seed: 62 },
+      { dx: 11, dy: 59, rx: 6.0, ry: 4.0, ramp: R.pine, seed: 63 },
+      { dx: 2, dy: 64, rx: 11.0, ry: 6.5, ramp: R.foliage, seed: 61 },
+    ] },
+];
+
+function sway(t, b) {
+  const hfac = b.tipdy / 70;
+  const dx = Math.sin(t * b.freq + b.phase) * b.amp * hfac + Math.sin(t * 0.4) * 0.6;
+  return Math.round(dx * scene.U);
+}
+
+function drawCanopy(t) {
+  const bark = R.bark;
+  for (const b of BRANCH_DEFS) {
+    const dx = sway(t, b);
+    if (b.limb) {
+      const w0 = Math.max(3, Math.round(3.4 * scene.U));
+      const w1 = Math.max(2, Math.round(1.6 * scene.U));
+      PK.limb(
+        scene.X(b.a[0]), scene.Y(b.a[1]),
+        scene.X(b.c[0]) + Math.round(dx * 0.4), scene.Y(b.c[1]),
+        scene.X(b.tip[0]) + dx, scene.Y(b.tip[1]),
+        w0, w1, bark, (b.pads[0].seed + 100)
+      );
+    }
+    for (const p of b.pads) {
+      PK.pad(scene.X(p.dx) + dx, scene.Y(p.dy), Math.max(3, p.rx * scene.U), Math.max(2, p.ry * scene.U), p.ramp, { seed: p.seed });
+    }
+  }
+}
+
+// ---- leaves + wind streaks (front layer) -----------------------------------------------------
+function drawWind(t) {
+  streaks.step = streaks.step; // no-op keep
+  for (const p of leaves.particles) {
+    const bx = Math.round(p.x);
+    const by = Math.round(p.y + Math.sin(t * 2 + p.k * 6.283) * 1.2);
+    const pal = leafPal[Math.floor(p.k * leafPal.length) % leafPal.length];
+    PK.px(bx, by, pal[0]);
+    PK.px(bx + 1, by, pal[1]);
+    PK.px(bx + 2, by, pal[0]);
+    if (p.len >= 3) PK.px(bx + 1, by + 1, pal[1]);
+  }
+}
+
+// ---- boot ------------------------------------------------------------------------------------
+const canvas = document.getElementById("c");
+const view = PK.fit(canvas, 150, (v) => {
+  const { W, H } = v;
+  const U = clamp(Math.min((0.48 * H) / 76, (0.62 * W) / 56), 0.6, 2.7);
+  const shelfTopY = Math.round(H * 0.74);
+  const ox = Math.round(W / 2) + Math.round(2 * U);
+  const topHalf = Math.round(30 * U), botHalf = Math.round(21 * U);
+  const footHalf = Math.round(botHalf * 0.8);
+  const rimTopY = shelfTopY - Math.max(8, Math.round(13 * U));
+  const rimH = Math.max(2, Math.round(3 * U));
+  const footH = Math.max(2, Math.round(2 * U));
+  scene = {
+    W, H, U, ox, shelfTopY, topHalf, botHalf, footHalf,
+    rimTopY, rimBotY: rimTopY + rimH, bodyTopY: rimTopY + rimH, bodyBotY: shelfTopY - footH, footBotY: shelfTopY,
+    X: (dx) => ox + Math.round(dx * U),
+    Y: (dy) => (shelfTopY - Math.max(8, Math.round(13 * U))) - Math.round(1 * U) - Math.round(dy * U),
+  };
+  scene.static = buildStatic(v, scene);
+  leaves.setArea([0, -6, W, H]);
+  streaks.setArea([0, 0, W, H]);
+});
+
+PK.loop((t, dt) => {
+  PK.blit(scene.static);
+  drawCanopy(t);
+  streaks.step(dt);
+  streaks.streaks(["#efe4cc", "#fffdf6"]);
+  leaves.step(dt);
+  drawWind(t);
+});
+</script>
+</body>
+</html>
