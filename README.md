@@ -90,6 +90,7 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 | kit v4 + ponytail | kit v4 with the [ponytail](https://github.com/DietrichGebert/ponytail) "smallest change that works" skill as always-on instructions |
 | kit v5 | the `pixel-art` skill ships [`pixel-kit.js`](harness/skills/pixel-art/pixel-kit.js), a tested drawing library the agent copies into the project (full-screen integer scaling, shaded trunks and foliage pads, jagged faceted rocks, rolling sea and foam, beams, glows, particles, text-grid sprites, 16 colour ramps); the agent may read, never edit, the skills folder |
 | kit v6 | kit v5.1 plus a calibrated critic (three judge-scored example screenshots from other briefs, see [Critic calibration](#critic-calibration)), measured page checks handed to the critic (blank page, share of pixels that move between frames, phone overflow), and keep-best: the project is snapshotted whenever a round beats the best score and restored when a later round scores lower |
+| kit v7 | kit v6 plus one mid-course check: at minute 10 the supervisor looks at the page once and appends the critique to the agent's next tool result |
 | kit v5.1 | kit v5 plus a wrap-up note: from minute 20 of a page-building session the supervisor appends "the harness checks the page when you stop; do not write your own check scripts; finish and stop" to tool results |
 
 Third-party skills used (not redistributed here; install from their repos):
@@ -139,6 +140,7 @@ unless noted. Opus 5.5 averages 9.1 on the same briefs.
 | kit v5 / v5.1, thinking low | 7.0 | 7.5 | 8.0 | 6.0 | 7.1 |
 | kit v6, thinking off | 7.0 | 3.5 | 7.0 | 7.5 | 6.3 |
 | kit v6, thinking low | 7.5 | 7.0 | 8.0 | 8.0 | 7.6 |
+| kit v7, thinking low | 7.5 | 7.5 | 7.0 | 7.5 | 7.4 |
 
 Single runs swing by a point or more (the same setup produced a 3.5 and a 7.5 lighthouse), so read
 the means, not single cells. Thinking low wins on the windmill every time (8.0, 8.0 against 6.5, 7.0)
@@ -196,7 +198,7 @@ Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
 - Thinking low on the other two briefs: lighthouse 7.5 in 20.7 min (same score, 5 min faster), dashboard 6.0 (the category donut rendered as an empty ring) against 8.0 and 7.5 with thinking off. Across the four briefs thinking low moved scores by +1.5, -0.5, 0 and about -1.75: not a consistent win on single runs, so the next rounds use two runs per cell.
 - Critic calibration (offline, no new pages): every saved screenshot replayed through four critic designs and compared with the judge, see [Critic calibration](#critic-calibration).
 - Kit v6, thinking off: bonsai 7.0, lighthouse 3.5 (the agent first stopped at minute 27, after the supervisor's budget, so no fix round ran), windmill 7.0, dashboard 7.5. Thinking low: 7.5, 7.0, 8.0, 8.0.
-- In progress: kit v7 (one mid-course critique at minute 10, folded into the agent's next tool result, so every run gets feedback even if it never stops) with thinking low on all four briefs.
+- Kit v7 (one mid-course critique at minute 10, folded into the agent's next tool result, so every run gets feedback even if it never stops), thinking low: bonsai 7.5, lighthouse 7.5, windmill 7.0, dashboard 7.5. Same mean as kit v6 within noise; no run below 7.
 - This repository is updated as runs finish.
 
 ## Reproduce
