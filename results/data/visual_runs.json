@@ -449,5 +449,27 @@
   "score": 7.0,
   "outcome": "done",
   "note": "brick tower with door and lit window, lattice sails (one skewed), sunset with sun glow, canal, path through dense tulip rows, birds; blocky tulips"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v6 \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v6",
+  "attempt": "#1",
+  "minutes": 27.3,
+  "score": 3.5,
+  "outcome": "done",
+  "note": "a tiny tower on the horizon under a beam, a flat distant island, a huge empty sea with one foam line; no cliff or keeper's house. The agent first stopped at minute 27, after the supervisor's budget, so no fix round ran"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 kit v6 \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v6",
+  "attempt": "#1",
+  "minutes": 16.3,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "KPI cards with icons, category bars, income vs spending, transactions, budgets nearing the limit; inside budget. Spending drop shown in red, raw 2026-05 month labels"
  }
 ]

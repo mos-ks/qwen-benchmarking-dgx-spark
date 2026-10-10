@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Night Watch — a pixel-art lighthouse</title>
+<style>
+  html { background: #06071a; }
+  body { margin: 0; overflow: hidden; background: #06071a; }
+  canvas { position: fixed; left: 0; top: 0; image-rendering: pixelated; }
+  .caption {
+    position: fixed; left: 0; right: 0; bottom: max(10px, env(safe-area-inset-bottom));
+    text-align: center; color: #4a527e; font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .38em; text-transform: uppercase; user-select: none; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="caption">Night Watch</div>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps, SKY = PK.skies.night;
+  const TAU = Math.PI * 2;
+
+  const RED    = ["#3d1219", "#671c26", "#993030", "#c25a48", "#e0886c"]; // tower stripes (dark->light)
+  const WHITE  = R.whitePaint;                                            // tower bands
+  const SLATE  = ["#0d1020", "#181d33", "#252c49", "#39426a", "#5a648e"]; // roofs, door, railings
+  const MOON   = ["#8f97c2", "#c6cdea", "#eef0ff"];
+  const BEAM   = ["#3d4a86", "#7284c2", "#dbe2f8"];
+  const FOAM   = ["#7fa8c8", "#d8ecf8"];
+  const GLASS  = ["#3a3252", "#8a5a34", "#e09a3e", "#ffd76e", "#fff4c8"];
+  const SILL   = "#232741";
+  const HULL   = "#191d36";
+  const HILITE = "#364266";
+
+  const clouds = [
+    { x: 0.12, y: 0.08, s: 1.00, v: 2.0 },
+    { x: 0.55, y: 0.04, s: 0.80, v: 3.0 },
+    { x: 0.84, y: 0.20, s: 1.25, v: 1.3 },
+    { x: 0.34, y: 0.28, s: 0.65, v: 2.6 },
+    { x: 0.17, y: 0.17, s: 1.15, v: 0.9 }, // passes in front of the moon
+  ];
+
+  const rain = PK.drift({ n: 84, seed: 23, area: [0, 0, 140, 140], vx: [-20, -13], vy: [82, 118], len: [3, 5] });
+
+  let theView = null;
+  PK.fit(document.getElementById("c"), 144, (v) => {
+    theView = v;
+    const L = layout(v);
+    v.L = L;
+    rain.setArea([0, -8, v.W, v.H]);
+    v.bg = PK.layer(v.W, v.H, () => drawStatic(v));
+    v.mg = PK.layer(v.W, v.H, () => { PK.blit(v.bg); drawStructures(v); });
+    v.moon = moonSprite();
+  });
+
+  PK.loop((t, dt) => {
+    const v = theView, L = v && v.L;
+    if (!L) return;
+    PK.blit(v.bg);
+
+    drawClouds(v, t);
+    drawFarRidge(v);
+    PK.blit(v.moon, L.moonX - 7, L.moonY - 7);
+    PK.stars(0, 2, v.W, L.horizonY - 5, 14, t);
+
+    const ang = (t * TAU) / 26 + Math.PI * 0.42;
+    const lanX = L.cx, lanY = L.towerBaseY - L.towerH - 4;
+    const len = Math.hypot(v.W, v.H) + 8;
+    PK.blit(v.mg);
+
+    const sky = [0, 0, v.W, L.waterY - 2];
+    PK.beam(lanX, lanY, ang, len, 0.06, BEAM, 0.6, sky);
+    PK.beam(lanX, lanY, ang + Math.PI, len, 0.06, BEAM, 0.6, sky);
+    PK.glow(lanX, lanY, 11, GLASS[2], 0.45);
+    PK.glow(lanX, lanY, 7, GLASS[3], 0.55);
+    PK.glow(lanX, lanY, 3, GLASS[4], 0.7);
+
+    PK.sea(0, L.horizonY, v.W, L.seaFloor, t, R.nightWater, 5);
+    PK.foam(L.landL - 4, L.landL + 2, L.waterY - 1, t, FOAM, 9);
+    PK.foam(L.landR - 1, L.landR + 3, L.waterY - 1, t * 0.9 + 2, FOAM, 12);
+    PK.foam(L.landL + 1, L.landR, L.waterY + 1, t * 0.7 + 3, FOAM, 17);
+    for (const s of L.spray) {
+      const n = Math.round(s.base * (0.35 + 0.65 * (Math.sin(t * s.sp + s.ph) * 0.5 + 0.5)));
+      for (let k = 0; k < n; k++) {
+        PK.px(s.x + Math.round(Math.sin(k * 3.7 + s.ph) * 1.6), s.y - k, k === n - 1 ? FOAM[1] : FOAM[0]);
+      }
+    }
+
+    rain.step(dt);
+    rain.streaks(["#243558", "#8aa0cc"]);
+  });
+
+  // ---- layout --------------------------------------------------------------------------------
+
+  function layout(v) {
+    const waterY = Math.round(v.H * (v.portrait ? 0.80 : 0.80));
+    const landL = Math.round(v.W * 0.40), landR = Math.round(v.W * 0.99);
+    const cx = Math.round((landL + landR) / 2);
+    const rockH = Math.max(20, Math.round(v.H * 0.13));
+    const cw = Math.min(30, Math.max(18, Math.round(v.W * 0.14)));
+    const th = Math.min(56, Math.max(34, Math.round(v.H * 0.28)));
+    return {
+      waterY, landL, landR, cx, rockH,
+      towerBaseY: waterY - rockH + 3,
+      towerH: th,
+      towerHW: Math.max(4, Math.round(th / 10)),
+      houseW: Math.max(14, Math.round(cw * 0.8)),
+      cw,
+      horizonY: Math.max(30, Math.round(waterY * (v.portrait ? 0.55 : 0.62))),
+      seaFloor: v.H,
+      moonX: Math.max(9, Math.min(v.W - 10, Math.round(v.W * 0.17))),
+      moonY: 4 + Math.round(Math.max(24, Math.max(30, Math.round(waterY * (v.portrait ? 0.55 : 0.62))) - 10) * 0.30),
+      boatX: Math.round(v.W * 0.22),
+      spray: [],
+      rock: null,
+    };
+  }
+
+  // ---- static: sky, moon halo, stars, far ridge, sea, rocks ---------------------------------
+
+  function drawStatic(v) {
+    const L = v.L;
+    PK.gradient(0, 0, v.W, L.horizonY, SKY);
+    PK.glow(L.moonX, L.moonY, 15, MOON[0], 0.5);
+    PK.glow(L.moonX, L.moonY, 9, MOON[1], 0.55);
+    const rnd = PK.rng(101);
+    for (let i = 0; i < 90; i++) {
+      const x = Math.floor(rnd() * v.W);
+      const y = Math.floor(rnd() * (L.horizonY - 4));
+      if (Math.hypot(x - L.moonX, y - L.moonY) < 15) continue;
+      PK.px(x, y, rnd() < 0.22 ? "#aeb4de" : "#565e8e");
+      if (rnd() < 0.08) { PK.px(x - 1, y, "#565e8e"); PK.px(x + 1, y, "#565e8e"); }
+    }
+    drawFarRidge(v);
+    PK.sea(0, L.horizonY, v.W, L.seaFloor, 0, R.nightWater, 5, { swell: false });
+    drawRocks(v);
+  }
+
+  function drawFarRidge(v) {
+    const L = v.L;
+    const rnd = PK.rng(77);
+    const x0 = Math.max(0, Math.round(v.W * 0.02));
+    const x1 = Math.round(v.W * 0.34);
+    if (x1 - x0 < 8) return;
+    const top = [];
+    let h = 4;
+    for (let i = 0; i < x1 - x0; i++) {
+      if (rnd() < 0.18) h += Math.round(rnd() * 5 - 2);
+      h = Math.max(2, Math.min(9, h));
+      top.push(L.horizonY - h);
+    }
+    for (let i = 0; i < top.length; i++) {
+      for (let y = top[i]; y < L.horizonY; y++) {
+        PK.px(x0 + i, y, (y - top[i] < 1 && rnd() < 0.7) ? HILITE : HULL);
+      }
+    }
+    for (let y = L.horizonY - 1; y < L.waterY; y++) PK.rect(x0, y, x1 - x0, 1, "#101836");
+  }
+
+  function drawRocks(v) {
+    const L = v.L;
+    L.rock = PK.rock(L.landL - 2, L.waterY + 3, (L.landR - L.landL) + 4, L.rockH, R.nightStone,
+      { profile: "cliff", seed: 11, rough: 3 });
+    PK.rock(Math.round(v.W * 0.27), L.waterY + 1, 11, 5, R.nightStone, { seed: 41 });
+    PK.rock(Math.round(v.W * 0.10), L.waterY + 2, 8, 4, R.nightStone, { seed: 42 });
+    if (v.W > 130) PK.rock(Math.round(v.W * 0.62), L.waterY + 2, 9, 4, R.nightStone, { seed: 43 });
+    L.spray = [];
+    for (const gx of [L.landL - 2, L.landR - 1, L.landL + 3, Math.round((L.landL + L.landR) / 2) + 6]) {
+      L.spray.push({ x: gx, y: L.waterY, base: 5, sp: 1.1 + (gx % 5) * 0.13, ph: gx * 0.7 });
+    }
+  }
+
+  // ---- mid layer: tower, house, railing, boat -------------------------------------------------
+
+  function drawStructures(v) {
+    const L = v.L;
+    drawBoat(v, 0);
+    drawBoatGlow(v, L.boatX + 2, L.waterY - 7);
+    const cx = L.cx;
+    const baseY = L.towerBaseY;
+    const hw = L.towerHW;
+    const topY = baseY - L.towerH;
+    const footHw = hw + 2;
+    const bandH = Math.max(4, Math.round(L.towerH / 6));
+    const bands = Math.ceil(L.towerH / bandH);
+
+    PK.rect(cx - footHw - 1, baseY, footHw * 2 + 3, 2, SLATE[0]);
+    PK.rect(cx - footHw, baseY, footHw * 2 + 1, 2, SLATE[1]);
+
+    for (let b = 0; b < bands; b++) {
+      const y0 = Math.max(topY + 4, baseY - (b + 1) * bandH);
+      const y1 = Math.min(baseY - 1, baseY - b * bandH);
+      for (let y = y0; y < y1; y++) {
+        const f = (baseY - y) / L.towerH;
+        const w = Math.round(hw + 2 * (1 - f));
+        const ramp = (b % 2) ? RED : WHITE;
+        PK.rect(cx - w, y, w * 2 + 1, 1, ramp[1]);
+        PK.rect(cx - w, y, Math.max(1, Math.round(w * 0.4)), 1, ramp[2]);
+        if (w > 2) PK.rect(cx + Math.round(w * 0.35), y, w - Math.round(w * 0.35) + 1, 1, ramp[0]);
+        PK.px(cx - w, y, ramp[0]);
+        PK.px(cx + w, y, ramp[0]);
+      }
+    }
+    for (let y = topY + 6; y < baseY - 2; y += 4) {
+      const w = Math.round(hw + 2 * (1 - (baseY - y) / L.towerH));
+      const rnd = PK.rng(y * 31 + 7);
+      for (let i = 0; i < 3; i++) {
+        const x = cx - w + 1 + Math.floor(rnd() * Math.max(1, w * 2 - 1));
+        if (rnd() < 0.5) PK.px(x, y, SLATE[0]);
+      }
+    }
+    PK.rect(cx - 2, baseY - 8, 5, 8, SLATE[0]);
+    PK.rect(cx - 2, baseY - 8, 5, 1, SLATE[2]);
+    PK.rect(cx - 1, baseY - 7, 3, 6, SLATE[1]);
+    PK.px(cx + 1, baseY - 4, "#e8a83c");
+
+    drawHouse(v, cx, baseY);
+    drawLantern(v, cx, topY);
+  }
+
+  function drawHouse(v, cx, baseY) {
+    const L = v.L;
+    const hw = L.houseW;
+    const wallH = Math.max(7, Math.round(hw * 0.45));
+    const hx = cx - L.cw - hw + 2;
+    const gy0 = L.rock.top(cx - L.cw - 2) - baseY + 3;
+    const wy = baseY + gy0;
+    const wallTop = wy - wallH;
+    PK.rect(hx - 1, wy, hw * 2 + 3, 1, SLATE[0]);
+    PK.rect(hx, wallTop, hw * 2 + 1, wallH, SLATE[1]);
+    PK.rect(hx, wallTop, Math.max(2, Math.round(hw * 0.6)), wallH, SLATE[2]);
+    if (hw > 6) PK.rect(hx + Math.round(hw * 1.4), wallTop, hw - Math.round(hw * 1.4) + 1, wallH, SLATE[0]);
+    PK.px(hx, wallTop, SLATE[0]);
+    PK.px(hx + hw * 2, wallTop, SLATE[0]);
+    for (let k = 0; k < 4; k++) PK.px(hx + 2 + ((k * 5 + 1) % Math.max(1, hw * 2 - 1)), wallTop + 2 + (k % 3) * 2, SLATE[0]);
+
+    const peak = wallTop - Math.max(3, Math.round(hw * 0.35));
+    for (let i = 0; i <= hw + 1; i++) {
+      const y = peak + Math.round((i / (hw + 1)) * (wallTop - peak));
+      PK.rect(hx + hw + i, y, 1, wallTop - y + 2, SLATE[1]);
+      PK.rect(hx + hw - i, y, 1, wallTop - y + 2, SLATE[2]);
+      PK.px(hx + hw + i, y, SLATE[3]);
+    }
+    for (let x = hx; x <= hx + hw * 2; x++) PK.px(x, wallTop, SLATE[0]);
+
+    PK.rect(hx + hw + 2, peak - 2, 2, 4, SLATE[1]);
+    PK.rect(hx + hw + 2, peak - 2, 2, 1, SLATE[3]);
+    const rnd = PK.rng(9);
+    for (let s = 0; s < 5; s++) PK.px(hx + hw + 4 + s, peak - 4 - (s % 2), rnd() < 0.5 ? "#262c4a" : "#1c2138");
+
+    PK.rect(hx + 2, wallTop + 2, 2, 2, GLASS[3]);
+    PK.rect(hx + 2, wallTop + 2, 1, 1, GLASS[4]);
+    PK.rect(hx + hw + 2, wallTop + 3, 3, wallH - 3, SLATE[0]);
+    PK.rect(hx + hw, wallTop + 3, 3, wallH - 3, SLATE[1]);
+    PK.px(hx + hw + 2, wallTop + wallH - 3, "#e8a83c");
+    PK.px(hx - 1, wy, SLATE[0]);
+    PK.px(hx + hw * 2 + 1, wy, SLATE[0]);
+  }
+
+  function drawLantern(v, cx, topY) {
+    const hw = v.L.towerHW;
+    const topW = Math.max(2, hw);
+    const glassHW = Math.max(2, topW - 1);
+    const railW = topW + 3;
+    const galleryY = topY + 3;
+    const galleryTopY = galleryY - 2;
+    const glassBot = galleryTopY - 1;
+    const roofBase = glassBot - 5;
+
+    PK.rect(cx - railW, galleryY, railW * 2 + 1, 2, SLATE[1]);
+    PK.rect(cx - railW, galleryY, railW + 1, 1, SLATE[2]);
+    PK.rect(cx - railW, galleryY + 2, railW * 2 + 1, 1, SLATE[0]);
+    for (let i = -railW + 1; i < railW; i += 2) PK.px(cx + i, galleryY + 1, SLATE[0]);
+    PK.rect(cx - railW, galleryTopY, railW * 2 + 1, 1, SLATE[3]);
+
+    PK.rect(cx - topW - 1, roofBase - 1, (topW + 1) * 2 + 1, 1, SLATE[0]);
+    PK.rect(cx - topW - 1, roofBase, (topW + 1) * 2 + 1, 1, SLATE[2]);
+    PK.rect(cx - topW, glassBot - 4, topW * 2 + 1, 4, GLASS[1]);
+    PK.rect(cx - glassHW, glassBot - 3, glassHW * 2 + 1, 3, GLASS[2]);
+    PK.rect(cx - glassHW + 1, glassBot - 3, Math.max(1, glassHW * 2 - 1), 3, GLASS[3]);
+    PK.rect(cx - glassHW + 1, glassBot - 3, 1, 3, GLASS[0]);
+    PK.rect(cx + glassHW - 1, glassBot - 3, 1, 3, GLASS[0]);
+    PK.rect(cx - 1, glassBot - 3, 3, 3, GLASS[4]);
+    PK.rect(cx - glassHW, glassBot - 1, glassHW * 2 + 1, 1, SILL);
+    PK.rect(cx - glassHW, glassBot - 3, glassHW * 2 + 1, 1, SILL);
+
+    for (let d = 0; d <= topW + 1; d++) {
+      const y = roofBase - 1 - d;
+      const w = topW + 1 - d;
+      if (w < 0) break;
+      PK.rect(cx - w, y, w * 2 + 1, 1, SLATE[1]);
+      if (d === 0) PK.rect(cx - w, y, Math.max(1, w + 1), 1, SLATE[2]);
+    }
+    const apexY = roofBase - 2 - Math.max(0, topW - 1);
+    PK.rect(cx - 1, apexY - 2, 3, 2, SLATE[2]);
+    PK.rect(cx, apexY - 3, 1, 1, SLATE[3]);
+  }
+
+  function drawBoat(v, bob) {
+    const L = v.L;
+    const bx = L.boatX, y = L.waterY - 4 + bob;
+    PK.rect(bx, y, 6, 2, SLATE[0]);
+    PK.rect(bx, y, 6, 1, SLATE[1]);
+    PK.px(bx + 5, y + 1, SLATE[0]);
+    PK.px(bx + 1, y + 1, SLATE[0]);
+    PK.rect(bx + 2, y - 4, 1, 4, SLATE[2]);
+    PK.line(bx + 3, y - 4, bx + 5, y - 1, SLATE[3]);
+  }
+
+  function drawBoatGlow(v, lx, ly) {
+    const rnd = PK.rng(5);
+    for (let k = 0; k < 6; k++) {
+      const dy = 1 + k;
+      const off = Math.round((rnd() * 2 - 1) * (0.5 + k * 0.4));
+      const c = rnd() < 0.5 ? GLASS[2] : GLASS[1];
+      PK.px(lx + off, ly + dy, c);
+      if (rnd() < 0.4) PK.px(lx + off + 1, ly + dy, c);
+    }
+  }
+
+  function moonSprite() {
+    const rows = [
+      "..######..",
+      ".###L####.",
+      "##LS######",
+      "##########",
+      "#####S####",
+      "##########",
+      "######S###",
+      "########SS",
+      ".########.",
+      "..######..",
+    ];
+    const p = { "#": MOON[1], L: MOON[2], S: MOON[0] };
+    return PK.layer(10, 10, () => PK.sprite(rows, p, 0, 0));
+  }
+
+  // ---- clouds ----------------------------------------------------------------------------------
+
+  function drawClouds(v, t) {
+    const L = v.L;
+    const span = v.W + 64;
+    for (const c of clouds) {
+      const x = ((c.x * span + t * c.v) % span + span) % span - 32;
+      let y = 4 + Math.round(c.y * Math.max(24, L.horizonY - 10));
+      if (c === clouds[4]) { // keep the moon-veiling cloud locked onto the moon
+        y = L.moonY + Math.round(3 * Math.sin(t * 0.35));
+      }
+      cloud(x, y, c.s);
+    }
+  }
+
+  function cloud(x, y, s) {
+    const puffs = [
+      [0, 0, 7, 3], [7, -3, 8, 5], [15, -1, 6, 4], [20, 1, 5, 3], [4, 2, 9, 3], [13, 3, 7, 2],
+    ];
+    const px0 = Math.round(x), py0 = Math.round(y);
+    for (const [ox, oy, w, h] of puffs) {
+      PK.ellipse(px0 + Math.round(ox * s), py0 + Math.round(oy * s), Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s)), "#10142c");
+    }
+    for (const [ox, oy, w, h] of puffs) {
+      PK.ellipse(px0 + Math.round(ox * s), py0 + Math.round(oy * s) - 1, Math.max(1, Math.round(w * s)) - 1, Math.max(1, Math.round(h * s) - 1), "#1d2342");
+    }
+    for (const [ox, oy, w, h] of puffs) {
+      const e = 1 + (oy < -1 ? 1 : 0);
+      PK.ellipse(px0 + Math.round(ox * s), py0 + Math.round(oy * s) - e, Math.max(1, Math.round(w * s)) - 2, Math.max(1, Math.round(h * s) - 2), "#2e3560");
+    }
+    const rnd = PK.rng((Math.round(x) * 13) ^ (Math.round(y) * 7));
+    for (let k = 0; k < 5 * s; k++) {
+      const ox = Math.round((rnd() * 2 - 1) * 22 * s);
+      const oy = Math.round((rnd() * 2 - 1) * 3 * s);
+      PK.px(px0 + ox, py0 + oy, rnd() < 0.6 ? "#2e3560" : "#3d4574");
+    }
+  }
+})();
+</script>
+</body>
+</html>
