@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lighthouse at Night</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #06071a; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps, SK = PK.skies;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const wrap = (v, a, b) => { const r = b - a; return a + ((((v - a) % r) + r) % r); };
+
+  const cloudRamp = ["#141936", "#20274c", "#303a66", "#48548a", "#6874ac"];
+  const beamCols = ["#4a4468", "#b98f52", "#ffeab0"];
+  const rainCols = ["#33406e", "#a8bce8"];
+  const foamCols = ["#cfe8f2", "#ffffff"];
+  const moonCols = ["#b9c2dd", "#e6eaf6", "#ffffff"];
+
+  const rain = PK.drift({ n: 120, seed: 7, area: [0, 0, 1, 1], vx: [-24, -17], vy: [62, 84], len: [3, 6] });
+  let S = null;
+
+  // animated surf: a band that surges with t, climbs the rock flank and recedes, with taller splash at the edges
+  function foamRock(rk, wy, t, speed, phase, climb) {
+    for (let x = rk.x - 4; x < rk.x + rk.w + 4; x++) {
+      const inRock = x >= rk.x && x < rk.x + rk.w;
+      const edge = Math.min(Math.abs(x - rk.x), Math.abs(x - rk.x - rk.w + 1));
+      if (!inRock && edge > 4) continue;
+      const th = inRock ? rk.top(x) : wy;
+      const surge = Math.sin(t * speed + x * 0.3 + phase) * 0.5 + 0.5;
+      let h = 1 + Math.round(surge * 2);
+      if (edge <= 3) h += Math.round(surge * 4 * climb);
+      if (inRock && th > wy - 10) h += Math.round(surge * Math.min(8, wy - th + 1) * 0.6 * climb);
+      for (let k = 0; k <= h; k++) {
+        const y = wy - k;
+        if (y < th) break;
+        PK.px(x, y, k === h ? (surge > 0.75 ? "#ffffff" : "#cfe8f2") : k > h - 2 ? "#cfe8f2" : "#8fb0c8");
+      }
+      if (surge > 0.8 && ((x + Math.floor(t * 3)) & 7) < 2) PK.px(x + ((x & 1) ? 1 : -1), wy - h - 2 - ((x * 3) & 3), "#ffffff");
+    }
+  }
+
+  function drawTower(cx, baseY, h, wBase, wTop, seed) {
+    const rnd = PK.rng(seed);
+    const bands = 6;
+    for (let y = 0; y < h; y++) {
+      const f = y / (h - 1);
+      const w = Math.max(5, Math.round(wBase + (wTop - wBase) * f));
+      const x0 = Math.round(cx - w / 2);
+      const yy = baseY - h + y;
+      const red = Math.floor(f * bands) % 2 === 1;
+      const ramp = red ? R.brickRed : R.whitePaint;
+      PK.rect(x0, yy, w, 1, ramp[2]);
+      PK.px(x0, yy, ramp[3]);
+      PK.px(x0 + w - 1, yy, ramp[1]);
+      if (rnd() < 0.07) PK.px(x0 + 2 + Math.floor(rnd() * Math.max(1, w - 4)), yy, red ? ramp[1] : ramp[3]);
+    }
+    // stone base course
+    PK.rect(cx - Math.round(wBase / 2) - 1, baseY - 2, wBase + 2, 1, R.nightStone[2]);
+    PK.rect(cx - Math.round(wBase / 2) - 1, baseY - 1, wBase + 2, 1, R.nightStone[1]);
+    // lit windows up the shaft
+    for (const f of [0.34, 0.56, 0.78]) {
+      const y = baseY - Math.round(f * h);
+      PK.px(cx, y - 1, R.nightStone[0]);
+      PK.px(cx, y, R.warmLight[3]);
+      PK.px(cx, y + 1, R.warmLight[2]);
+    }
+    // door with lamp
+    PK.rect(cx - 2, baseY - 6, 5, 5, R.bark[1]);
+    for (let y = baseY - 6; y < baseY - 1; y++) { PK.px(cx - 3, y, R.nightStone[0]); PK.px(cx + 3, y, R.nightStone[0]); }
+    PK.px(cx - 2, baseY - 6, R.bark[3]);
+    PK.px(cx - 3, baseY - 7, R.nightStone[0]); PK.px(cx - 2, baseY - 7, R.nightStone[0]);
+    PK.px(cx - 1, baseY - 7, R.nightStone[0]); PK.px(cx, baseY - 7, R.nightStone[0]);
+    PK.px(cx + 1, baseY - 7, R.nightStone[0]); PK.px(cx + 2, baseY - 7, R.nightStone[0]);
+    PK.px(cx + 3, baseY - 7, R.nightStone[0]);
+    PK.px(cx, baseY - 8, R.warmLight[4]);
+    PK.glow(cx, baseY - 8, 3, "#f2a33a", 0.5);
+
+    const ty = baseY - h; // topmost body row
+    // corbel + gallery platform
+    PK.rect(cx - Math.round(wTop / 2) - 1, ty, wTop + 2, 1, R.nightStone[2]);
+    PK.rect(cx - Math.round(wTop / 2) - 3, ty - 2, wTop + 6, 2, R.nightStone[1]);
+    for (let x = cx - Math.round(wTop / 2) - 3; x <= cx + Math.round(wTop / 2) + 2; x++) PK.px(x, ty - 2, R.nightStone[3]);
+    // railing
+    for (let dx = -Math.round(wTop / 2) - 3; dx <= Math.round(wTop / 2) + 3; dx += 2)
+      for (let y = ty - 6; y <= ty - 3; y++) PK.px(cx + dx, y, R.nightStone[2]);
+    PK.rect(cx - Math.round(wTop / 2) - 3, ty - 7, wTop + 7, 1, R.nightStone[3]);
+    PK.rect(cx - Math.round(wTop / 2) - 3, ty - 5, wTop + 7, 1, R.nightStone[2]);
+    // lantern room
+    const wL = wTop + 2, hL = Math.max(7, Math.round(h * 0.14));
+    const x0 = cx - Math.round(wL / 2), y0 = ty - 8 - hL;
+    PK.rect(x0, y0, wL, hL, R.warmLight[2]);
+    PK.rect(x0 + 1, y0 + 1, wL - 2, hL - 2, R.warmLight[3]);
+    PK.rect(cx - 1, y0 + 2, 3, hL - 4, R.warmLight[4]);
+    for (let x = x0 + 2; x < x0 + wL - 1; x += 3)
+      for (let y = y0; y < y0 + hL; y++) PK.px(x, y, R.nightStone[1]);
+    for (let y = y0; y < y0 + hL; y++) { PK.px(x0, y, R.nightStone[0]); PK.px(x0 + wL - 1, y, R.nightStone[0]); }
+    // domed roof
+    let rw = wL + 2, ry = y0 - 1;
+    while (rw >= 3) {
+      PK.rect(cx - Math.round(rw / 2), ry, rw, 1, rw >= wL ? R.nightStone[2] : R.nightStone[3]);
+      PK.px(cx - Math.round(rw / 2), ry, R.nightStone[4]);
+      rw -= 2; ry--;
+    }
+    PK.px(cx, ry, R.nightStone[3]); PK.px(cx, ry - 1, R.nightStone[3]);
+    return { lamp: { x: cx, y: y0 + Math.round(hL / 2) } };
+  }
+
+  function drawHouse(big, hx, houseW, seed) {
+    const rnd = PK.rng(seed);
+    const gy = big.top(hx) + 2;
+    const hw = Math.round(houseW / 2), wallH = 7, wy = gy - wallH;
+    PK.rect(hx - hw, wy, houseW, wallH, R.whitePaint[2]);
+    for (let y = wy; y < gy; y++) {
+      PK.px(hx - hw, y, R.whitePaint[3]);
+      PK.px(hx + hw - 1, y, R.whitePaint[1]);
+      if (rnd() < 0.08) PK.px(hx - hw + 1 + Math.floor(rnd() * (houseW - 2)), y, R.whitePaint[1]);
+    }
+    PK.rect(hx - hw, gy - 1, houseW, 1, R.whitePaint[1]);
+    // roof
+    const ax = Math.round(hw * 0.5);
+    PK.poly([[hx - hw - 2, wy], [hx + hw + 2, wy], [hx + ax, wy - 4], [hx - ax, wy - 4]], R.brickRed[2]);
+    PK.line(hx - hw - 2, wy, hx + hw + 2, wy, R.brickRed[0]);
+    PK.line(hx - hw - 1, wy - 1, hx - ax + 1, wy - 3, R.brickRed[3]);
+    PK.line(hx + hw + 1, wy - 1, hx + ax, wy - 3, R.brickRed[1]);
+    // chimney
+    PK.rect(hx + hw - 6, wy - 6, 3, 5, R.brickRed[1]);
+    PK.px(hx + hw - 6, wy - 6, R.brickRed[3]);
+    PK.rect(hx + hw - 7, wy - 7, 5, 1, R.stone[2]);
+    // lit windows + door
+    PK.rect(hx - 6, wy + 2, 2, 2, R.warmLight[3]);
+    PK.rect(hx + 3, wy + 2, 2, 2, R.warmLight[3]);
+    PK.px(hx - 6, wy + 4, R.nightStone[0]); PK.px(hx - 5, wy + 4, R.nightStone[0]);
+    PK.px(hx + 3, wy + 4, R.nightStone[0]); PK.px(hx + 4, wy + 4, R.nightStone[0]);
+    PK.rect(hx - 1, gy - 4, 3, 4, R.bark[1]);
+    PK.px(hx - 1, gy - 4, R.bark[3]);
+    PK.px(hx + 3, gy - 3, R.warmLight[4]);
+    for (let x = hx - 3; x <= hx + 4; x++) if ((x & 1) === (hx & 1)) PK.px(x, gy, "#7a3b1e");
+    // contact shadow
+    for (let x = hx - hw - 2; x <= hx + hw + 2; x++) if ((x & 1) === 0) PK.px(x, gy, R.nightStone[0]);
+    return {
+      w1: { x: hx - 5, y: wy + 3 }, w2: { x: hx + 4, y: wy + 3 },
+      chim: { x: hx + hw - 5, y: wy - 7 }, door: { x: hx, y: gy - 2 }, gy,
+    };
+  }
+
+  function build(v) {
+    const W = v.W, H = v.H;
+    const cx = Math.round(W / 2);
+    const cliffW = clamp(Math.round(W * 0.58), 56, 96);
+    const cliffX = cx - Math.round(cliffW / 2);
+    const baseY = H + 8;
+    const cliffH = clamp(Math.round(H * 0.28), 30, 74);
+    const towerX = cx - Math.round(cliffW * 0.06);
+    const houseX = cx + Math.round(cliffW * 0.26);
+    const houseW = clamp(Math.round(W * 0.1), 15, 22);
+    const towerH = clamp(Math.round(H * 0.38), 52, 150);
+    const wBase = clamp(Math.round(towerH * 0.16), 10, 18);
+    const wTop = clamp(Math.round(towerH * 0.11), 7, 12);
+    const moonX = Math.round(W * 0.2);
+    const moonY = clamp(Math.round(H * 0.14), 10, Math.round(H * 0.22));
+    const moonR = clamp(Math.round(Math.min(W, H) * 0.045), 5, 8);
+    const waterY = H - Math.max(8, Math.round(H * 0.07));
+
+    let horizon = 0, lamp = null, house = null, big = null, rL = null, rR = null;
+
+    const fg = PK.layer(W, H, function () {
+      rL = PK.rock(Math.round(W * 0.13), H - Math.round(H * 0.02), clamp(Math.round(W * 0.08), 10, 16), clamp(Math.round(H * 0.055), 6, 14), R.nightStone, { seed: 31, rough: 3 });
+      rR = PK.rock(Math.round(W * 0.83), H - Math.round(H * 0.015), clamp(Math.round(W * 0.09), 10, 18), clamp(Math.round(H * 0.06), 6, 16), R.nightStone, { seed: 57, rough: 3 });
+      big = PK.rock(cliffX, baseY, cliffW, cliffH, R.stone, {
+        seed: 41,
+        rough: Math.max(4, Math.round(cliffH * 0.16)),
+        ledges: Math.max(3, Math.round(cliffH / 8)),
+        cracks: Math.max(4, Math.round(cliffW / 10)),
+        profile: function (u) {
+          if (u < 0.12) return 0.12 + (u / 0.12) * 0.4;
+          if (u < 0.3) return 0.52 + ((u - 0.12) / 0.18) * 0.48;
+          if (u < 0.66) return 1;
+          if (u < 0.8) return 1 - ((u - 0.66) / 0.14) * 0.35;
+          return Math.max(0.18, 0.65 - ((u - 0.8) / 0.2) * 0.47);
+        },
+      });
+      const ty0 = big.top(towerX) + 4;
+      horizon = ty0 - Math.round(towerH * 0.6);
+      house = drawHouse(big, houseX, houseW, 77);
+      lamp = drawTower(towerX, ty0, towerH, wBase, wTop, 21).lamp;
+    });
+
+    const splashes = [];
+    {
+      const rnd = PK.rng(211);
+      for (let i = 0; i < 26; i++) splashes.push({ x: Math.floor(rnd() * W), y: Math.floor(waterY + rnd() * (H - 2 - waterY)), k: rnd() });
+      for (const rk of [big, rL, rR]) {
+        const n = rk === big ? 16 : 6;
+        for (let i = 0; i < n; i++) {
+          const x = rk.x + Math.floor(rnd() * rk.w);
+          const ty = rk.top(x);
+          const y = rnd() < 0.5 ? ty : Math.min(waterY, ty + Math.floor(rnd() * Math.max(2, rk.baseY - ty)));
+          splashes.push({ x, y, k: rnd() });
+        }
+      }
+    }
+
+    const glints = [];
+    {
+      const rnd = PK.rng(101);
+      for (let i = 0; i < 30; i++) glints.push({ f: rnd(), ox: Math.round((rnd() * 2 - 1) * (moonR + 1)), hot: rnd() < 0.3 });
+    }
+    const waveRows = [];
+    {
+      const rnd = PK.rng(131);
+      const n = Math.max(6, Math.round((H - horizon) / 4));
+      for (let i = 0; i < n; i++) {
+        waveRows.push({
+          f: (i + 0.5) / n,
+          period: 7 + rnd() * 14,
+          period2: 13 + rnd() * 21,
+          amp: Math.round(rnd() * 2),
+          speed: 4 + rnd() * 12,
+          phase: rnd() * 100,
+          phase2: rnd() * 100,
+          seed: 1 + Math.floor(rnd() * 9),
+        });
+      }
+    }
+
+    const bg = PK.layer(W, H, function () {
+      PK.gradient(0, 0, W, horizon + 4, SK.night);
+      PK.glow(moonX, horizon, Math.round(W * 0.3), "#3a4470", 0.22, 3);
+      // far island on the right, low contrast
+      PK.poly([
+        [Math.round(W * 0.6), horizon + 2], [Math.round(W * 0.68), horizon - 4],
+        [Math.round(W * 0.74), horizon - 2], [Math.round(W * 0.8), horizon - 6],
+        [Math.round(W * 0.88), horizon - 3], [Math.round(W * 0.96), horizon + 2],
+      ], "#1c2348");
+    });
+
+    const clouds = [
+      { x0: W * 0.16, y: moonY + 3, rx: Math.round(moonR * 1.7), ry: Math.max(4, Math.round(moonR * 0.95)), spd: 1.4, seed: 5, main: true },
+      { x0: W * 0.62, y: moonY - 8, rx: Math.round(moonR * 2.1), ry: Math.max(3, Math.round(moonR * 0.7)), spd: 1.0, seed: 8 },
+      { x0: W * 0.85, y: Math.round(H * 0.3), rx: Math.round(moonR * 1.6), ry: Math.max(3, Math.round(moonR * 0.55)), spd: 1.9, seed: 12 },
+      { x0: W * 0.42, y: Math.round(H * 0.08), rx: Math.round(moonR * 1.3), ry: Math.max(3, Math.round(moonR * 0.5)), spd: 1.2, seed: 16 },
+    ];
+
+    rain.setArea([0, -10, W, H]);
+    return { W, H, horizon, waterY, moonX, moonY, moonR, lamp, house, big, rL, rR, glints, waveRows, splashes, clouds, bg, fg };
+  }
+
+  const view = PK.fit(document.getElementById("c"), 150, function (v) { S = build(v); });
+
+  PK.loop(function (t, dt) {
+    const s = S;
+    PK.blit(s.bg);
+    PK.stars(0, 0, s.W, s.horizon - 8, Math.round((s.W * s.horizon) / 110) + 20, t, ["#8a90c0", "#ffffff"], 11);
+    // moon over the stars: stepped dithered halo instead of a soft glow
+    const { moonX: mx, moonY: my, moonR: mr } = s;
+    for (let d = mr + 1; d <= mr + 9; d++) {
+      const p = (d - mr) / 9;
+      const col = d > mr + 6 ? "#242c50" : d > mr + 3 ? "#2e3860" : "#3a4674";
+      const n = d * 8;
+      for (let a = 0; a < n; a++) {
+        const ang = (a / n) * Math.PI * 2;
+        const x = mx + Math.round(Math.cos(ang) * d);
+        const y = my + Math.round(Math.sin(ang) * d);
+        if (PK.bayer(x, y) < 1 - p) PK.px(x, y, col);
+      }
+    }
+    PK.disc(mx, my, mr, moonCols[1]);
+    for (const c of [[-2, -1], [1, 2], [3, -2], [0, 0]]) if (Math.abs(c[0]) + Math.abs(c[1]) < mr + 1) PK.disc(mx + c[0], my + c[1], 1, moonCols[0]);
+    PK.px(mx - Math.round(mr * 0.4), my - Math.round(mr * 0.5), moonCols[2]);
+    // sea + moon glint path
+    PK.sea(0, s.horizon, s.W, s.H, t, R.nightWater, 5);
+    // broken, varied crest lines over the base sea bands
+    const seaBot = s.H - 3;
+    for (const r of s.waveRows) {
+      const y0 = s.horizon + 2 + Math.floor(r.f * (seaBot - s.horizon - 4));
+      for (let x = 0; x < s.W; x++) {
+        const s1 = Math.sin(((x + t * r.speed + r.phase) / r.period) * Math.PI * 2);
+        const s2 = Math.sin(((x * 0.37 + t * r.speed * 0.6 + r.phase2) / r.period2) * Math.PI * 2);
+        const v = s1 * 0.65 + s2 * 0.35;
+        if (v > 0.72) {
+          const y = y0 - r.amp * (v > 0.9 ? 1 : 0);
+          PK.px(x, y, v > 0.93 ? R.nightWater[4] : R.nightWater[3]);
+          if (v > 0.95 && ((x + r.seed) & 3) === 0) PK.px(x, y - 1, R.nightWater[4]);
+        } else if (v < -0.88 && ((x * 7 + r.seed) & 3) === 0) {
+          PK.px(x, y0 + 1, R.nightWater[1]);
+        }
+      }
+    }
+    for (const g of s.glints) {
+      const y = s.horizon + 2 + Math.floor(g.f * (s.H - s.horizon - 6));
+      if (y < s.waterY - 2 || Math.abs(g.ox) > s.moonR + 2) continue;
+      PK.px(s.moonX + g.ox, y, g.hot ? "#9cc0e8" : R.nightWater[4]);
+    }
+    // drifting clouds
+    for (const cl of s.clouds) {
+      const x = wrap(cl.x0 + t * cl.spd, -cl.rx * 2.4, s.W + cl.rx * 2.4);
+      PK.pad(x, cl.y, cl.rx, cl.ry, cloudRamp, { seed: cl.seed });
+      PK.pad(x - Math.round(cl.rx * 0.7), cl.y + 2, Math.max(3, Math.round(cl.rx * 0.6)), Math.max(2, Math.round(cl.ry * 0.7)), cloudRamp, { seed: cl.seed + 1 });
+      PK.pad(x + Math.round(cl.rx * 0.8), cl.y + 2, Math.max(3, Math.round(cl.rx * 0.65)), Math.max(2, Math.round(cl.ry * 0.75)), cloudRamp, { seed: cl.seed + 2 });
+      if (cl.main) PK.pad(x, cl.y - Math.round(cl.ry * 0.8), Math.max(3, Math.round(cl.rx * 0.85)), Math.max(3, Math.round(cl.ry * 1.1)), cloudRamp, { seed: cl.seed + 3 });
+    }
+    PK.blit(s.fg);
+    // house warmth: lit windows, door glow, chimney smoke
+    PK.glow(s.house.w1.x, s.house.w1.y, 3, "#f2a33a", 0.5, 3);
+    PK.glow(s.house.w2.x, s.house.w2.y, 3, "#f2a33a", 0.5, 3);
+    PK.glow(s.house.door.x, s.house.door.y, 3, "#c4612a", 0.4, 3);
+    for (let i = 0; i < 3; i++) {
+      const age = ((t * 0.35 + i / 3) % 1);
+      const sx = s.house.chim.x + Math.round(age * 5 + Math.sin(t * 1.2 + i * 2) * 1.2);
+      const sy = s.house.chim.y - Math.round(age * 11);
+      PK.px(sx, sy, age < 0.33 ? "#4a5580" : age < 0.66 ? "#39415f" : "#2a3050");
+      if (age > 0.2) PK.px(sx + 1, sy + 1, "#333b5c");
+    }
+    // surf against the rocks, each with its own surge timing
+    foamRock(s.big, s.waterY, t, 1.9, 0, 1);
+    foamRock(s.rL, s.rL.baseY - 1, t, 1.5, 2.1, 0.8);
+    foamRock(s.rR, s.rR.baseY - 1, t, 2.4, 4.3, 0.8);
+    // rain splashes on rock and sea
+    for (const sp of s.splashes) {
+      const ph = (t * 1.6 + sp.k * 7) % 1;
+      if (ph < 0.16) {
+        PK.px(sp.x, sp.y, "#7f96c8");
+        if (sp.k > 0.6) { PK.px(sp.x - 1, sp.y - 1, "#e8f0fa"); PK.px(sp.x + 1, sp.y - 1, "#e8f0fa"); }
+      }
+    }
+    // lantern halo and sweeping twin beams (tight bright core over a wide faint haze)
+    PK.glow(s.lamp.x, s.lamp.y, 20, "#c8a05c", 0.2, 3);
+    PK.glow(s.lamp.x, s.lamp.y, 11, "#ffd56a", 0.55, 4);
+    const len = Math.hypot(s.W, s.H) * 1.05;
+    const a = -Math.PI / 2 + Math.sin(t * 0.3) * 2.1;
+    for (const ang of [a, a + Math.PI]) {
+      PK.beam(s.lamp.x, s.lamp.y, ang, len, 0.16, beamCols, 0.16);
+      PK.beam(s.lamp.x, s.lamp.y, ang, len, 0.05, ["#8a6f46", "#e0b060", "#fff0c0"], 0.5);
+    }
+    // rain
+    rain.step(dt);
+    rain.streaks(rainCols);
+  });
+})();
+</script>
+</body>
+</html>

@@ -977,5 +977,27 @@
   "score": 7.5,
   "outcome": "done",
   "note": "striped tower with lantern and railing, moon partly behind clouds, connected surf along the island base, rain; over-spiky rock towers, a dim grey beam, a small house"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.5, phase-split thinking \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.5, phase-split thinking",
+  "attempt": "#1",
+  "minutes": 22.3,
+  "score": 8.0,
+  "outcome": "done",
+  "note": "glazed blue pot on a wooden bench, four lush shaded cloud pads on an S-curved trunk, sunset with a soft sun, rocks and grass; the trunk base swallows the pot rim, cracked dark ground tiles, no middle depth plane"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.5, phase-split thinking \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.5, phase-split thinking",
+  "attempt": "#1",
+  "minutes": 26.1,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "tall striped tower with a glowing lantern and a strong horizontal beam, moon behind clouds, red-roofed house, rain; very thin tower on a small rock, a foam band across the rock face"
  }
 ]
