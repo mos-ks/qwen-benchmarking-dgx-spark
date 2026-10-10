@@ -471,5 +471,27 @@
   "score": 7.5,
   "outcome": "done",
   "note": "KPI cards with icons, category bars, income vs spending, transactions, budgets nearing the limit; inside budget. Spending drop shown in red, raw 2026-05 month labels"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v6 + thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v6 + thinking low",
+  "attempt": "#1",
+  "minutes": 13.7,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "twisting tapered trunk, four well-shaped shaded pads, terracotta pot, stones and grass, wind streaks; the sun is a dotted grid, a wide bare ground band"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 kit v6 + thinking low \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v6 + thinking low",
+  "attempt": "#1",
+  "minutes": 23.2,
+  "score": 8.0,
+  "outcome": "done",
+  "note": "large tapered brick mill with gallery, door, window and lattice sails, sunset glow, distant mills, canal and tulip rows in perspective, birds; clouds drawn as clusters of orbs"
  }
 ]
