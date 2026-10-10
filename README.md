@@ -63,7 +63,7 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
    version that does the core job. On from-scratch pixel art that cut craft (stacked round pads, a
    flat slab pot) without saving time: 6.0 and 6.5 against kit v4's 7.0 and 7.0.
 6. **Thinking at low effort beats thinking off.** Every Flash-Next run before kit v5 had thinking
-   switched off. Across kits v5 to v7, thinking low averages 7.5 over twelve runs against 6.9 for
+   switched off. Across kits v5 to v7, thinking low averages 7.4 over twelve runs against 6.9 for
    thinking off over nine, never fell below 6.0 (thinking off produced a 3.5), and averaged 7.7 on
    the held-out windmill against 6.8. Medium effort was not better (7.1) and swung more.
 7. **Give the agent tested building blocks, not more critique.** The critic kept naming the same
