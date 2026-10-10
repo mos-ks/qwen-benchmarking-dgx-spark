@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #8cbee6; overflow: hidden; }
+  canvas { position: fixed; left: 0; top: 0; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+const R = PK.ramps;
+const POT = { a: "#141c30", b: "#22345a", c: "#355488", d: "#5a80b8", e: "#9cc0e8" };
+const SKY = PK.skies.day;
+const SAND = ["#f4e2a8", "#dcbc7c", "#b8905a", "#9a744a", "#7a5a3c"];
+
+const leaves = PK.drift({ n: 26, seed: 3, area: [0, 0, 1, 1], vx: [-22, -9], vy: [5, 16], len: [1, 2] });
+const gusts = PK.drift({ n: 14, seed: 7, area: [0, 0, 1, 1], vx: [-32, -18], vy: [-1.5, 1.5], len: [4, 8] });
+const clouds = PK.drift({ n: 2, seed: 31, area: [0, 0, 1, 1], vx: [-3, -2], vy: [0, 0], len: [1, 1] });
+const CLOUD = ["..aaa..", ".aaaaa.", "aaaaaaa", ".bbbbb."];
+const CLOUD_PAL = { a: "#ffffff", b: "#c6d8ec" };
+
+let bg = null, pads = [], lay = {};
+
+function potSprite(w, h) {
+  const rows = [];
+  const rim = Math.max(2, 1 + Math.round(h * 0.18));
+  const feet = 2;
+  const bodyH = Math.max(2, h - rim - 1 - feet);
+  const litEnd = Math.round(w * 0.7);
+  rows.push("e".repeat(litEnd) + "d".repeat(w - litEnd));
+  for (let i = 1; i < rim; i++) rows.push("d".repeat(litEnd) + "c".repeat(w - litEnd));
+  rows.push("a".repeat(w));
+  for (let i = 0; i < bodyH; i++) {
+    const inset = Math.round((i / Math.max(1, bodyH - 1)) * w * 0.13);
+    const bw = w - inset * 2;
+    const lit = Math.max(1, Math.round(bw * 0.12));
+    const dark = Math.round(bw * 0.38);
+    const mid = Math.max(1, bw - lit - dark);
+    rows.push(".".repeat(inset) + "d".repeat(lit) + "c".repeat(mid) + "b".repeat(dark) + ".".repeat(inset));
+  }
+  const inset = Math.round(w * 0.13);
+  const bw = w - inset * 2;
+  const fw = Math.max(2, Math.round(bw * 0.2));
+  const gap = Math.max(1, bw - fw * 2);
+  for (let f = 0; f < feet; f++)
+    rows.push(".".repeat(inset) + "a".repeat(fw) + ".".repeat(gap) + "a".repeat(fw) + ".".repeat(inset));
+  return rows;
+}
+
+function hill(hx, hy, rx, ry, body, lip) {
+  for (let dy = 0; dy <= ry; dy++) {
+    const dx = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry))));
+    PK.rect(hx - dx, hy - dy, dx * 2 + 1, 1, dy <= 1 ? lip : body);
+  }
+}
+
+function build(v) {
+  const W = v.W, H = v.H;
+  const horizon = Math.round(H * 0.62), groundY = Math.round(H * 0.8);
+  const Hb = Math.round(Math.min(H * 0.46, W * 0.85));
+  const cx = Math.round(W / 2);
+  const potW = Math.max(16, Math.round(Hb * 0.5)), potH = Math.max(8, Math.round(potW * 0.3));
+  const rimY = groundY - potH;
+  const trunkH = Hb - potH;
+  const tbx = cx + Math.round(potW * 0.14);
+  const w0 = Math.max(3, Math.round(Hb * 0.055));
+  const mid = { x: tbx + Math.round(trunkH * 0.13), y: rimY - Math.round(trunkH * 0.4) };
+  const apexX = tbx - Math.round(Hb * 0.16), apexY = rimY - Math.round(trunkH * 0.92);
+  lay = { W, H, horizon, groundY, cx, potW, potH, rimY, tbx, trunkH };
+
+  const s1 = { x: tbx + Math.round(trunkH * 0.02), y: rimY - Math.round(trunkH * 0.34) };
+  const t1 = { x: s1.x - Math.round(Hb * 0.2), y: s1.y - Math.round(Hb * 0.03) };
+  const s2 = { x: mid.x + Math.round(trunkH * 0.1), y: rimY - Math.round(trunkH * 0.58) };
+  const t2 = { x: s2.x + Math.round(Hb * 0.17), y: s2.y - Math.round(Hb * 0.02) };
+  const s3 = { x: apexX + Math.round(Hb * 0.02), y: apexY + Math.round(Hb * 0.1) };
+  const t3 = { x: s3.x - Math.round(Hb * 0.11), y: s3.y - Math.round(Hb * 0.01) };
+  pads = [];
+  function addPad(tx, side, scale, seed) {
+    const rx = Math.max(4, Math.round(Hb * scale));
+    const ry = Math.max(3, Math.round(rx * 0.42));
+    pads.push({ x: tx + side * Math.round(rx * 0.12), y: 0, rx, ry, seed, phase: seed * 0.7 });
+    return { rx, ry };
+  }
+  const d1 = addPad(t1.x, -1, 0.14, 101), d2 = addPad(t2.x, 1, 0.125, 102), d3 = addPad(t3.x, -1, 0.1, 103);
+  pads[0].y = t1.y - Math.round(d1.ry * 0.3);
+  pads[1].y = t2.y - Math.round(d2.ry * 0.3);
+  pads[2].y = t3.y - Math.round(d3.ry * 0.3);
+  const crx = Math.max(4, Math.round(Hb * 0.11)), cry = Math.max(3, Math.round(crx * 0.5));
+  pads.push({ x: apexX, y: apexY - Math.round(cry * 0.6), rx: crx, ry: cry, seed: 104, phase: 1.9 });
+  pads.forEach((p) => (p.hf = (groundY - p.y) / Hb));
+
+  bg = PK.layer(W, H, () => {
+    PK.gradient(0, 0, W, horizon + 1, SKY);
+    const sx = Math.round(W * 0.24), sy = Math.round(H * 0.16);
+    PK.glow(sx, sy, Math.max(6, Math.round(Math.min(W, H) * 0.11)), "#ffd56a", 0.5, 4);
+    PK.disc(sx, sy, Math.max(3, Math.round(Math.min(W, H) * 0.045)), "#ffe08a");
+    PK.disc(sx - 1, sy - 1, Math.max(2, Math.round(Math.min(W, H) * 0.025)), "#fff4c0");
+
+    hill(Math.round(W * 0.16), horizon + 1, Math.round(W * 0.2), Math.round(H * 0.06), "#b9cddd", "#d3e2ee");
+    hill(Math.round(W * 0.72), horizon + 1, Math.round(W * 0.26), Math.round(H * 0.08), "#adc4d6", "#cbdbe8");
+    hill(Math.round(W * 0.92), horizon + 1, Math.round(W * 0.16), Math.round(H * 0.045), "#c0d2e0", "#dae6f0");
+
+    PK.gradient(0, horizon, W, H, SAND);
+    const rnd = PK.rng(5);
+    for (let i = 0; i < W * (H - horizon) * 0.015; i++) {
+      const x = Math.round(rnd() * W), y = Math.round(horizon + 2 + rnd() * (H - horizon - 3));
+      PK.px(x, y, rnd() < 0.5 ? "#9a744a" : "#dcbc7c");
+    }
+    for (const [px_, r, c] of [[W * 0.2, 2, R.stone[2]], [W * 0.83, 2, R.stone[1]], [W * 0.3, 1, R.stone[3]]]) {
+      PK.disc(Math.round(px_), Math.round(horizon + (H - horizon) * (0.3 + 0.5 * r)), r, c);
+    }
+
+    const px0 = cx - Math.round(potW / 2) - 2, px1 = cx + Math.round(potW / 2) + 2;
+    for (let y = groundY; y < groundY + 3; y++)
+      for (let x = px0; x <= px1; x++) {
+        const edge = (x - cx) / (potW * 0.62), yy = (y - groundY) / 2.4;
+        if (edge * edge + yy * yy <= 1 && PK.bayer(x, y) < 0.55) PK.px(x, y, "#6e4e34");
+      }
+
+    PK.sprite(potSprite(potW, potH), POT, cx - Math.round(potW / 2), rimY);
+    PK.disc(tbx, rimY, Math.max(2, Math.round(potW * 0.16)), R.bark[0]);
+    PK.disc(tbx, rimY - 1, Math.max(1, Math.round(potW * 0.16) - 1), R.bark[1]);
+    for (let i = 0; i < 5; i++) {
+      const mx = tbx + Math.round((rnd() * 2 - 1) * potW * 0.18), my = rimY + Math.round(rnd() * 2);
+      PK.px(mx, my, R.foliage[1 + (i % 2)]);
+    }
+
+    for (const dir of [-1, 1])
+      PK.limb(tbx, rimY + 1, tbx + dir * Math.round(w0 * 0.9), rimY + 2, tbx + dir * Math.round(w0 * 1.7), rimY + 3,
+        Math.max(2, Math.round(w0 * 0.5)), 1, R.bark, 13 + dir);
+    PK.limb(tbx, rimY + 1, tbx + Math.round(trunkH * 0.03), rimY - Math.round(trunkH * 0.18), mid.x, mid.y,
+      w0, Math.max(2, Math.round(w0 * 0.6)), R.bark, 11);
+    PK.limb(mid.x, mid.y, mid.x + Math.round(trunkH * 0.18), rimY - Math.round(trunkH * 0.68), apexX, apexY,
+      Math.max(2, Math.round(w0 * 0.6)), Math.max(1, Math.round(w0 * 0.28)), R.bark, 12);
+    PK.limb(s1.x, s1.y, s1.x - Math.round(Hb * 0.1), s1.y + 2, t1.x, t1.y, Math.max(2, Math.round(w0 * 0.42)), 1, R.bark, 14);
+    PK.limb(s2.x, s2.y, s2.x + Math.round(Hb * 0.08), s2.y + 2, t2.x, t2.y, Math.max(2, Math.round(w0 * 0.38)), 1, R.bark, 15);
+    PK.limb(s3.x, s3.y, s3.x - Math.round(Hb * 0.05), s3.y + 1, t3.x, t3.y, Math.max(1, Math.round(w0 * 0.3)), 1, R.bark, 16);
+  });
+
+  leaves.setArea([0, 0, W, H]);
+  gusts.setArea([0, 0, W, H]);
+  clouds.setArea([8, Math.round(H * 0.06), Math.max(20, W - 16), Math.round(H * 0.3)]);
+}
+
+PK.fit(document.getElementById("c"), 140, build);
+PK.loop((t, dt) => {
+  PK.blit(bg);
+  for (const c of clouds.particles) PK.sprite(CLOUD, CLOUD_PAL, Math.round(c.x), Math.round(c.y));
+  const gust = 1 + 0.45 * Math.sin(t * 0.35) + 0.2 * Math.sin(t * 0.9 + 2);
+  gusts.step(dt * gust);
+  gusts.streaks(["#9fbfe0", "#eaf4fc"]);
+  for (const p of pads) {
+    const off = Math.round((Math.sin(t * 1.1 + p.phase) + 0.5 * Math.sin(t * 2.3 + p.seed)) * 2 * p.hf);
+    PK.pad(p.x + off, p.y, p.rx, p.ry, R.foliage, { seed: p.seed });
+  }
+  leaves.step(dt * gust);
+  leaves.dots(["#3f7a3a", "#78b84a", "#b8e070", "#cfe89a"]);
+});
+</script>
+</body>
+</html>
