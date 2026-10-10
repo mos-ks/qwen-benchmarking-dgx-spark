@@ -89,9 +89,9 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 | kit v4 | score-driven supervision: the critic first lists the brief's requirements, scores 1 to 10 and names the unmet ones; the plugin keeps sending fixes until 8/10, 4 rounds or 25 minutes. The `pixel-art` skill gains a fill-the-screen rule |
 | kit v4 + ponytail | kit v4 with the [ponytail](https://github.com/DietrichGebert/ponytail) "smallest change that works" skill as always-on instructions |
 | kit v5 | the `pixel-art` skill ships [`pixel-kit.js`](harness/skills/pixel-art/pixel-kit.js), a tested drawing library the agent copies into the project (full-screen integer scaling, shaded trunks and foliage pads, jagged faceted rocks, rolling sea and foam, beams, glows, particles, text-grid sprites, 16 colour ramps); the agent may read, never edit, the skills folder |
+| kit v5.1 | kit v5 plus a wrap-up note: from minute 20 of a page-building session the supervisor appends "the harness checks the page when you stop; do not write your own check scripts; finish and stop" to tool results |
 | kit v6 | kit v5.1 plus a calibrated critic (three judge-scored example screenshots from other briefs, see [Critic calibration](#critic-calibration)), measured page checks handed to the critic (blank page, share of pixels that move between frames, phone overflow), and keep-best: the project is snapshotted whenever a round beats the best score and restored when a later round scores lower |
 | kit v7 | kit v6 plus one mid-course check: at minute 10 the supervisor looks at the page once and appends the critique to the agent's next tool result |
-| kit v5.1 | kit v5 plus a wrap-up note: from minute 20 of a page-building session the supervisor appends "the harness checks the page when you stop; do not write your own check scripts; finish and stop" to tool results |
 
 Third-party skills used (not redistributed here; install from their repos):
 [obra/superpowers](https://github.com/obra/superpowers) (TDD, debugging, verification, plans),
