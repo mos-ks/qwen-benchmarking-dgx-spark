@@ -3,12 +3,10 @@
 Can a local model on one NVIDIA DGX Spark, wrapped in the right agent harness, build front-end work
 at the quality of Claude Opus 5.5, in at most twice Opus's time?
 
-**Not yet.** The best local setup is Qwen3.8-Flash-Next (the strongest model that fits on one
-Spark) in OpenCode, with a harness that screenshots the page, critiques it and hands the agent a
-tested pixel-art drawing library. It scores 7.5 on the bonsai and lighthouse briefs inside the time
-budget, against Opus's 9.0. With thinking switched on at low effort it reached 8.0 on the windmill
-brief, which no harness change was tuned on, in Opus's time (17.8 vs 17.7 minutes). See
-[Status](#status) for the dashboard and the open experiments.
+**Not yet.** The shipped setup (Qwen3.8-Flash-Next, the strongest model that fits on one Spark, in
+OpenCode with a harness that screenshots the page, critiques it with a calibrated critic, keeps the
+best version and hands the agent a tested pixel-art drawing library) averages 7.4 over the four
+briefs against Opus's 9.1, inside or near the time budget.
 
 ![Bonsai brief: quality against time](results/charts/bonsai_quality_vs_time.png)
 
