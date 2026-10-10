@@ -492,9 +492,9 @@
     }
   }
 
-  // Surf around a rock (from PK.rock) standing in water: a continuous foam line along the base when
-  // the rock sits on the water, foam only at its edges when it runs on below the waterline, with
-  // taller splashes and spray at the edges. waterY defaults to the rock's base.
+  // Surf around a rock (from PK.rock) standing in water: one continuous foam line along the rock's
+  // waterline that spills past both edges, taller splashes and spray at the edges, never a band
+  // across the rock face. waterY defaults to the rock's base.
   function rockFoam(rk, waterY = rk.baseY - 1, t = 0, colors = ["#cfe8f2", "#ffffff"], seed = 17) {
     let left = -1;
     let right = -1;
@@ -507,12 +507,7 @@
     if (left < 0) return;
     const reach = Math.max(4, Math.round(rk.w * 0.08));
     const rnd = rng(seed);
-    // A rock that sits on the water gets one surf line along its base. A rock that runs on below the
-    // waterline (a cliff in front of the sea) only foams at its two edges: a line across its face
-    // would float on the rock.
-    const sitsOnWater = rk.baseY - waterY <= 3;
     for (let x = left - reach; x <= right + reach; x++) {
-      if (!sitsOnWater && x > left + 3 && x < right - 3) continue;
       const edge = Math.min(Math.abs(x - left), Math.abs(x - right));
       const atEdge = edge <= 3 || x < left || x > right;
       const surge = Math.sin(t * 2.2 + x * 0.35 + rnd() * 6.28) * 0.5 + 0.5;

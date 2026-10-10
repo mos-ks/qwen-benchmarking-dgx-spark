@@ -933,5 +933,27 @@
   "score": 7.5,
   "outcome": "done",
   "note": "whole striped tower with a soft glowing lantern and beam, red-roofed house, moon partly behind clouds, rain; a surf band drawn across the cliff face (a pixel-kit bug: the cliff runs below the waterline)"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.3, thinking low \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.3, thinking low",
+  "attempt": "#2",
+  "minutes": 29.0,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "shallow terracotta pot, tall textured trunk with blossoming flat pads, puffy clouds, soft sun, layered ridges; sparse canopy for the trunk, spiky ridge tops, flat grey ground; 1 min over budget"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.3, thinking low \u00b7 #2",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.3, thinking low",
+  "attempt": "#2",
+  "minutes": 27.3,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "striped tower with a big glowing lantern room, red keeper's house, low rocky island with a continuous surf line and big splashes, moon behind clouds, rain; the beam crosses down through the tower"
  }
 ]

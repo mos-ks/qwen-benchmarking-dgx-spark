@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2a3a6a">
+<title>Bonsai · Wind</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #2a3a6a;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .tag {
+    position: fixed;
+    right: 14px;
+    bottom: 12px;
+    margin: 0;
+    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgba(246, 238, 232, 0.55);
+    text-shadow: 0 1px 0 rgba(20, 16, 30, 0.35);
+    user-select: none;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <p class="tag">bonsai · wind</p>
+  <script src="pixel-kit.js"></script>
+  <script src="scene.js"></script>
+</body>
+</html>

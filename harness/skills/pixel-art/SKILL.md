@@ -48,12 +48,12 @@ let bg, rain = PK.drift({ n: 60, area: [0, 0, 1, 1], vx: [-12, -8], vy: [70, 90]
 // fit() sizes the canvas to cover the whole viewport at an integer scale and calls the
 // callback right away and on every resize: declare your state BEFORE calling it.
 const view = PK.fit(document.getElementById("c"), 140, (v) => {
-  bg = PK.layer(v.W, v.H, () => { /* static scenery: sky, rocks, trunk, buildings */ });
+  bg = PK.layer(v.W, v.H, () => { /* static scenery: sky, ground, PK.rock, PK.sprite buildings and pots */ });
   rain.setArea([0, -8, v.W, v.H]);
 });
 PK.loop((t, dt) => {           // t, dt in seconds; reduced motion is handled
   PK.blit(bg);                 // static layer first
-  /* moving parts: sway, beams, water, particles */
+  /* moving parts: PK.tree(x, groundY, h, { style: "windswept", sway: 1, t }), PK.beam, PK.sea, particles */
   rain.step(dt); rain.streaks(["#3a4a7a", "#8aa0d0"]);
 });
 </script>
