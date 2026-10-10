@@ -70,6 +70,9 @@ Console/page errors captured while loading: {errors}
 Measured by the harness (trust these over your impression of the images): {facts}
 
 Judge only what is visible. First list the concrete requirements stated in the goal and check each one.
+Composition counts as a requirement: if the main subject (or a key part of it, such as its top)
+is cut off by any edge of any frame, or the subject fills less than about a third of the frame height,
+list that under UNMET REQUIREMENTS.
 Score 1-10 against what a top designer would ship for this goal: 10 = portfolio piece; 8 = clearly the
 subject, crafted, every requirement met, only small polish left; 6 = recognizable but crude or missing
 requirements; 4 = barely the subject; 1-2 = broken or blank. Reply in this exact structure:

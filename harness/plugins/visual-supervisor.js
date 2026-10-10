@@ -23,6 +23,11 @@ const NUDGE_EVERY_MIN = Number(process.env.VISUAL_SUPERVISOR_NUDGE_EVERY_MIN ?? 
 // minute the harness looks once and puts the critique into the tool result the agent reads next.
 // Set to "off" to disable.
 const CHECKPOINT_MIN = Number(process.env.VISUAL_SUPERVISOR_CHECKPOINT_MIN ?? 10);
+// Stop polishing after this many looks in a row that do not beat the best version, once the best is
+// at least PLATEAU_FLOOR: past that point extra rounds mostly produce regressions that keep-best
+// reverts (logged: 8, 8, 7 reverted, 7 reverted, ... until the budget ran out).
+const PLATEAU = Number(process.env.VISUAL_SUPERVISOR_PLATEAU ?? 2);
+const PLATEAU_FLOOR = Number(process.env.VISUAL_SUPERVISOR_PLATEAU_FLOOR ?? 7);
 // Keep the best round: models often make a page worse while "fixing" it (scores 8 then 7), so the
 // harness snapshots the project after every critique that beats the best so far, restores that
 // snapshot when a round scores lower, and leaves the best version on disk when supervision ends.
@@ -182,18 +187,24 @@ async function handle({ client, $, directory, event }) {
     let regressed = false;
     if (Number.isFinite(score)) {
       if (s.best === undefined || score > s.best) {
+        s.noGain = 0;
         if (snapshot(directory)) {
           s.best = score;
           s.bestCritique = critique;
           log(`best=${score} snapshot saved`);
         }
-      } else if (score < s.best && restore(directory)) {
-        regressed = true;
-        log(`score ${score} < best ${s.best}: restored the best version`);
+      } else {
+        s.noGain = (s.noGain ?? 0) + 1;
+        if (score < s.best && restore(directory)) {
+          regressed = true;
+          log(`score ${score} < best ${s.best}: restored the best version`);
+        }
       }
     }
+    const plateaued = PLATEAU > 0 && (s.noGain ?? 0) >= PLATEAU && (s.best ?? 0) >= PLATEAU_FLOOR;
+    if (plateaued) log(`plateau: ${s.noGain} looks without beating ${s.best}, stopping`);
     const finished =
-      (Number.isFinite(score) ? score >= TARGET_SCORE : /VERDICT:\s*GOOD/i.test(out)) || elapsedMin >= BUDGET_MIN;
+      (Number.isFinite(score) ? score >= TARGET_SCORE : /VERDICT:\s*GOOD/i.test(out)) || elapsedMin >= BUDGET_MIN || plateaued;
     if (finished || lastLook || !/VERDICT:/i.test(out)) {
       // Done, or look could not render or reach the model: stop, and leave the best version on disk.
       s.done = true;

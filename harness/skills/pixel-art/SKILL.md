@@ -91,6 +91,31 @@ integer with `image-rendering: pixelated`, `imageSmoothingEnabled = false`, no `
 `bezierCurveTo` or stroked lines for the art (they antialias), shapes rasterized with
 `fillRect(x, y, 1, 1)`, and a seeded random generator so nothing flickers.
 
+## 2b. Craft rules that separate crafted art from generated art
+
+Condensed from the rules in [with-pebbly/aseprite-ai-artist](https://github.com/with-pebbly/aseprite-ai-artist)
+(MIT): trees and foliage, composition and scenes, generated-art tells.
+
+- **Use the kit's shapes for the hard parts**: `PK.tree` for trees, `PK.rock` + `PK.rockFoam` for rocks in
+  water, `PK.beam` for light beams, `PK.glow` for halos. Draw anything with a specific outline (a pot,
+  a house, a lantern room, an animal) as a `PK.sprite` from a character grid. Hand-placed dotted
+  beams, dot-grid halos and wedge-shaped pots are the most common defects.
+- **Silhouette first**: filled flat black, the subject must still read as itself. Then light, then
+  detail, and detail only on borders.
+- **Tree crowns** are a handful of clumps glued together, each shaded once (light, body, shade), light
+  patches upper-left, the darkest colour only along the bottom edge, ragged 1-3 px notched edges, a few
+  small sky gaps. No concentric rings, no dark outline ring. Trunks have a root flare and a contact
+  shadow where they meet the ground or pot.
+- **Warm light, cool shadow**: shadows shift toward blue or purple, never toward brown-yellow.
+- **Horizon** at 33-45% from the top for open land, 55-65% when the sky is the drama; never exactly 50%.
+- **One focal point** gets the strongest value contrast, the sharpest detail and the one accent hue.
+  Everything else is quieter. At most three depth planes; each farther plane is lighter, less
+  saturated and closer to the sky colour.
+- **Quiet zones**: leave areas with little detail. Equal detail everywhere reads as machine-made.
+- **Dither only in transition bands** (sky seams, the shadow under the subject), never as a fill.
+- **Nothing cut by the frame** and no accidental tangents: keep the whole subject, including its top,
+  at least 6% inside every edge on desktop and phone; shapes either overlap clearly or keep a 2 px gap.
+
 ## 3. Palette
 
 - 16-32 colors total. Each material gets a ramp of 4-5 shades. Shift hue along the ramp:

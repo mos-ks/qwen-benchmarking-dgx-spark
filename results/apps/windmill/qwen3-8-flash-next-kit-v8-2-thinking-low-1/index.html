@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dutch Windmill at Sunset</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1c1636; overflow: hidden; }
+  #c { display: block; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+"use strict";
+const PK = window.PK;
+// Sun sits low on the right -> key light from the top-right, matching PK's shaded primitives.
+PK.light.x = 1; PK.light.y = -1;
+
+const lerp = (a, b, f) => a + (b - a) * f;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---- limited sunset palette ---------------------------------------------------------------
+const SKY = ["#1c1636", "#38224e", "#7a3450", "#c15046", "#ec8a44", "#ffc76a"]; // top -> horizon
+const GRASS = ["#463447", "#2c4330", "#223a28", "#1b2f20", "#13221a"];         // far(hazy) -> near
+const WATER = ["#bfe6f2", "#6fb4d8", "#3d82b4", "#245a86", "#123a5e"];         // far(light) -> near(dark)
+const GLINT = ["#ffb347", "#ffd98a", "#fff0c8"];                                // sun glitter on water
+const BRICK = ["#3a1218", "#6e1e22", "#a8322c", "#c95a40", "#ef8a60"];         // shadow -> sun-lit
+const CAP   = ["#4a3a40", "#7e6458", "#b8987e", "#e6cfa2", "#fff2d0"];         // cream cap
+const WOOD  = ["#241610", "#3e2617", "#63401f", "#8f5f2e", "#c48a48"];         // sails / gallery / door
+const LIT   = ["#7a3b1e", "#c4612a", "#f2a33a", "#ffd56a", "#fff2c0"];         // lit window
+const CLOUD = ["#4a2a4e", "#7a3a58", "#a8464e", "#e0764a", "#ffd07a"];         // shadow -> sun-lit
+const FAR   = ["#241c30", "#33273f", "#43344f", "#55415f", "#6b5276"];         // distant silhouettes
+const TULIP = [
+  { pal: ["#4a1018", "#8a1c2a", "#d0383a", "#ff6a54"] },                        // red
+  { pal: ["#5a4010", "#b0801a", "#f2b424", "#ffe07a"] },                        // yellow
+  { pal: ["#4a1436", "#9a2658", "#e0508a", "#ff9ac0"] },                        // pink
+];
+
+const canvas = document.getElementById("c");
+const L = {};
+let bg, clouds = [], birds = [];
+
+// ---- layout from the current viewport -----------------------------------------------------
+function layout(v) {
+  const W = v.W, H = v.H;
+  L.W = W; L.H = H;
+  L.horizon = Math.round(H * 0.52);
+  L.sun = { x: Math.round(W * 0.74), y: L.horizon - 2 };
+  // main windmill, sized so the whole structure (cap + full sail sweep) fits inside the frame
+  L.mx = Math.round(W * 0.38);
+  L.baseY = Math.round(H * 0.80);
+  L.th = Math.round(H * 0.52);                        // tower: cap-top to base
+  L.topY = L.baseY - L.th;
+  L.capH = Math.round(L.th * 0.22);
+  L.mw = clamp(Math.round(L.th * 0.17), 9, 17);       // base half-width
+  L.tw = Math.max(3, Math.round(L.mw * 0.45));        // top half-width -> clear taper
+  L.hubY = L.topY + Math.round(L.capH * 0.45);
+  L.sailLen = Math.round(Math.min(L.th * 0.55, W * 0.36, Math.max(6, L.hubY - 5)));
+  L.towerTop = L.topY + L.capH;                        // top row of the brick tower
+  L.galY = L.baseY - Math.round(L.th * 0.40);
+  // distant windmill (depth, near right)
+  L.dx = Math.round(W * 0.87);
+  L.dbaseY = L.horizon + 1;
+  L.dmh = Math.max(10, Math.round(H * 0.12));
+  L.dhubY = L.dbaseY - L.dmh + Math.round(L.dmh * 0.22);
+  L.dsail = Math.round(Math.min(L.dmh * 0.46, W * 0.11));
+  // receding canal (right, under the sun)
+  L.canTopCx = W * 0.74;
+  L.canBotCx = W * 0.62;
+  L.canTopY = L.horizon + 2;
+}
+const canalAt = (y) => {
+  const d = clamp((y - L.canTopY) / (L.H - L.canTopY), 0, 1);
+  return { cx: lerp(L.canTopCx, L.canBotCx, d), hw: lerp(1, L.W * 0.21, d) };
+};
+const inCanal = (x, y) => { if (y < L.canTopY) return false; const c = canalAt(y); return Math.abs(x - c.cx) < c.hw; };
+
+// ---- tulip head (crisp 3-row cup, sun-lit on the right) ----------------------------------
+function head(cx, cy, s, pal) {
+  const [sh, base, lit, hi] = pal;
+  const hw = Math.max(1, s);
+  const rows = [[Math.max(1, hw - 1), -2], [hw, -1], [Math.max(1, hw - 1), 0]];
+  for (const [dxx, dy] of rows)
+    for (let x = -dxx; x <= dxx; x++) {
+      let c = base;
+      if (x === 0 && dy === -2) c = sh;         // open cup notch
+      else if (x >= dxx) c = lit;
+      else if (x >= dxx - 1) c = hi;            // rim highlight toward the sun
+      else if (x <= -dxx) c = sh;               // shadow side
+      PK.px(cx + x, cy + dy, c);
+    }
+}
+function tulipPlant(x, by, s, pal, swy) {
+  const h = Math.round(s * 2.6) + 1, hy = by - h, hx = x + swy;
+  const stem = s > 2 ? "#1c3322" : "#26412a";
+  PK.line(x, by, hx, hy + s, stem);
+  PK.line(x, by - 1, x - Math.max(1, s), by - Math.round(h * 0.5), stem);
+  PK.line(x, by - 1, x + Math.max(1, s), by - Math.round(h * 0.72), stem);
+  head(hx, hy + (s > 1 ? 1 : 0), s, pal);
+  PK.px(x, by + 1, "#10201a");
+}
+
+// ---- one lattice sail ---------------------------------------------------------------------
+function sailOne(cx, cy, ang, len, rc) {
+  const dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
+  const w0 = Math.max(2, Math.round(len * 0.13));   // half width near the hub
+  const w1 = Math.max(3, Math.round(len * 0.22));   // wide frame, slight taper to the tip
+  const tx = cx + dx * len, ty = cy + dy * len;
+  const s0 = Math.round(len * 0.18);                // frame starts out from the hub (stock shows)
+  // stock pole (the arm) runs the full length
+  PK.line(cx, cy, tx, ty, rc[1]);
+  // two long rails form the open frame: sun-lit front rail, shaded back rail
+  PK.line(cx + dx * s0 + nx * w0, cy + dy * s0 + ny * w0, tx + nx * w1, ty + ny * w1, rc[4]);
+  PK.line(cx + dx * s0 - nx * w0, cy + dy * s0 - ny * w0, tx - nx * w1, ty - ny * w1, rc[1]);
+  // lattice rungs (perpendicular bars) with open gaps so the sky shows through
+  const step = Math.max(3, Math.round(len / 6));
+  for (let s = s0 + step; s <= len; s += step) {
+    const w = lerp(w0, w1, s / len), bx = cx + dx * s, by = cy + dy * s;
+    PK.line(bx - nx * w, by - ny * w, bx + nx * w, by + ny * w, rc[2]);
+  }
+  // diagonal braces for the cross-hatch lattice look
+  for (let s = s0; s < len - step; s += step * 2) {
+    const w = lerp(w0, w1, s / len), e = s + step, we = lerp(w0, w1, e / len);
+    PK.line(cx + dx * s - nx * w, cy + dy * s - ny * w, cx + dx * e + nx * we, cy + dy * e + ny * we, rc[3]);
+    PK.line(cx + dx * s + nx * w, cy + dy * s + ny * w, cx + dx * e - nx * we, cy + dy * e - ny * we, rc[3]);
+  }
+  // frame tip cap + root bar
+  PK.line(tx + nx * w1, ty + ny * w1, tx - nx * w1, ty - ny * w1, rc[1]);
+  PK.line(cx + dx * s0 + nx * w0, cy + dy * s0 + ny * w0, cx + dx * s0 - nx * w0, cy + dy * s0 - ny * w0, rc[2]);
+}
+function sails(cx, cy, len, base, rc) {
+  for (let k = 0; k < 4; k++) sailOne(cx, cy, base + k * Math.PI / 2, len, rc);
+  PK.disc(cx, cy, Math.max(1, Math.round(len * 0.10) + 1), rc[0]);
+  PK.disc(cx, cy, Math.max(1, Math.round(len * 0.10)), rc[2]);
+  PK.px(cx + (PK.light.x > 0 ? 1 : -1), cy - 1, rc[3]);
+}
+
+// ---- static scenery -----------------------------------------------------------------------
+function treeline() {
+  const rnd = PK.rng(4);
+  let h = 2;
+  for (let x = 0; x < L.W; x++) {
+    if (rnd() < 0.12) h = clamp(h + (rnd() < 0.5 ? -1 : 1) * 2, 1, 6);
+    for (let y = 0; y < h; y++) PK.px(x, L.horizon - y, y === h - 1 ? FAR[2] : FAR[1]);
+    if (rnd() < 0.05) { const t = 2 + Math.floor(rnd() * 4); for (let y = 0; y < t; y++) PK.px(x, L.horizon - h - y, FAR[1]); }
+  }
+}
+function windmillBody() {
+  const { mx, baseY, mw, capH, th } = L;
+  const tw = L.tw, topRow = L.towerTop;
+  // tapered brick tower: wide base -> narrow top, shaded shadow(left)->sun(right)
+  for (let y = topRow; y <= baseY; y++) {
+    const f = (y - topRow) / Math.max(1, baseY - topRow);
+    const hw = Math.round(lerp(tw, mw, f));
+    for (let x = -hw; x <= hw; x++) {
+      const xx = hw ? x / hw : 0;                                  // -1 left .. +1 right
+      let c = BRICK[clamp(Math.round((xx * 0.5 + 0.5) * 3 + 0.2), 0, 3)];
+      if (xx >= 0.85) c = BRICK[4];                                // rim light on the sun side
+      if ((y - topRow) % 3 === 0 && (x + (Math.floor(y / 3) & 1)) % 3 === 0) c = BRICK[0]; // mortar
+      PK.px(mx + x, y, c);
+    }
+  }
+  PK.line(mx - tw, topRow, mx - mw, baseY, BRICK[0]);              // dark silhouette edge
+  PK.line(mx + tw, topRow, mx + mw, baseY, BRICK[4]);              // sun-lit edge
+  // base plinth
+  PK.rect(mx - mw - 1, baseY - 1, mw * 2 + 2, 2, BRICK[0]);
+  // arched door (dark, obvious)
+  const dw = Math.max(3, Math.round(mw * 0.62)), dh = Math.max(6, Math.round(th * 0.24)), dy = baseY - dh;
+  PK.rect(mx - dw, dy, dw * 2 + 1, dh, WOOD[0]);
+  PK.rect(mx - dw - 1, dy, 1, dh, WOOD[2]);                       // sun-lit frame edge
+  PK.rect(mx + dw + 1, dy, 1, dh, WOOD[3]);                        // frame edge toward the sun
+  PK.line(mx - dw, dy, mx, dy - 2, WOOD[2]);                       // arched top
+  PK.line(mx, dy - 2, mx + dw, dy, WOOD[2]);
+  PK.line(mx, dy + 1, mx, baseY - 1, WOOD[1]);                     // plank seam
+  PK.rect(mx - dw, baseY - 1, dw * 2 + 1, 1, WOOD[1]);            // threshold
+  PK.px(mx + dw - 2, baseY - Math.round(dh * 0.5), LIT[2]);        // door handle
+  // lit window (clearly on the tower, above the door)
+  const wy = topRow + Math.round(th * 0.14);
+  PK.rect(mx - 2, wy, 5, 5, WOOD[0]);
+  PK.rect(mx - 1, wy + 1, 3, 3, LIT[3]);
+  PK.px(mx - 1, wy + 1, LIT[4]); PK.px(mx + 1, wy + 3, LIT[2]);
+  PK.line(mx - 2, wy, mx + 2, wy, WOOD[3]);                        // sill highlight
+  // gallery (balcony) railing
+  PK.rect(mx - Math.round(mw * 1.5), L.galY, Math.round(mw * 3), 1, WOOD[3]);
+  PK.rect(mx - Math.round(mw * 1.5), L.galY + 3, Math.round(mw * 3), 1, WOOD[2]);
+  for (let x = -Math.round(mw * 1.5); x <= Math.round(mw * 1.5); x += 2) PK.px(mx + x, L.galY + 1, WOOD[1]), PK.px(mx + x, L.galY + 2, WOOD[1]);
+  PK.rect(mx - Math.round(mw * 1.5) - 1, L.galY - 1, 2, 5, WOOD[0]);
+  PK.rect(mx + Math.round(mw * 1.5), L.galY - 1, 2, 5, WOOD[0]);
+  // cap (dome, sun-lit right)
+  for (let y = 0; y <= capH; y++) {
+    const f = y / capH, hw = Math.round(Math.max(1, (tw + 1) * Math.sin(Math.PI * (0.12 + 0.88 * (1 - f)) * 0.5) + (1 - f)));
+    for (let x = -hw; x <= hw; x++) {
+      let c = CAP[2];
+      if (x >= hw) c = CAP[4]; else if (x >= hw - 1) c = CAP[4];
+      else if (x <= -hw) c = CAP[0]; else if (x <= -hw + 1) c = CAP[1];
+      PK.px(mx + x, topRow - (capH - y) - 1, c);
+    }
+  }
+  PK.rect(mx - tw - 2, topRow - 1, (tw + 2) * 2, 1, CAP[1]); // cap base band
+  // tail pole + crossbars (cap-steering), toward the right
+  const ty = L.hubY - 1;
+  PK.line(mx + tw, ty, mx + tw + Math.round(mw * 1.3), ty + 2, WOOD[2]);
+  for (let i = 1; i <= 3; i++) { const tx = mx + tw + Math.round(mw * 1.3 * i / 3); PK.line(tx, ty - 2, tx, ty + 4, WOOD[1]); }
+  // distant windmill silhouette
+  const { dx, dbaseY, dmh } = L;
+  const dtw = Math.max(1, Math.round(dmh * 0.16));
+  PK.poly([[dx - dtw * 1.6, dbaseY], [dx + dtw * 1.6, dbaseY], [dx + dtw, dbaseY - dmh], [dx - dtw, dbaseY - dmh]], FAR[1]);
+  PK.disc(dx, dbaseY - dmh, dtw, FAR[2]);
+}
+function groundAndCanal() {
+  PK.gradient(0, L.horizon, L.W, L.H, GRASS, 3);
+  // warm haze right at the horizon (atmospheric depth)
+  for (let y = L.horizon; y < L.horizon + 4; y++)
+    for (let x = 0; x < L.W; x++) if (PK.bayer(x, y) < (L.horizon + 4 - y) / 8) PK.px(x, y, "#7a4a52");
+  // converging furrow lines -> tulip rows running toward a vanishing point on the horizon
+  const vpx = Math.round(L.W * 0.5), span = L.H - L.horizon;
+  for (let i = -7; i <= 7; i++) {
+    const bx = vpx + i * (L.W * 0.17);
+    for (let y = L.horizon + 1; y <= L.H; y++) {
+      const f = (y - L.horizon) / span, x = Math.round(lerp(vpx, bx, f));
+      PK.px(x, y, "#16271b"); PK.px(x + 1, y, "#1f3a26");
+    }
+  }
+  // canal water (receding trapezoid) with darker banks on both edges
+  for (let y = L.canTopY; y <= L.H; y++) {
+    const c = canalAt(y), d = clamp((y - L.canTopY) / (L.H - L.canTopY), 0, 1);
+    const i = Math.min(WATER.length - 1, Math.floor((1 - d) * (WATER.length - 1) + 0.5));
+    const x0 = Math.round(c.cx - c.hw), x1 = Math.round(c.cx + c.hw);
+    for (let x = x0 - 1; x <= x1 + 1; x++) {
+      if (x < x0 || x > x1) { PK.px(x, y, "#0f1c22"); continue; }                 // bank / dark waterline
+      let col = WATER[i];
+      if (x <= x0 + 1 || x >= x1 - 1) col = WATER[Math.min(WATER.length - 1, i + 1)];
+      if (PK.bayer(x, y) < 0.05) col = WATER[0];
+      PK.px(x, y, col);
+    }
+  }
+}
+
+// ---- animated clouds + birds --------------------------------------------------------------
+function setClouds(v) {
+  const rnd = PK.rng(77); const n = 5; clouds = [];
+  for (let i = 0; i < n; i++) {
+    const scale = 1 + Math.floor(rnd() * 2);
+    const puffs = []; const np = 3 + Math.floor(rnd() * 3);
+    for (let p = 0; p < np; p++) puffs.push({ dx: Math.round((p - np / 2) * (2 + scale)), dy: Math.round(rnd() * 2 - 1), r: 2 + Math.floor(rnd() * 2) + scale });
+    clouds.push({ x: rnd() * v.W, y: Math.round(v.H * (0.10 + rnd() * 0.28)), scale, speed: -(1 + rnd() * 1.5), puffs });
+  }
+}
+function drawCloud(c) {
+  const x = Math.round(c.x), y = Math.round(c.y), s = c.scale;
+  for (const p of c.puffs) PK.disc(x + p.dx * s, y + p.dy * s, Math.max(1, p.r * s), CLOUD[1]);
+  for (const p of c.puffs) PK.disc(x + p.dx * s, y + p.dy * s + Math.max(1, Math.round(p.r * s * 0.7)), Math.max(1, Math.round(p.r * s * 0.55)), CLOUD[3]); // sun-lit underside
+  for (const p of c.puffs) PK.px(x + p.dx * s + Math.round(p.r * s * 0.4), y + p.dy * s + Math.round(p.r * s * 0.7), CLOUD[4]);
+  for (const p of c.puffs) PK.px(x + p.dx * s - Math.round(p.r * s * 0.5), y + p.dy * s - 1, CLOUD[0]);                                // cool top
+}
+function setBirds(v) {
+  const rnd = PK.rng(5); birds = [];
+  for (let i = 0; i < 4; i++) birds.push({ x: rnd() * v.W, y: Math.round(v.H * (0.12 + rnd() * 0.22)), vx: 6 + rnd() * 6, fl: rnd() * 6.28, s: rnd() < 0.5 ? 1 : 2 });
+}
+function drawBird(b, t) {
+  const w = Math.round(1 + (Math.sin(t * 7 + b.fl) * 0.5 + 0.5) * b.s);
+  const c = "#2a2036";
+  PK.line(b.x - b.s - 1, b.y - w, b.x, b.y, c);
+  PK.line(b.x, b.y, b.x + b.s + 1, b.y - w, c);
+}
+
+// ---- canal ripples + sun reflection (dynamic) ---------------------------------------------
+function drawCanal(t) {
+  for (let y = L.canTopY + 2; y <= L.H; y++) {
+    const c = canalAt(y), d = clamp((y - L.canTopY) / (L.H - L.canTopY), 0, 1);
+    const i = Math.min(WATER.length - 1, Math.floor((1 - d) * (WATER.length - 1) + 0.5));
+    const per = 8 + d * 16, sp = 6 + d * 14;
+    for (let x = Math.round(c.cx - c.hw); x <= Math.round(c.cx + c.hw); x++) {
+      const s = Math.sin(((x + t * sp) / per) * 6.28);
+      if (s > 0.82) PK.px(x, Math.round(y - d * 1.2), WATER[Math.min(WATER.length - 1, i + 1)]);
+      if (s > 0.94) PK.px(x, Math.round(y - d * 1.2) - 1, "#eaf6ff");
+    }
+    // shimmering warm sun reflection down the canal from the sun
+    if (d < 0.85) {
+      const rx = Math.round(c.cx + Math.sin(t * 3 + y * 0.9) * c.hw * 0.3);
+      if (Math.abs(rx - c.cx) < c.hw && PK.bayer(rx, y) < 0.6) { PK.px(rx, y, GLINT[1]); if (Math.sin(t * 5 + y) > 0.2) PK.px(rx + 1, y, GLINT[2]); if (Math.sin(t * 5 + y) > 0.7) PK.px(rx, y, GLINT[2]); }
+    }
+  }
+}
+
+// ---- foreground grass tufts ---------------------------------------------------------------
+function drawGrass(t) {
+  const rnd = PK.rng(123);
+  for (let x = 0; x < L.W; x += 3) {
+    const base = L.H - Math.floor(rnd() * 3);
+    const sway = Math.round(Math.sin(t * 1.6 + x * 0.4) * 1.5);
+    for (let k = 1; k <= 3; k++) PK.px(x + sway * (k / 3), base - k, k === 3 ? "#3f6b32" : "#26452a");
+  }
+}
+
+// ---- build & loop -------------------------------------------------------------------------
+PK.fit(canvas, 140, (v) => {
+  layout(v);
+  bg = PK.layer(v.W, v.H, () => {
+    PK.gradient(0, 0, v.W, L.horizon + 2, SKY, 4);
+    PK.glow(L.sun.x, L.sun.y, Math.round(L.H * 0.17), "#ff8a3a", 0.75, 5);
+    PK.glow(L.sun.x, L.sun.y, Math.max(3, Math.round(L.H * 0.06)), "#ffd27a", 0.9, 4);
+    PK.disc(L.sun.x, L.sun.y, Math.max(2, Math.round(L.H * 0.045)), "#fff0c0");
+    PK.disc(L.sun.x - 1, L.sun.y - 1, Math.max(1, Math.round(L.H * 0.025)), "#fffbe8");
+    treeline(); windmillBody(); groundAndCanal();
+  });
+  setClouds(v); setBirds(v);
+});
+
+PK.loop((t, dt) => {
+  PK.blit(bg);
+  for (const c of clouds) { c.x += c.speed * dt; if (c.x < -40) c.x = L.W + 30; }
+  for (const c of clouds) drawCloud(c);
+  for (const b of birds) { b.x += b.vx * dt; if (b.x > L.W + 4) { b.x = -4; b.y = Math.round(L.H * (0.12 + Math.random() * 0.22)); } drawBird(b, t); }
+  drawCanal(t);
+  // tulip field: rows receding to the horizon, big near / tiny far, skipping the canal
+  const rows = 11, vpx = L.W * 0.5;
+  for (let r = 0; r < rows; r++) {
+    const f = r / (rows - 1);
+    const y = Math.round(L.horizon + 3 + (L.H - L.horizon - 3) * (f * f * 0.75 + f * 0.25));
+    const s = clamp(Math.round(1 + f * 4), 1, 5);
+    const gap = Math.max(3, Math.round(lerp(3, 7, f)));
+    for (let x = 0; x < L.W; x += gap) {
+      if (inCanal(x, y) || inCanal(x, y - s)) continue;
+      const ph = x * 0.33 + r * 0.7;
+      const swy = Math.round(Math.sin(t * 1.9 + ph) * (f * s * 0.9) + Math.sin(t * 0.6 + x * 0.05) * f);
+      let ci = r % 3; if (((x * 13 + r * 7) % 15) === 0) ci = (ci + 1) % 3;
+      tulipPlant(Math.round(x + (x - vpx) * f * 0.05), y, s, TULIP[ci].pal, swy);
+    }
+  }
+  // windmill sails on top
+  sails(L.mx, L.hubY, L.sailLen, t * (Math.PI * 2 / 9) + Math.PI / 4, WOOD);
+  sails(L.dx, L.dhubY, L.dsail, t * (Math.PI * 2 / 16) + 0.6, FAR);
+  drawGrass(t);
+});
+</script>
+</body>
+</html>
