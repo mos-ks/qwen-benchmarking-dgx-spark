@@ -304,57 +304,6 @@
     }
     return blobs;
   }
-  // A whole tree with designed proportions: tapering curved trunk with root flare, branches on
-  // alternating sides, and flat cloud pads arranged as a canopy (wide and low, narrow at the apex).
-  // style: "windswept" (S-curved trunk, layered flat pads; bonsai, coastal pine) or "pine" (straight
-  // trunk, stacked tiers). lean: -1..1 (negative leans left). sway: pixels the top moves at t.
-  // Returns { pads, apex } so details (blossom, snow, lanterns) can be placed on it.
-  function tree(x, baseY, h, opts = {}) {
-    const bark = opts.bark || ramps.bark;
-    const leaves = opts.foliage || ramps.foliage;
-    const lean = opts.lean ?? 0.6;
-    const seed = opts.seed || 21;
-    const rnd = rng(seed);
-    const sway = (opts.sway || 0) * Math.sin((opts.t || 0) * 1.3 + seed);
-    const at = (f) => Math.round(f * h);
-    const pads = [];
-    if (opts.style === "pine") {
-      limb(x, baseY, x, baseY - at(0.5), x, baseY - at(0.95), Math.max(3, at(0.08)), 2, bark, seed);
-      const tiers = 5;
-      for (let i = 0; i < tiers; i++) {
-        const f = 0.3 + (i / (tiers - 1)) * 0.62;
-        const rx = Math.max(3, at(0.34 * (1 - f) + 0.06));
-        pads.push({ cx: x + Math.round(sway * f), cy: baseY - at(f), rx, ry: Math.max(2, Math.round(rx * 0.42)) });
-      }
-    } else {
-      const w0 = Math.max(4, at(0.12));
-      const mid = { x: x + lean * at(0.22), y: baseY - at(0.45) };
-      const apex = { x: x - lean * at(0.06) + sway, y: baseY - at(0.86) };
-      for (const dir of [-1, 1]) limb(x, baseY, x + dir * at(0.06), baseY - 1, x + dir * at(0.14), baseY, Math.round(w0 * 0.55), 2, bark, seed + dir);
-      limb(x, baseY, x - lean * at(0.18), baseY - at(0.2), mid.x, mid.y, w0, Math.round(w0 * 0.62), bark, seed);
-      limb(mid.x, mid.y, mid.x + lean * at(0.28), baseY - at(0.66), apex.x, apex.y, Math.round(w0 * 0.62), Math.max(2, Math.round(w0 * 0.25)), bark, seed + 1);
-      const levels = [0.42, 0.55, 0.66, 0.76];
-      levels.forEach((f, i) => {
-        const side = i % 2 === 0 ? -1 : 1;
-        const u = Math.min(1, f / 0.86);
-        const sx = x + (mid.x - x) * Math.min(1, u * 1.9) + (apex.x - mid.x) * Math.max(0, u * 1.9 - 0.9);
-        const sy = baseY - at(f);
-        const len = at(0.3 - i * 0.04);
-        const tipX = sx + side * len;
-        const tipY = sy - at(0.05 + rnd() * 0.04);
-        limb(sx, sy, sx + side * len * 0.5, sy + at(0.02), tipX, tipY, Math.max(2, Math.round(w0 * (0.32 - i * 0.05))), 1, bark, seed + 10 + i);
-        const rx = Math.max(5, at(0.25 - i * 0.03));
-        const ry = Math.max(3, Math.round(rx * 0.42));
-        // the pad sits on the branch tip and hides it, slightly toward the outside
-        pads.push({ cx: tipX + side * Math.round(rx * 0.15) + Math.round(sway * f), cy: tipY - Math.round(ry * 0.35), rx, ry });
-      });
-      const rx = Math.max(5, at(0.18));
-      pads.push({ cx: Math.round(apex.x), cy: Math.round(apex.y) - 2, rx, ry: Math.max(3, Math.round(rx * 0.5)) });
-    }
-    pads.forEach((p, i) => pad(p.cx, p.cy, p.rx, p.ry, leaves, { seed: seed + 100 + i }));
-    return { pads, apex: pads[pads.length - 1] };
-  }
-
   // Rock or cliff as a height field: jagged stepped top edge, a lit top face, faceted sides
   // (lighter toward the light), cracks and speckle. Returns { top(x) } so things can stand on it.
   // profile: "mound" | "cliff" | (u in 0..1) => height share 0..1. ramp needs 5 shades.
@@ -492,32 +441,6 @@
     }
   }
 
-  // Surf around a rock (from PK.rock) standing in water: one continuous foam line along the rock's
-  // waterline that spills past both edges, taller splashes and spray at the edges, never a band
-  // across the rock face. waterY defaults to the rock's base.
-  function rockFoam(rk, waterY = rk.baseY - 1, t = 0, colors = ["#cfe8f2", "#ffffff"], seed = 17) {
-    let left = -1;
-    let right = -1;
-    for (let gx = rk.x; gx < rk.x + rk.w; gx++) {
-      if (rk.top(gx) < waterY) {
-        if (left < 0) left = gx;
-        right = gx;
-      }
-    }
-    if (left < 0) return;
-    const reach = Math.max(4, Math.round(rk.w * 0.08));
-    const rnd = rng(seed);
-    for (let x = left - reach; x <= right + reach; x++) {
-      const edge = Math.min(Math.abs(x - left), Math.abs(x - right));
-      const atEdge = edge <= 3 || x < left || x > right;
-      const surge = Math.sin(t * 2.2 + x * 0.35 + rnd() * 6.28) * 0.5 + 0.5;
-      const fade = x < left ? 1 - (left - x) / (reach + 1) : x > right ? 1 - (x - right) / (reach + 1) : 1;
-      const hgt = Math.max(1, Math.round((atEdge ? 3 + surge * 4 : 2 + surge * 2) * fade));
-      for (let k = 0; k < hgt; k++) px(x, waterY - k, k === hgt - 1 ? colors[1] : colors[0]);
-      if (atEdge && surge > 0.8 && rnd() < 0.6) px(x + Math.round(rnd() * 2 - 1), waterY - hgt - 1 - Math.floor(rnd() * 3), colors[1]);
-    }
-  }
-
   // ---- sky and particles ---------------------------------------------------------------------
 
   function stars(x0, y0, x1, y1, n, t, colors = ["#8a90c0", "#ffffff"], seed = 11) {
@@ -619,8 +542,8 @@
     rng, bayer, fit, layer, blit, loop, use: (c) => (ctx = c),
     px, rect, disc, ellipse, line, poly, sprite,
     gradient, glow, beam,
-    light, taper, limb, pad, tree, rock,
-    sea, foam, rockFoam, stars, drift,
+    light, taper, limb, pad, rock,
+    sea, foam, stars, drift,
     ramps, skies,
   };
 })();

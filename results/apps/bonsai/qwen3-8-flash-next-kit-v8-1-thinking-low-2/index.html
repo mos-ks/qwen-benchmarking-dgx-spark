@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bonsai in the wind</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #1e2350; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps;
+  const px = PK.px, rect = PK.rect;
+  const far = ["#2b2f52", "#3b4069", "#4d5480", "#656e9c", "#818cb8"];
+  const grass = ["#16281d", "#1d3b2a", "#2f5d34", "#4a8a3c"];
+  const wood = ["#221510", "#3a2318", "#5a3826", "#7d5236", "#a8764c"];
+  const stoneL = ["#2b2a38", "#47465c", "#696d88", "#9298b2", "#c6ccdd"];
+  const leafCols = ["#2f5d34", "#4a8a3c", "#78b84a"];
+
+  const leaves = PK.drift({ n: 26, seed: 41, area: [0, 0, 1, 1], vx: [9, 19], vy: [5, 13] });
+  const skyWind = PK.drift({ n: 30, seed: 42, area: [0, 0, 1, 1], vx: [30, 50], vy: [0, 1.5], len: [3, 7] });
+  const canopyWind = PK.drift({ n: 14, seed: 43, area: [0, 0, 1, 1], vx: [22, 36], vy: [0, 2], len: [2, 5] });
+  const gusts = PK.drift({ n: 7, seed: 44, area: [0, 0, 1, 1], vx: [46, 62], vy: [-0.5, 1], len: [8, 12] });
+
+  function windDraw(d, tailCol, headCol, alpha) {
+    const ctx = view.ctx;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    for (const p of d.particles) {
+      const sp = Math.hypot(p.vx, p.vy) || 1;
+      for (let s = 0; s < p.len; s++) {
+        ctx.fillStyle = s === 0 ? headCol : tailCol;
+        ctx.fillRect(Math.round(p.x - (p.vx / sp) * s), Math.round(p.y - (p.vy / sp) * s), 1, 1);
+      }
+    }
+    ctx.restore();
+  }
+
+  let bg, S, view;
+
+  function drawPot(cx, baseY) {
+    const g = R.glaze;
+    rect(cx - 19, baseY - 8, 38, 1, g[3]);
+    rect(cx - 19, baseY - 7, 38, 1, g[2]);
+    px(cx - 19, baseY - 7, g[0]);
+    px(cx + 18, baseY - 7, g[0]);
+    for (let r = 0; r < 5; r++) {
+      const y = baseY - 6 + r;
+      const w = 34 - r * 2;
+      const x0 = cx - Math.floor(w / 2);
+      rect(x0, y, w, 1, g[2]);
+      px(x0, y, g[0]);
+      px(x0 + w - 1, y, g[0]);
+      rect(x0 + 1, y, Math.ceil(w * 0.3), 1, g[3]);
+      rect(x0 + w - Math.ceil(w * 0.32), y, Math.ceil(w * 0.32), 1, g[1]);
+    }
+    px(cx - 10, baseY - 5, g[4]);
+    px(cx - 9, baseY - 5, g[4]);
+    px(cx - 10, baseY - 4, g[4]);
+    rect(cx - 14, baseY - 6, 2, 3, "#cfe0f4");
+    px(cx - 14, baseY - 6, "#ffffff");
+    px(cx - 13, baseY - 5, "#eef4fc");
+    px(cx - 16, baseY - 8, "#ffffff");
+    px(cx - 15, baseY - 8, "#dfe8f6");
+    for (let r = 0; r < 5; r++) px(cx + 14 - r, baseY - 6 + r, g[0]);
+    rect(cx - 12, baseY - 1, 24, 2, g[1]);
+    px(cx - 12, baseY - 1, g[0]);
+    px(cx + 11, baseY - 1, g[0]);
+    px(cx - 12, baseY, g[0]);
+    px(cx + 11, baseY, g[0]);
+  }
+
+  function drawRim(p, dx) {
+    const x = p.px0 + dx;
+    for (let k = -Math.round(p.rx * 0.8); k <= Math.round(p.rx * 0.9); k += 2) {
+      const f = k / (p.rx * 0.85);
+      if (Math.abs(f) > 1) continue;
+      const yy = p.py - Math.round(p.ry * Math.sqrt(Math.max(0, 1 - f * f)));
+      px(x + k, yy, k >= 0 ? "#ffe08a" : "#c8a45c");
+    }
+  }
+
+  view = PK.fit(document.getElementById("c"), 128, function (v) {
+    const cx = Math.round(v.W / 2);
+    const gy = Math.round(v.H * 0.8);
+    let terrace = null;
+
+    bg = PK.layer(v.W, v.H, function () {
+      PK.gradient(0, 0, v.W, gy + 1, PK.skies.dusk);
+
+      PK.ellipse(cx - 84, gy + 6, 48, 17, far[1]);
+      PK.ellipse(cx - 92, gy + 2, 24, 9, far[2]);
+      PK.ellipse(cx + 66, gy + 9, 56, 21, far[1]);
+      PK.ellipse(cx + 58, gy + 4, 26, 10, far[2]);
+
+      const legBot0 = gy + 2;
+      const potTopY0 = legBot0 - 16;
+      const sunX = cx, sunY = potTopY0 - 34;
+      PK.glow(sunX, sunY, 16, "#f2a33a", 0.75, 5);
+      PK.disc(sunX, sunY, 7, "#f2a33a");
+      PK.disc(sunX, sunY, 5, "#ffd56a");
+      PK.disc(sunX - 1, sunY - 1, 2, "#fff2c0");
+
+      terrace = PK.rock(0, v.H + 2, v.W, v.H + 2 - gy, stoneL,
+        { seed: 17, profile: function () { return 1; }, rough: 3, ledges: 1, cracks: 2 });
+      for (const dxp of [-40, 34, -52, 46]) {
+        const py = terrace.top(cx + dxp);
+        PK.disc(cx + dxp, py - 1, dxp % 2 ? 2 : 1, stoneL[3]);
+        PK.px(cx + dxp, py, stoneL[1]);
+      }
+      const rnd = PK.rng(23);
+      for (let i = 0; i < 26; i++) {
+        const gx = Math.round(rnd() * (v.W - 2)) + 1;
+        const py = terrace.top(gx);
+        if (Math.abs(gx - cx) < 26 || rnd() > 0.6) continue;
+        PK.px(gx, py + 1 + Math.floor(rnd() * 3), rnd() < 0.5 ? stoneL[1] : stoneL[3]);
+      }
+
+      const tufts = [-30, -24, 26, 32, -44, 40];
+      for (let i = 0; i < tufts.length; i++) {
+        const tx = cx + tufts[i];
+        const ty = terrace.top(tx);
+        const h = 2 + (i % 3);
+        PK.line(tx, ty, tx - 1, ty - h, grass[2]);
+        PK.line(tx + 1, ty, tx + 2, ty - h + 1, grass[1]);
+        PK.line(tx - 1, ty, tx - 2, ty - h + 1, grass[3]);
+      }
+
+      const legBot = Math.max(terrace.top(cx - 17), terrace.top(cx + 17)) + 2;
+      PK.rect(cx - 19, legBot, 5, 1, stoneL[0]);
+      PK.rect(cx + 14, legBot, 5, 1, stoneL[0]);
+      PK.rect(cx - 15, legBot, 30, 1, stoneL[1]);
+      PK.rect(cx - 18, legBot - 5, 3, 5, wood[2]);
+      PK.rect(cx - 16, legBot - 5, 1, 5, wood[1]);
+      PK.rect(cx + 15, legBot - 5, 3, 5, wood[2]);
+      PK.rect(cx + 17, legBot - 5, 1, 5, wood[1]);
+      PK.rect(cx - 21, legBot - 7, 42, 1, wood[3]);
+      PK.rect(cx - 21, legBot - 6, 42, 1, wood[1]);
+      PK.px(cx - 21, legBot - 7, wood[0]);
+      PK.px(cx + 20, legBot - 7, wood[0]);
+
+      const potTopY = legBot - 16;
+      PK.limb(cx + 3, potTopY + 3, cx - 7, potTopY, cx - 14, potTopY - 4, 5, 1.5, R.bark, 31);
+      PK.limb(cx + 3, potTopY + 3, cx + 10, potTopY, cx + 15, potTopY - 4, 5, 1.5, R.bark, 32);
+      PK.limb(cx + 3, potTopY + 3, cx + 13, potTopY + 1, cx + 19, potTopY - 1, 3, 1, R.bark, 34);
+      PK.limb(cx + 2, potTopY + 3, cx + 1, potTopY - 1, cx, potTopY - 5, 4, 2, R.bark, 33);
+      PK.limb(cx + 4, potTopY + 2, cx - 12, potTopY - 10, cx - 6, potTopY - 22, 8, 3.5, R.bark, 21);
+      for (let x = cx - 6; x <= cx + 8; x += 2) PK.px(x, potTopY - 1, R.bark[0]);
+
+      drawPot(cx, legBot - 8);
+    });
+
+    const legBot = Math.max(terrace.top(cx - 17), terrace.top(cx + 17)) + 2;
+    const potTopY = legBot - 16;
+    S = {
+      cx, gy, potTopY,
+      t2: { x0: cx - 6, y0: potTopY - 22, cx: cx - 2, cy: potTopY - 30, x1: cx + 2, y1: potTopY - 39, amp: 3, ph: 0.4 },
+      pads: [
+        { px0: cx + 2, py: potTopY - 46, rx: 15, ry: 7, r: 4, n: 12, seed: 31, amp: 4, ph: 0,
+          b: { dyn: true, c0: cx + 5, c1: potTopY - 43, w0: 2, w1: 1 } },
+        { px0: cx - 17, py: potTopY - 28, rx: 12, ry: 5.5, r: 4, n: 10, seed: 32, amp: 3, ph: 1.7,
+          b: { x0: cx - 6, y0: potTopY - 22, cx: cx - 12, cy: potTopY - 23, w0: 3, w1: 1 } },
+        { px0: cx + 15, py: potTopY - 35, rx: 10, ry: 5, r: 3, n: 9, seed: 33, amp: 3, ph: 3.1,
+          b: { x0: cx - 3, y0: potTopY - 30, cx: cx + 6, cy: potTopY - 29, w0: 3, w1: 1, onTrunk: 0.7 } },
+        { px0: cx - 13, py: potTopY - 15, rx: 8, ry: 4, r: 3, n: 7, seed: 34, amp: 2, ph: 4.4,
+          b: { x0: cx - 2, y0: potTopY - 12, cx: cx - 8, cy: potTopY - 11, w0: 2, w1: 1 } },
+        { px0: cx + 11, py: potTopY - 21, rx: 6, ry: 3.5, r: 3, n: 6, seed: 35, amp: 2, ph: 2.6,
+          b: { x0: cx - 7, y0: potTopY - 19, cx: cx + 2, cy: potTopY - 17, w0: 2.5, w1: 1 } }
+      ]
+    };
+
+    leaves.setArea([-10, potTopY - 60, v.W + 10, gy + 8]);
+    skyWind.setArea([0, 0, v.W, gy - 40]);
+    canopyWind.setArea([cx - 36, potTopY - 54, cx + 36, potTopY - 6]);
+    gusts.setArea([0, 4, v.W, gy - 14]);
+  });
+
+  PK.loop(function (t, dt) {
+    PK.blit(bg);
+    PK.stars(0, 0, view.W, S.gy * 0.4, 20, t);
+
+    const dxTop = Math.round(Math.sin(t * 1.8 + S.t2.ph) * S.t2.amp);
+    PK.limb(S.t2.x0, S.t2.y0, S.t2.cx, S.t2.cy, S.t2.x1 + dxTop, S.t2.y1, 3.5, 2, R.bark, 22);
+
+    S.pads.forEach(function (p, i) {
+      const dx = Math.round(Math.sin(t * 1.8 + p.ph) * p.amp);
+      let bx0 = p.b.x0, by0 = p.b.y0;
+      if (p.b.dyn) { bx0 = S.t2.x1 + dxTop; by0 = S.t2.y1; }
+      else if (p.b.onTrunk) { bx0 += Math.round(dxTop * p.b.onTrunk); }
+      PK.limb(bx0, by0, p.b.cx, p.b.cy, p.px0 + dx, p.py, p.b.w0, p.b.w1, R.bark, 51 + i * 7);
+      PK.pad(p.px0 + dx, p.py, p.rx, p.ry, R.foliage, { seed: p.seed, r: p.r, n: p.n });
+      drawRim(p, dx);
+    });
+
+    skyWind.step(dt);
+    windDraw(skyWind, "#8a78b4", "#e8dcf6", 0.5);
+    canopyWind.step(dt);
+    windDraw(canopyWind, "#9cb4d8", "#f0f6ff", 0.55);
+    gusts.step(dt);
+    windDraw(gusts, "#c8b8e4", "#ffffff", 0.65);
+
+    leaves.step(dt);
+    for (const p of leaves.particles) {
+      const fx = p.x + Math.sin(t * 2.3 + p.k * 40) * 1.2;
+      const c = leafCols[Math.min(2, Math.floor(p.k * 3))];
+      PK.px(fx, p.y, c);
+      PK.px(fx - 1, p.y, leafCols[0]);
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -73,8 +73,9 @@ be about 40-60% of it.
 | `PK.beam(x, y, angle, len, spread, [faint, mid, bright], alpha)` | light beam wedge, bright on axis and near the source |
 | `PK.limb(x0, y0, cx, cy, x1, y1, w0, w1, ramp, seed)` | shaded trunk or branch along a curve, wide to narrow; returns the points |
 | `PK.pad(cx, cy, rx, ry, ramp, {seed})` | foliage pad: shaded clumps, flat bottom |
+| `PK.tree(x, baseY, h, {style: "windswept" or "pine", lean, sway, t, seed, bark, foliage})` | a whole tree with designed proportions: tapering curved trunk, root flare, alternating branches, flat cloud pads as a canopy; returns `{ pads, apex }` |
 | `PK.rock(x, baseY, w, h, ramp, {profile: "mound" or "cliff", seed})` | jagged faceted rock or cliff; returns `{ top(x) }` so things can stand on it |
-| `PK.sea(x0, y0, x1, y1, t, ramp)` / `PK.foam(x0, x1, y, t)` | rolling sea with moving crests / foam surging against rock or sand |
+| `PK.sea(x0, y0, x1, y1, t, ramp)` / `PK.rockFoam(rock, waterY, t)` / `PK.foam(x0, x1, y, t)` | rolling sea with moving crests / one continuous surf line around a `PK.rock`'s waterline (default: its base) / foam along a beach |
 | `PK.stars(x0, y0, x1, y1, n, t)` | twinkling star field |
 | `PK.drift({n, area, vx, vy, len})` | particles: `.setArea(a)` in the fit callback, `.step(dt)` then `.streaks(colors)` (rain, wind) or `.dots(colors)` (snow, leaves, sparks) |
 | `PK.ramps.*`, `PK.skies.*` | 5-shade ramps dark to light: foliage, pine, bark, stone, nightStone, sand, water, nightWater, snow, fire, warmLight, brickRed, whitePaint, clay, glaze, fur; skies: night, dusk, day, dawn |
@@ -117,13 +118,13 @@ integer with `image-rendering: pixelated`, `imageSmoothingEnabled = false`, no `
 
 ## 5. Organic shapes that read correctly
 
-- Trees: trunk = `PK.limb` from base (wide) to top (narrow) along a curve; root flare = 2-3 short
+- Trees: start from `PK.tree` (it gets the proportions right) and add details on its pads; build one by hand only for an unusual shape: trunk = `PK.limb` from base (wide) to top (narrow) along a curve; root flare = 2-3 short
   limbs spreading sideways at the base; branches = thinner limbs leaving the trunk at alternating
   sides. Foliage = several `PK.pad`s at different heights at the branch tips, not one blob, with sky
   visible between them.
 - Rocks and cliffs: `PK.rock` with `profile: "cliff"` for a cliff, `"mound"` for boulders; stand
   buildings on `rock.top(x)`. Add 2-4 smaller rocks around the base so it reads as rocky.
-- Water: `PK.sea` for the body, `PK.foam` along every line where water meets rock or shore.
+- Water: `PK.sea` for the body; `PK.rockFoam(rock, waterY, t)` where a rock stands in the water (draw it after the rock); `PK.foam` only along a beach.
 - Buildings: hard rectangles; windows as 2x2 or 3x3 lit squares; roofs one ramp darker on the
   shadow side.
 
