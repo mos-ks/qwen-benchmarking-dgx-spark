@@ -625,5 +625,16 @@
   "score": 7.0,
   "outcome": "done",
   "note": "picked (critic 8 vs 7): red tower with ladder-like lattice sails, path through tulips, canal, sunset, distant mills, a wide empty field. The other draw, with tulip rows in perspective and a canal, looked better to the judge (7.5)"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v7 + thinking low, best of 2 \u00b7 best",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v7 + thinking low, best of 2",
+  "attempt": "best",
+  "minutes": 18.2,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "picked (critic 8 vs 8, pick broke the tie, correctly): big striped tower on a jagged cliff, keeper's house, golden sweeping beam, moon behind a cloud, outcrops, rain, foam; the tower's base sinks into the rock"
  }
 ]
