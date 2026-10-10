@@ -18,6 +18,11 @@ const PAGE = process.env.VISUAL_SUPERVISOR_PAGE ?? "index.html";
 // script for the whole 45 minutes and never stopped, so the supervisor never got a turn.
 const WRAP_UP_MIN = Number(process.env.VISUAL_SUPERVISOR_WRAP_UP_MIN ?? 20);
 const NUDGE_EVERY_MIN = Number(process.env.VISUAL_SUPERVISOR_NUDGE_EVERY_MIN ?? 3);
+// One mid-course look. An agent that keeps building never goes idle, so the supervisor never got a
+// turn: a lighthouse shipped as a tiny tower on an empty sea after 27 minutes without a stop. At this
+// minute the harness looks once and puts the critique into the tool result the agent reads next.
+// Set to "off" to disable.
+const CHECKPOINT_MIN = Number(process.env.VISUAL_SUPERVISOR_CHECKPOINT_MIN ?? 10);
 // Keep the best round: models often make a page worse while "fixing" it (scores 8 then 7), so the
 // harness snapshots the project after every critique that beats the best so far, restores that
 // snapshot when a round scores lower, and leaves the best version on disk when supervision ends.
@@ -96,12 +101,49 @@ export const VisualSupervisor = async ({ client, $, directory }) => ({
   },
   "tool.execute.after": async (input, output) => {
     try {
+      await checkpoint({ client, $, directory }, input, output);
       nudge(directory, input, output);
     } catch (err) {
-      log(`nudge error: ${err?.stack ?? err}`);
+      log(`tool hook error: ${err?.stack ?? err}`);
     }
   },
 });
+
+async function runLook({ client, $, directory }, id) {
+  const request = (await firstUserRequest(client, id)).slice(0, 1500);
+  const goal = request || "the page the user asked for";
+  const out = await $`look ${PAGE} --goal ${goal}`
+    .cwd(directory)
+    .env({ ...process.env, LOOK_MAX_ROUNDS: "1000" })
+    .quiet()
+    .nothrow()
+    .text();
+  log(`look returned ${out.length} chars: ${out.slice(0, 160).replace(/\n/g, " ")}`);
+  const score = Number((out.match(/SCORE:\s*(\d+(?:\.\d+)?)/i) || [])[1] ?? NaN);
+  return { out, score, critique: out.replace(/^screenshots:.*$/m, "").trim() };
+}
+
+async function checkpoint(ctx, input, output) {
+  if (!(CHECKPOINT_MIN >= 0) || process.env.VISUAL_SUPERVISOR === "off" || typeof output?.output !== "string") return;
+  const s = session(input.sessionID);
+  if (s.checkpointed || s.done || s.rounds > 0) return;
+  const elapsedMin = (Date.now() - s.started) / 60000;
+  if (elapsedMin < CHECKPOINT_MIN || !wroteThePage(ctx.directory, s)) return;
+  s.checkpointed = true;
+  const { out, score, critique } = await runLook(ctx, input.sessionID);
+  log(`checkpoint ${input.sessionID} score=${score} at ${elapsedMin.toFixed(1)}min`);
+  if (!/VERDICT:/i.test(out)) return;
+  // Snapshot only: restoring files under an agent that is mid-edit would only confuse it.
+  if (Number.isFinite(score) && (s.best === undefined || score > s.best) && snapshot(ctx.directory)) {
+    s.best = score;
+    s.bestCritique = critique;
+  }
+  output.output +=
+    `\n\n[mid-course visual check by the harness at minute ${Math.round(elapsedMin)}, not part of the tool output] ` +
+    `A vision model looked at ${PAGE} as it is now:\n\n${critique}\n\n` +
+    `Fold the unmet requirements and top fixes into the work you are doing now. If the page is still unfinished, finish it first. ` +
+    `Do not run look yourself; the harness checks again when you stop.`;
+}
 
 function nudge(directory, input, output) {
   if (!WRAP_UP_MIN || process.env.VISUAL_SUPERVISOR === "off" || typeof output?.output !== "string") return;
@@ -134,19 +176,9 @@ async function handle({ client, $, directory, event }) {
     // After the last fix round there is one more look, so a final regression is still reverted.
     const lastLook = s.rounds >= MAX_ROUNDS;
 
-    const request = (await firstUserRequest(client, id)).slice(0, 1500);
-    const goal = request || "the page the user asked for";
-    const out = await $`look ${PAGE} --goal ${goal}`
-      .cwd(directory)
-      .env({ ...process.env, LOOK_MAX_ROUNDS: "1000" })
-      .quiet()
-      .nothrow()
-      .text();
-    log(`look returned ${out.length} chars: ${out.slice(0, 160).replace(/\n/g, " ")}`);
-    const score = Number((out.match(/SCORE:\s*(\d+(?:\.\d+)?)/i) || [])[1] ?? NaN);
+    const { out, score, critique } = await runLook({ client, $, directory }, id);
     const elapsedMin = (Date.now() - s.started) / 60000;
     log(`score=${score} elapsed=${elapsedMin.toFixed(1)}min`);
-    const critique = out.replace(/^screenshots:.*$/m, "").trim();
     let regressed = false;
     if (Number.isFinite(score)) {
       if (s.best === undefined || score > s.best) {

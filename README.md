@@ -89,6 +89,7 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 | kit v4 | score-driven supervision: the critic first lists the brief's requirements, scores 1 to 10 and names the unmet ones; the plugin keeps sending fixes until 8/10, 4 rounds or 25 minutes. The `pixel-art` skill gains a fill-the-screen rule |
 | kit v4 + ponytail | kit v4 with the [ponytail](https://github.com/DietrichGebert/ponytail) "smallest change that works" skill as always-on instructions |
 | kit v5 | the `pixel-art` skill ships [`pixel-kit.js`](harness/skills/pixel-art/pixel-kit.js), a tested drawing library the agent copies into the project (full-screen integer scaling, shaded trunks and foliage pads, jagged faceted rocks, rolling sea and foam, beams, glows, particles, text-grid sprites, 16 colour ramps); the agent may read, never edit, the skills folder |
+| kit v6 | kit v5.1 plus a calibrated critic (three judge-scored example screenshots from other briefs, see [Critic calibration](#critic-calibration)), measured page checks handed to the critic (blank page, share of pixels that move between frames, phone overflow), and keep-best: the project is snapshotted whenever a round beats the best score and restored when a later round scores lower |
 | kit v5.1 | kit v5 plus a wrap-up note: from minute 20 of a page-building session the supervisor appends "the harness checks the page when you stop; do not write your own check scripts; finish and stop" to tool results |
 
 Third-party skills used (not redistributed here; install from their repos):
@@ -126,6 +127,22 @@ Third-party skills used (not redistributed here; install from their repos):
 | Greenfield API, Qwen Code 0.25 | 0.60 | |
 
 Small samples (2 to 3 runs per cell); treat differences under about one point as noise.
+
+## Flash-Next configurations side by side
+
+Mean judged score over the four briefs (bonsai, lighthouse, windmill, dashboard), one run per brief
+unless noted. Opus 5.5 averages 9.1 on the same briefs.
+
+| Configuration | Bonsai | Lighthouse | Windmill | Dashboard | Mean |
+|---|---|---|---|---|---|
+| kit v5 / v5.1, thinking off | 7.5 | 7.5 | 6.5 | 7.5, 8.0 | 7.3 |
+| kit v5 / v5.1, thinking low | 7.0 | 7.5 | 8.0 | 6.0 | 7.1 |
+| kit v6, thinking off | 7.0 | 3.5 | 7.0 | 7.5 | 6.3 |
+| kit v6, thinking low | 7.5 | 7.0 | 8.0 | 8.0 | 7.6 |
+
+Single runs swing by a point or more (the same setup produced a 3.5 and a 7.5 lighthouse), so read
+the means, not single cells. Thinking low wins on the windmill every time (8.0, 8.0 against 6.5, 7.0)
+and has not produced a collapse; kit v6 with thinking low is the best configuration so far.
 
 ## Critic calibration
 
@@ -178,6 +195,8 @@ Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
 - Kit v5 with thinking on at `reasoning_effort: low` (every earlier run had thinking off): windmill 8.0 in 17.8 min (from 6.5 in 30.9 min, with real lattice sails and tulip rows in perspective), bonsai 7.0 in 23.0 min (from 7.5 in 11.9 min). One run each; the windmill jump is the largest single gain so far, on the brief no harness change was tuned on.
 - Thinking low on the other two briefs: lighthouse 7.5 in 20.7 min (same score, 5 min faster), dashboard 6.0 (the category donut rendered as an empty ring) against 8.0 and 7.5 with thinking off. Across the four briefs thinking low moved scores by +1.5, -0.5, 0 and about -1.75: not a consistent win on single runs, so the next rounds use two runs per cell.
 - Critic calibration (offline, no new pages): every saved screenshot replayed through four critic designs and compared with the judge, see [Critic calibration](#critic-calibration).
+- Kit v6, thinking off: bonsai 7.0, lighthouse 3.5 (the agent first stopped at minute 27, after the supervisor's budget, so no fix round ran), windmill 7.0, dashboard 7.5. Thinking low: 7.5, 7.0, 8.0, 8.0.
+- In progress: kit v7 (one mid-course critique at minute 10, folded into the agent's next tool result, so every run gets feedback even if it never stops) with thinking low on all four briefs.
 - This repository is updated as runs finish.
 
 ## Reproduce
