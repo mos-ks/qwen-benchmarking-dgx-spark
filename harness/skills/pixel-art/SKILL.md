@@ -10,6 +10,26 @@ Pixel art is a low-resolution image where every pixel is a deliberate choice, sh
 hard edges. Two things make it look amateur: blur (antialiasing or non-integer scaling) and flat
 single-color shapes. Avoid both from the first line of code.
 
+## 0. Art direction first (write ART.md before any code)
+
+Crafted pixel art is designed before it is drawn. Before writing index.html, write `ART.md` (10-20
+lines) and then build exactly what it says:
+
+1. **Iconic features**: the 4-6 details that make a viewer name the subject at a glance, the way an
+   illustrator would draw it (for a bonsai: the classic silhouette, the pot, what it stands on; for a
+   building: its tell-tale shape and the details people remember). Skip anything generic.
+2. **Composition**: the subject's bounding box as fractions of the canvas (it should span 45-65% of
+   the canvas height, its visual centre at 50-60% height), the horizon line, and what fills each
+   third of the frame. No empty bands: every region is sky, ground, water or scenery.
+3. **Light**: one key light (direction, colour, source in frame such as a sun or moon disc placed
+   behind or beside the subject as a backlight), and the mood.
+4. **Palette**: which `PK.ramps` / `PK.skies` per material, plus one accent colour that pulls the eye
+   to the subject.
+5. **Depth**: 3-4 layers back to front, each with less contrast than the one in front of it.
+6. **Motion**: what moves, how fast, and what stays still.
+
+Then check the built page against ART.md item by item before you stop.
+
 ## 1. Start from pixel-kit.js (do exactly this)
 
 This skill ships a tested helper library. Copy it into the project and build the scene from it;

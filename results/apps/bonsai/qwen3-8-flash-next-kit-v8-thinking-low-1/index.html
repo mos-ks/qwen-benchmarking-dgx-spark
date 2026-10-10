@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e2350">
+<title>Bonsai in the wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #2a3a6a; overflow: hidden; }
+  #c { display: block; }
+  .cap {
+    position: fixed; left: 12px; bottom: 10px; z-index: 2;
+    font: 500 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: rgba(255, 240, 220, 0.42); text-shadow: 0 1px 0 rgba(0,0,0,.25);
+    user-select: none; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">bonsai</div>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps;
+  const S = PK.skies;
+
+  // --- custom ramps (4-5 shades, dark -> light, hue-shifted) --------------------------------
+  const bark = R.bark;                                   // trunk / branches / bench
+  const foliage = R.foliage;
+  const pot = R.glaze;                                   // deep blue glazed pot (accent)
+  const sand = R.sand;
+  const sandShade = ["#6b4a30", "#8a6442", "#b8905a", "#dcbc7c", "#f4e2a8"];
+  // pale desaturated hills: sky blended toward warm horizon
+  const hillFar  = ["#7d86b8", "#949cc4", "#aab0d4"];
+  const hillNear = ["#6a72a6", "#838ab4", "#a0a5c8"];
+  const sunCore = ["#f2a33a", "#ffd56a", "#fff2c0"];
+  const blossom = ["#8a2f52", "#c85a8a", "#f0a0c0"];
+
+  // --- wind + leaves particles (created before fit, placed in onResize) ----------------------
+  const leaves = PK.drift({ n: 30, seed: 21, area: [0, 0, 1, 1], vx: [8, 20], vy: [-2.5, 3.5], len: [1, 2] });
+  const gusts  = PK.drift({ n: 44, seed: 7,  area: [0, 0, 1, 1], vx: [16, 30], vy: [-1.5, 1.5], len: [3, 6] });
+
+  let view = null, bg = null, layout = null;
+
+  // --- static scene -> offscreen layer ---------------------------------------------------------
+  function buildStatic(v) {
+    const W = v.W, H = v.H;
+    const L = layout;
+    return PK.layer(W, H, function () {
+      // sky: light near horizon -> deep at top
+      PK.gradient(0, 0, W, L.horizonY + 2, [S.dusk[4], S.dusk[3], S.dusk[2], S.dusk[1]]);
+      PK.rect(0, L.horizonY, W, H - L.horizonY, sandShade[0]);
+
+      // sun + halo (top-left key light)
+      PK.glow(L.sunX, L.sunY, Math.round(L.unit * 0.16), sunCore[1], 0.5);
+      PK.glow(L.sunX, L.sunY, Math.round(L.unit * 0.10), sunCore[2], 0.8);
+      PK.disc(L.sunX, L.sunY, Math.round(L.unit * 0.055), sunCore[2]);
+      PK.disc(L.sunX, L.sunY, Math.round(L.unit * 0.045), "#fff6d0");
+
+      // distant hills behind the garden (less contrast than the tree)
+      hill(L.hillA, L.horizonY + 2, L.unit * 0.62, L.unit * 0.22, hillFar);
+      hill(L.hillB, L.horizonY + 3, L.unit * 0.52, L.unit * 0.17, hillNear);
+      hill(L.hillC, L.horizonY + 4, L.unit * 0.70, L.unit * 0.26, hillNear);
+
+      // raked zen sand
+      PK.gradient(0, L.horizonY, W, H, [sandShade[2], sandShade[2], sandShade[1], sandShade[0]]);
+      rake(L.horizonY, W, H);
+
+      // stones flanking the bench
+      PK.rock(Math.round(L.cx - L.benchW * 0.9), L.groundY, Math.round(L.bh * 0.16), Math.round(L.bh * 0.10), R.stone, { profile: "mound", seed: 31 });
+      PK.rock(Math.round(L.cx + L.benchW * 0.72), L.groundY + 1, Math.round(L.bh * 0.20), Math.round(L.bh * 0.12), R.stone, { profile: "mound", seed: 55 });
+
+      // bench contact shadow on the sand
+      PK.ellipse(L.cx, L.groundY + 1, Math.round(L.benchW * 0.55), 2, "rgba(0,0,0,0.16)");
+      drawBench();
+
+      // static dark backing at each pad centre (so sway never reveals a gap over branch tips)
+      for (const p of L.pads) {
+        PK.ellipse(p.x, p.y, Math.max(1, p.rx - 1), Math.max(1, p.ry - 1), foliage[1]);
+      }
+
+      // pot, trunk, branches
+      drawPot();
+      drawTreeStatic();
+    });
+  }
+
+  function hill(cx, baseY, w, h, ramp) {
+    for (let i = 0; i < ramp.length; i++) {
+      PK.ellipse(cx, baseY, w - i * Math.round(w * 0.14), h - i * Math.max(1, Math.round(h * 0.28)), ramp[ramp.length - 1 - i]);
+    }
+    PK.ellipse(cx, baseY, w, h, ramp[0]); // base blends into horizon
+  }
+
+  function rake(y0, W, H) {
+    const rnd = PK.rng(99);
+    for (let y = y0 + 3; y < H; y += 4) {
+      const base = rnd() * 6;
+      for (let x = 0; x < W; x++) {
+        const yy = y + Math.round(Math.sin((x + base) * 0.14) * 1.2);
+        if ((x + Math.round(y * 2)) % 7 === 0 && rnd() < 0.5) continue; // speckle breaks the line
+        PK.px(x, yy, sandShade[0]);
+      }
+    }
+  }
+
+  function drawBench() {
+    const b = layout;
+    const x0 = Math.round(b.cx - b.benchW / 2);
+    const slab = 3;
+    // legs
+    for (const lx of [Math.round(b.cx - b.benchW * 0.34), Math.round(b.cx + b.benchW * 0.34) - 3]) {
+      PK.rect(lx, b.benchTopY + slab, 3, b.legH, bark[1]);
+      PK.rect(lx, b.benchTopY + slab, 1, b.legH, bark[2]);       // lit left
+      PK.rect(lx + 2, b.benchTopY + slab, 1, b.legH, bark[0]);   // shadow right
+    }
+    // top slab
+    PK.rect(x0, b.benchTopY, b.benchW, slab, bark[1]);
+    PK.rect(x0, b.benchTopY, b.benchW, 1, bark[3]);              // lit top edge
+    PK.rect(x0, b.benchTopY + slab - 1, b.benchW, 1, bark[0]);   // under-shadow
+    PK.px(x0, b.benchTopY, bark[4]);
+    // pot contact shadow
+    PK.ellipse(b.cx, b.benchTopY + 1, Math.round(b.potHalf * 0.85), 1, "rgba(0,0,0,0.28)");
+  }
+
+  function drawPot() {
+    const b = layout;
+    const cx = b.cx, top = b.potTopY, half = b.potHalf;
+    const botY = b.potBottomY;
+    const bw = Math.round(half * 0.80); // body is narrower at the base
+    // trapezoid body
+    PK.poly([[cx - half, top + 2], [cx + half, top + 2], [cx + bw, botY], [cx - bw, botY]], pot[2]);
+    // shading: lit left, shadow right
+    PK.poly([[cx - half, top + 2], [cx - half + 3, top + 2], [cx - bw + 3, botY], [cx - bw, botY]], pot[3]);
+    PK.poly([[cx + half - 3, top + 2], [cx + half, top + 2], [cx + bw, botY], [cx + bw - 3, botY]], pot[1]);
+    PK.poly([[cx + half - 1, top + 2], [cx + half, top + 2], [cx + bw, botY], [cx + bw - 1, botY]], pot[0]);
+    // feet
+    PK.rect(cx - bw + 1, botY, 3, 2, pot[0]);
+    PK.rect(cx + bw - 4, botY, 3, 2, pot[0]);
+    // rim lip (overhanging ellipse)
+    PK.ellipse(cx, top + 1, half, 2, pot[1]);
+    PK.ellipse(cx, top, half, 2, pot[2]);
+    PK.ellipse(cx - 2, top - 1, Math.max(1, half - 3), 1, pot[4]);   // lit rim highlight
+    PK.ellipse(cx, top, Math.max(1, half - 3), 1, pot[0]);           // mouth shadow
+    // soil in the mouth
+    PK.ellipse(cx, top - 1, Math.max(2, half - 4), 1, bark[0]);
+    PK.ellipse(cx - 2, top - 2, Math.max(1, half - 7), 1, bark[1]);
+  }
+
+  // trunk (S-curve with taper) + root flare + branches, drawn into the static layer
+  function drawTreeStatic() {
+    const b = layout;
+    // root flare
+    for (const [dx, w0] of [[-0.10, 3], [0.11, 3], [-0.02, 2]]) {
+      PK.limb(b.trunkBaseX, b.potTopY - 1, b.trunkBaseX + dx * b.bh * 0.5, b.potTopY,
+              b.trunkBaseX + dx * b.bh, b.potTopY + 1, w0, 1, bark, 3 + dx * 10);
+    }
+    // main S-curve trunk: base wide -> apex narrow
+    PK.limb(b.trunkBaseX, b.potTopY, b.trunkCtrlX, b.trunkCtrlY, b.trunkTopX, b.trunkTopY,
+            Math.max(5, Math.round(b.bh * 0.075)), Math.max(2, Math.round(b.bh * 0.022)), bark, 17);
+
+    // branches (drawn before pads so pads cap the tips)
+    for (const br of b.branches) {
+      PK.limb(br.x0, br.y0, br.cx, br.cy, br.x1, br.y1,
+              Math.max(2, Math.round(b.bh * 0.028)), 1, bark, br.seed);
+    }
+  }
+
+  // --- per-frame animated layers -------------------------------------------------------------
+  function drawCanopy(t) {
+    for (const p of layout.pads) {
+      const hf = p.hf;
+      const dx = Math.round(Math.sin(t * 0.9 + p.phase) * p.amp * hf
+                             + Math.sin(t * 1.9 + p.phase) * p.amp * 0.35 * hf);
+      const dy = Math.round(Math.sin(t * 1.3 + p.phase) * 0.6 * hf);
+      PK.pad(p.x + dx, p.y + dy, p.rx, p.ry, foliage, { seed: p.seed });
+      // a few blossom speckles ride along with the top pads
+      for (const bl of p.blossoms) {
+        PK.px(p.x + dx + bl.x, p.y + dy + bl.y, blossom[bl.k]);
+      }
+    }
+  }
+
+  let birds = null;
+  function initBirds(v) {
+    const rnd = PK.rng(5);
+    birds = [0, 1, 2].map((i) => ({
+      x: rnd() * v.W, y: Math.round(v.H * (0.14 + rnd() * 0.16)),
+      sp: 6 + rnd() * 6, ph: rnd() * 6.28, s: rnd() < 0.5 ? 1 : 2,
+    }));
+  }
+  function drawBirds(t) {
+    const col = "#242a4a";
+    for (const b of birds) {
+      let x = (b.x + t * b.sp) % (view.W + 20) - 10;
+      const flap = Math.sin(t * 3 + b.ph) > 0 ? 0 : 1;
+      PK.line(x - b.s, b.y + flap, x, b.y - 1, col);
+      PK.line(x, b.y - 1, x + b.s, b.y + flap, col);
+    }
+  }
+
+  // --- layout ---------------------------------------------------------------------------------
+  function computeLayout(v) {
+    const W = v.W, H = v.H, unit = Math.min(W, H);
+    const portrait = H > W;
+    const bh = Math.round(unit * (portrait ? 0.60 : 0.55));        // tree height (feet -> canopy)
+    const cx = Math.round(W / 2);
+    const benchTopY = Math.round(H * (portrait ? 0.66 : 0.76));
+    const legH = Math.max(4, Math.round(bh * 0.10));
+    const groundY = benchTopY + legH;                               // sand top line
+    const horizonY = groundY;
+    const benchW = Math.round(bh * 0.62);
+
+    const potH = Math.max(4, Math.round(bh * 0.13));
+    const potHalf = Math.max(6, Math.round(bh * 0.26));
+    const potBottomY = benchTopY;
+    const potTopY = potBottomY - potH;
+
+    const U = (x, y) => [cx + x * bh, potBottomY - y * bh];        // tree-space -> screen
+    const [tbx, tby] = U(0, 0.13);
+    const [tcx, tcy] = U(-0.12, 0.44);
+    const [ttx, tty] = U(0.05, 0.80);
+
+    const branchDefs = [
+      { s: [-0.01, 0.40], c: [-0.17, 0.45], e: [-0.25, 0.43], seed: 41 },   // low left
+      { s: [0.00, 0.54],  c: [0.15, 0.58],  e: [0.26, 0.61],  seed: 52 },   // mid right
+      { s: [-0.01, 0.66], c: [-0.13, 0.70], e: [-0.17, 0.72], seed: 63 },   // upper left
+    ];
+    const branches = branchDefs.map((br) => {
+      const [x0, y0] = U(br.s[0], br.s[1]);
+      const [ccx, ccy] = U(br.c[0], br.c[1]);
+      const [x1, y1] = U(br.e[0], br.e[1]);
+      return { x0, y0, cx: ccx, cy: ccy, x1, y1, seed: br.seed };
+    });
+
+    // 4 canopy pads: 3 at branch tips + apex; each with seeded blossom speckles
+    const padDefs = [
+      { n: [-0.27, 0.45], rx: 0.135, ry: 0.070, seed: 11, bl: 2 },
+      { n: [0.28, 0.62],  rx: 0.155, ry: 0.078, seed: 23, bl: 4 },
+      { n: [-0.18, 0.74], rx: 0.100, ry: 0.058, seed: 37, bl: 2 },
+      { n: [0.05, 0.83],  rx: 0.125, ry: 0.072, seed: 5,  bl: 5 },
+    ];
+    const rnd = PK.rng(101);
+    const pads = padDefs.map((pd, i) => {
+      const [px, py] = U(pd.n[0], pd.n[1]);
+      const rx = Math.max(3, Math.round(pd.rx * bh));
+      const ry = Math.max(2, Math.round(pd.ry * bh));
+      const blossoms = [];
+      for (let k = 0; k < pd.bl; k++) {
+        blossoms.push({
+          x: Math.round((rnd() * 2 - 1) * rx * 0.7),
+          y: Math.round((rnd() * 2 - 1) * ry * 0.6) - 1,
+          k: rnd() < 0.55 ? 2 : 1,
+        });
+      }
+      return { x: px, y: py, rx, ry, seed: pd.seed, phase: i * 1.7,
+               amp: Math.max(1, Math.round(bh * 0.022)), hf: pd.n[1] / 0.83, blossoms };
+    });
+
+    return {
+      W, H, unit, portrait, cx, bh, benchTopY, legH, groundY, horizonY, benchW,
+      potH, potHalf, potBottomY, potTopY,
+      trunkBaseX: tbx, trunkBaseY: tby, trunkCtrlX: tcx, trunkCtrlY: tcy, trunkTopX: ttx, trunkTopY: tty,
+      branches, pads,
+      sunX: Math.round(W * 0.26), sunY: Math.round(H * 0.19),
+      hillA: Math.round(W * 0.20), hillB: Math.round(W * 0.55), hillC: Math.round(W * 0.85),
+    };
+  }
+
+  // --- boot ----------------------------------------------------------------------------------
+  view = PK.fit(document.getElementById("c"), 150, function (v) {
+    layout = computeLayout(v);
+    const a = [-8, -4, v.W + 8, v.H + 4];
+    leaves.setArea(a);
+    gusts.setArea(a);
+    initBirds(v);
+    bg = buildStatic(v);
+  });
+
+  PK.loop(function (t, dt) {
+    PK.blit(bg);
+    drawBirds(t);
+    drawCanopy(t);
+    leaves.step(dt);
+    gusts.step(dt);
+    gusts.streaks(["rgba(214,234,246,0.20)", "rgba(214,234,246,0.40)"]);
+    leaves.dots([foliage[2], foliage[3], blossom[2], foliage[4]]);
+  });
+})();
+</script>
+</body>
+</html>

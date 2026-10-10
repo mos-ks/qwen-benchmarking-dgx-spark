@@ -757,5 +757,27 @@
   "score": 7.0,
   "outcome": "done",
   "note": "spent/kept stacked bars, category bars, split KPI cards; an oversized clock pill in the header; 9 min over budget"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8, thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8, thinking low",
+  "attempt": "#1",
+  "minutes": 25.1,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "art direction shows: glazed blue pot on a wooden bench, sun disc behind the tree, raked sand, hills, birds; sparse thin pads, checker-dithered sky, dotted sun halo"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8, thinking low \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8, thinking low",
+  "attempt": "#1",
+  "minutes": 25.3,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "big striped tower with glowing lantern and strong sweeping beam, keeper's house on a massive faceted cliff, foamed outcrops, rain; the cliff fills most of the frame, dotted moon halo"
  }
 ]
