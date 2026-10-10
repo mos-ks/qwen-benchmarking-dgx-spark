@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Windmill in a Tulip Field at Sunset</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #241f4a; overflow: hidden; }
+  canvas { display: block; }
+  .caption {
+    position: fixed; left: 0; right: 0; bottom: 10px; z-index: 2;
+    text-align: center;
+    font: 11px/1.4 ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: #ffe3bd; text-shadow: 0 1px 0 #2b1a2e, 0 2px 6px rgba(20,10,30,.8);
+    opacity: .8; pointer-events: none; user-select: none;
+  }
+  .caption span { opacity: .65; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Pixel-art scene: a Dutch windmill turning above a tulip field and a canal at sunset" role="img"></canvas>
+<p class="caption">Windmill &amp; tulips <span>&middot; sunset</span></p>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---- limited sunset palette (dark -> light, hue-shifted) --------------------------------
+  const P = {
+    sky:    ["#221c46", "#3c2560", "#7a3564", "#bf4f56", "#e8774a", "#ffb463"],
+    sun:    ["#c86a3c", "#f0995c", "#ffd08a", "#fff0c4"],
+    cloud:  ["#4d2f5c", "#7b4470", "#b3617e", "#e08c86", "#ffc79c"],
+    far:    ["#241d3c", "#33294e", "#443762", "#5a4874"],       // distant land, low contrast
+    water:  ["#181c3e", "#2a2f5c", "#3d4474", "#5a628e", "#93a0b8"],
+    glitter:["#8a5a78", "#d08a68", "#ffc27e", "#ffe9b8"],
+    grass:  ["#13261f", "#1e3b28", "#2c5531", "#3d7039", "#5b8f47"],
+    grassWarm:["#1b2a24", "#2a3d2c", "#3b5634", "#4f703e", "#6d8f4a"],
+    brick:  ["#2f1420", "#54232c", "#7d3636", "#a9503f", "#d0785a"],
+    thatch: ["#20161f", "#3a2626", "#573b30", "#7a563c", "#a37a4e"],
+    wood:   ["#1e1210", "#33201a", "#4d2f22", "#6e4430", "#96674a"],
+    canvas: ["#4a3a44", "#7c5c52", "#b08a6e", "#dcb88e", "#f7dcac"],   // sail cloth
+    lit:    ["#7a3b1e", "#c4612a", "#f2a33a", "#ffe08a"],
+    red:    ["#571023", "#96182f", "#d1323f", "#f46a5a", "#ffb08e"],
+    yellow: ["#6b3d10", "#a8681a", "#dc9a26", "#f7c74e", "#fff0a0"],
+    pink:   ["#4e1440", "#8a2459", "#c7417e", "#ec6f9e", "#ffadc8"],
+    leaf:   ["#152a1d", "#26452a", "#396433", "#4f853d", "#71a856"],
+  };
+  const TULIPS = [P.red, P.yellow, P.pink];
+
+  // ---- layout state (recomputed on resize) -------------------------------------------------
+  let L = {};                                   // layout, recomputed on resize
+  let clouds, birds;
+
+  clouds = Array.from({ length: 6 }, (_, i) => ({
+    bx: i / 6,                       // relative x, wrapped into the sky at draw time
+    by: 0.06 + (i % 3) * 0.11,       // relative y inside the sky band
+    w: 16 + (i % 3) * 9 + (i % 2) * 5,
+    h: 3 + (i % 2) * 2,
+    sp: 1.6 + (i % 3) * 1.1,
+    seed: 21 + i * 7,
+  }));
+  birds = Array.from({ length: 4 }, (_, i) => ({
+    bx: (i * 0.27) % 1,
+    by: 0.10 + (i % 3) * 0.09,
+    sp: 9 + (i % 3) * 4,
+    bob: 0.6 + (i % 2) * 0.5,
+    ph: i * 1.7,
+    sc: i % 3 === 0 ? 2 : 1,
+  }));
+
+  function layout(v) {
+    const W = v.W, H = v.H;
+    const hy = Math.round(H * 0.50);              // horizon (bottom of sky)
+    const cw = Math.max(6, Math.round(H * 0.09)); // canal depth
+    const canalTop = hy + 3;
+    const canalBot = canalTop + cw;
+    const groundTop = canalBot + 1;
+    L = {
+      W, H, hy, cw, canalTop, canalBot, groundTop,
+      portrait: v.portrait,
+      sunX: Math.round(W * (v.portrait ? 0.74 : 0.72)),
+      sunY: hy - Math.max(4, Math.round(H * 0.06)),
+      millX: Math.round(W * (v.portrait ? 0.48 : 0.36)),
+      millBase: canalBot + Math.max(4, Math.round(H * 0.055)),
+      millH: Math.max(30, Math.round(H * 0.30)),
+      farMillX: Math.round(W * (v.portrait ? 0.2 : 0.83)),
+    };
+    L.fieldTop = L.millBase + 2;
+    L.rows = tulipRows(L);
+    L.reeds = reeds(L);
+  }
+
+  // deterministic tulip placement, rebuilt only on resize
+  function tulipRows(L) {
+    const rows = [];
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const f = i / (n - 1);
+      const y = Math.round(L.fieldTop + Math.pow(f, 1.55) * (L.H - L.fieldTop - 2));
+      const size = 1 + Math.round(f * 3.4);              // sprite scale class 1..4
+      const step = Math.max(3, Math.round(3 + f * 8));
+      const rnd = PK.rng(101 + i * 37);
+      const block = Math.floor(rnd() * 3);               // per-row colour block offset
+      const list = [];
+      for (let x = -2; x < L.W + 2; x += step) {
+        const jitter = Math.round((rnd() * 2 - 1) * Math.max(0, size - 1));
+        if (rnd() < 0.1) continue;                        // gaps, so it reads as a field
+        const kind = rnd() < 0.82 ? block : (block + 1 + Math.floor(rnd() * 2)) % 3;
+        list.push({ x: x + jitter, y: y + Math.round((rnd() * 2 - 1) * (0.5 + f)), kind, size, ph: rnd() * 6.28, k: rnd() });
+      }
+      list.sort((a, b) => a.y - b.y);
+      rows.push({ y, size, list });
+    }
+    return rows;
+  }
+
+  function reeds(L) {
+    const rnd = PK.rng(9001);
+    const out = [];
+    for (let i = 0; i < Math.round(L.W / 5); i++) {
+      out.push({ x: Math.floor(rnd() * L.W), h: 2 + Math.floor(rnd() * 3), k: rnd() });
+    }
+    return out;
+  }
+
+  // ---- static scenery ----------------------------------------------------------------------
+  let bg;
+  function buildBG(v) {
+    bg = PK.layer(v.W, v.H, () => {
+      PK.gradient(0, 0, L.W, L.hy + 1, P.sky);
+      // sun disc + halo
+      PK.glow(L.sunX, L.sunY, Math.max(9, Math.round(L.H * 0.13)), P.sun[2], 0.5);
+      PK.glow(L.sunX, L.sunY, Math.max(5, Math.round(L.H * 0.07)), P.sun[3], 0.55);
+      PK.disc(L.sunX, L.sunY, Math.max(3, Math.round(L.H * 0.045)), P.sun[1]);
+      PK.disc(L.sunX, L.sunY - 1, Math.max(2, Math.round(L.H * 0.033)), P.sun[2]);
+      PK.disc(L.sunX, L.sunY - 1, Math.max(1, Math.round(L.H * 0.02)), P.sun[3]);
+
+      // distant land: undulating dyke silhouette with clumps of trees
+      const rnd = PK.rng(4242);
+      let h = 2;
+      for (let x = 0; x < L.W;) {
+        const run = 4 + Math.floor(rnd() * 8);
+        h = Math.max(1, Math.min(4, h + (rnd() < 0.5 ? -1 : 1)));
+        for (let k = 0; k < run && x < L.W; k++, x++) {
+          PK.rect(x, L.hy - h, 1, h + 3, P.far[1]);
+          PK.px(x, L.hy - h, P.far[2]);
+        }
+      }
+      for (let i = 0; i < Math.round(L.W / 26); i++) {
+        const tx = Math.floor(rnd() * L.W);
+        PK.pad(tx, L.hy - 2, 3 + Math.floor(rnd() * 3), 2 + Math.floor(rnd() * 2), P.far, { seed: 500 + i, r: 2 });
+      }
+
+      // canal water body (crests/glints are drawn per frame)
+      for (let y = L.canalTop; y < L.canalBot; y++) {
+        const f = (y - L.canalTop) / Math.max(1, L.canalBot - L.canalTop - 1);
+        PK.rect(0, y, L.W, 1, P.water[Math.min(4, Math.round(f * 3.4))]);
+      }
+      // banks
+      PK.rect(0, L.canalTop - 1, L.W, 1, P.grass[1]);
+      PK.rect(0, L.canalBot, L.W, 1, P.grass[0]);
+
+      // meadow, warmer near the horizon, darker toward the viewer
+      const rows = L.H - L.groundTop;
+      for (let y = L.groundTop; y < L.H; y++) {
+        const f = (y - L.groundTop) / Math.max(1, rows - 1);
+        const warm = f < 0.35;
+        const ramp = warm ? P.grassWarm : P.grass;
+        const band = Math.min(4, Math.round(f * 3.1 + (warm ? 0.6 : 0)));
+        PK.rect(0, y, L.W, 1, ramp[band]);
+      }
+      // grass texture: scattered blades / speckle
+      const g = PK.rng(777);
+      for (let i = 0; i < Math.round(L.W * rows * 0.05); i++) {
+        const x = Math.floor(g() * L.W);
+        const y = L.groundTop + Math.floor(g() * rows);
+        const f = (y - L.groundTop) / Math.max(1, rows - 1);
+        const ramp = f < 0.35 ? P.grassWarm : P.grass;
+        PK.px(x, y, g() < 0.55 ? ramp[1] : ramp[4]);
+      }
+      // dirt path from the mill door down to the bottom edge, lit on the left
+      const px0 = L.millX, py0 = L.millBase + 1;
+      for (let y = py0; y < L.H; y++) {
+        const f = (y - py0) / Math.max(1, L.H - py0 - 1);
+        const hw = Math.max(2, Math.round(1.5 + f * 5.5));
+        for (let x = px0 - hw; x <= px0 + hw; x++) {
+          const u = (x - (px0 - hw)) / Math.max(1, hw * 2);
+          let c = u < 0.34 ? P.wood[3] : u < 0.72 ? P.wood[2] : P.wood[1];
+          if (u > 0.18 && u < 0.82 && PK.bayer(x, y) < 0.2) c = P.wood[3];
+          if (u < 0.06 || u > 0.94) c = P.wood[0];
+          PK.px(x, y, c);
+        }
+      }
+    });
+  }
+
+  // ---- clouds & birds ----------------------------------------------------------------------
+  function drawClouds(t) {
+    for (const c of clouds) {
+      const w = c.w + 6;
+      const span = L.W + w * 2;
+      let x = ((c.bx * L.W + t * c.sp) % span + span) % span - w;
+      const y = Math.round(2 + c.by * L.hy);
+      PK.pad(x + w / 2, y, w / 2, c.h, P.cloud, { seed: c.seed, r: Math.max(2, c.h) });
+    }
+  }
+
+  function drawBirds(t) {
+    for (const b of birds) {
+      const span = L.W + 24;
+      const x = Math.round(((b.bx * L.W + t * b.sp) % span + span) % span - 12);
+      const y = Math.round(3 + (b.by + Math.sin(t * b.bob + b.ph) * 0.02) * L.hy);
+      const up = Math.sin(t * 7 + b.ph) > 0;
+      const c = P.far[0];
+      const s = b.sc;
+      PK.px(x - 2 * s, y - (up ? s : 0), c);
+      PK.px(x - s, y - (up ? 1 : -1) * s, c);
+      PK.px(x, y, c);
+      PK.px(x + s, y - (up ? 1 : -1) * s, c);
+      PK.px(x + 2 * s, y - (up ? s : 0), c);
+    }
+  }
+
+  // ---- canal life --------------------------------------------------------------------------
+  function drawCanal(t) {
+    const rnd = PK.rng(31);
+    const rows = Math.max(3, Math.floor(L.cw / 3));
+    for (let k = 0; k < rows; k++) {
+      const depth = (k + 1) / rows;
+      const yy = L.canalTop + 1 + k * ((L.cw - 2) / rows);
+      const period = 12 + depth * 22 + rnd() * 6;
+      const amp = 0.5 + depth * 1.4;
+      const speed = 4 + depth * 12 + rnd() * 5;
+      const phase = rnd() * 100;
+      for (let x = 0; x < L.W; x++) {
+        const s = Math.sin(((x + t * speed + phase) / period) * Math.PI * 2);
+        if (s < 0.62) continue;
+        const y = Math.round(yy - amp * s);
+        PK.px(x, y, s > 0.9 ? P.water[4] : P.water[3]);
+      }
+    }
+    // sun glitter path on the water
+    const half = Math.max(4, Math.round(L.H * 0.06));
+    for (let y = L.canalTop; y < L.canalBot; y++) {
+      for (let x = L.sunX - half; x <= L.sunX + half; x++) {
+        if (x < 0 || x >= L.W) continue;
+        const dx = Math.abs(x - L.sunX) / half;
+        const shimmer = Math.sin(t * 3.2 + x * 0.6 + y * 1.7) * 0.5 + 0.5;
+        if (PK.bayer(x, y) < (1 - dx) * (0.35 + shimmer * 0.5))
+          PK.px(x, y, shimmer > 0.72 ? P.glitter[3] : P.glitter[2]);
+      }
+    }
+    // reeds on the near bank
+    for (const r of L.reeds) {
+      const sway = Math.round(Math.sin(t * 1.6 + r.x * 0.4) * 1);
+      for (let k = 0; k < r.h; k++)
+        PK.px(r.x + (k > r.h - 2 ? sway : 0), L.canalBot - 1 - k, k === r.h - 1 ? P.leaf[3] : P.leaf[1]);
+    }
+  }
+
+  // ---- windmill ----------------------------------------------------------------------------
+  function drawSails(cx, cy, len, angle) {
+    for (let k = 0; k < 4; k++) {
+      const a = angle + k * Math.PI / 2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const nx = -sa, ny = ca;                       // perpendicular
+      const from = Math.round(len * 0.24), to = len - 1;
+      const span = Math.max(1, to - from);
+      const baseOff = Math.max(2, Math.round(len * 0.12));
+      const nLit = nx * PK.light.x + ny * PK.light.y > 0;   // which rail side faces the sun
+      const bulge = (d) => Math.max(2, Math.round(baseOff * (0.72 + 0.42 * Math.sin((Math.PI * (d - from)) / span))));
+      // wind-filled sail cloth, shaded across its width
+      for (let d = from; d <= to; d++) {
+        const off = bulge(d);
+        const x = cx + ca * d, y = cy + sa * d;
+        for (let o = -off; o <= off; o++) {
+          let c;
+          if (o <= -off) c = nLit ? P.canvas[1] : P.canvas[3];
+          else if (o >= off) c = nLit ? P.canvas[3] : P.canvas[1];
+          else c = (o < 0) === nLit ? P.canvas[3] : P.canvas[2];
+          PK.px(x + nx * o, y + ny * o, c);
+        }
+      }
+      // stock (spine) from hub outwards, over the cloth
+      for (let d = 0; d <= to; d++) {
+        const x = cx + ca * d, y = cy + sa * d;
+        const w = d < 4 ? 1 : 0;
+        PK.px(x - nx * w, y - ny * w, P.wood[1]);
+        PK.px(x, y, d < 4 ? P.wood[3] : P.wood[2]);
+        PK.px(x + nx * w, y + ny * w, P.wood[1]);
+      }
+      // rungs and rails of the lattice
+      for (let d = from; d <= to; d++) {
+        const off = bulge(d);
+        const x = cx + ca * d, y = cy + sa * d;
+        if ((d - from) % 3 === 0) {
+          for (let o = -off; o <= off; o++)
+            PK.px(x + nx * o, y + ny * o, (o < 0) === nLit ? P.wood[3] : P.wood[1]);
+        }
+        PK.px(x + nx * off, y + ny * off, nLit ? P.wood[3] : P.wood[0]);
+        PK.px(x - nx * off, y - ny * off, nLit ? P.wood[0] : P.wood[3]);
+      }
+      // sail tip catchlight
+      PK.px(cx + ca * to, cy + sa * to, P.canvas[4]);
+    }
+    // hub
+    PK.disc(cx, cy, Math.max(2, Math.round(len * 0.1)), P.wood[1]);
+    PK.disc(cx, cy, Math.max(1, Math.round(len * 0.06)), P.wood[3]);
+    PK.px(cx - 1, cy - 1, P.wood[4]);
+  }
+
+  function drawWindmill(t) {
+    const cx = L.millX, baseY = L.millBase, h = L.millH;
+    const topY = baseY - h;
+    const wBot = Math.max(9, Math.round(h * 0.38)), wTop = Math.max(6, Math.round(h * 0.21));
+    const rnd = PK.rng(1234);
+
+    // contact shadow
+    for (let x = cx - wBot / 2 - 3; x <= cx + wBot / 2 + 3; x++)
+      if (rnd() < 0.7) PK.px(x, baseY + 1, P.grass[0]);
+
+    // tapered tower with per-row shading, brick courses and speckle
+    for (let y = topY; y < baseY; y++) {
+      const f = (y - topY) / Math.max(1, baseY - topY - 1);
+      const hw = (wTop + (wBot - wTop) * f) / 2;
+      const x0 = Math.round(cx - hw), x1 = Math.round(cx + hw);
+      const course = (y - topY) % 3 === 0;
+      for (let x = x0; x <= x1; x++) {
+        const u = (x - x0) / Math.max(1, x1 - x0);          // cylindrical ramp, lit from the left
+        const band = u < 0.14 ? 4 : u < 0.34 ? 3 : u < 0.6 ? 2 : u < 0.82 ? 1 : 0;
+        let c = P.brick[band];
+        if (course && (x + ((y >> 1) & 1) * 2) % 4 === 0) c = P.brick[Math.max(0, band - 1)];
+        else if (rnd() < 0.05) c = P.brick[Math.max(0, Math.min(4, band + (rnd() < 0.4 ? 1 : -1)))];
+        PK.px(x, y, c);
+      }
+      PK.px(x0, y, P.brick[4]);            // lit left edge
+      PK.px(x1, y, P.brick[0]);            // shaded right edge
+    }
+    // base plinth
+    for (let x = cx - wBot / 2 - 1; x <= cx + wBot / 2 + 1; x++) {
+      PK.px(x, baseY, P.brick[0]);
+      PK.px(x, baseY - 1, P.brick[1]);
+    }
+
+    // gallery (balcony) with rail
+    const gy = baseY - Math.round(h * 0.34);
+    const ghw = Math.round((wTop + (wBot - wTop) * ((gy - topY) / (baseY - topY))) / 2);
+    PK.rect(cx - ghw - 3, gy, (ghw + 3) * 2, 1, P.wood[3]);
+    PK.rect(cx - ghw - 3, gy + 1, (ghw + 3) * 2, 1, P.wood[0]);
+    for (let x = cx - ghw - 2; x <= cx + ghw + 2; x += 2) PK.px(x, gy - 2, P.wood[2]);
+    PK.px(cx - ghw - 3, gy - 2, P.wood[3]);
+    PK.px(cx + ghw + 2, gy - 2, P.wood[3]);
+
+    // door with lit seam
+    const dw = Math.max(4, Math.round(wBot * 0.42)), dh = Math.max(6, Math.round(h * 0.2));
+    const dx = Math.round(cx - dw / 2), dy = baseY - dh;
+    PK.rect(dx, dy + 1, dw, dh - 1, P.wood[0]);
+    PK.rect(dx + 1, dy + 1, dw - 2, dh - 2, P.wood[1]);
+    PK.rect(dx + 1, dy + 2, dw - 2, 2, P.wood[2]);
+    PK.px(dx, dy + 1, P.wood[3]);
+    PK.px(dx + dw - 1, dy + 1, P.wood[0]);
+    PK.rect(dx + dw - 2, dy + Math.round(dh * 0.55), 1, 2, P.lit[1]);   // lit keyhole seam
+
+    // lit window on the tower body, with a warm halo
+    const wy = baseY - Math.round(h * 0.58);
+    PK.glow(cx, wy + 1, 5, P.lit[2], 0.45);
+    PK.rect(cx - 2, wy - 1, 5, 4, P.wood[0]);
+    PK.rect(cx - 1, wy, 3, 2, P.lit[2]);
+    PK.px(cx - 1, wy, P.lit[3]);
+    PK.px(cx, wy + 1, P.lit[1]);
+    PK.px(cx, wy, P.wood[1]);
+    PK.px(cx - 2, wy + 3, P.wood[2]);
+
+    // cap: thatched dome facing the sails
+    const capH = Math.max(4, Math.round(h * 0.13));
+    const cwBot = wTop + 3, cwTop = Math.max(3, wTop - 3);
+    for (let y = 0; y < capH; y++) {
+      const f = y / Math.max(1, capH - 1);
+      const hw = (cwBot + (cwTop - cwBot) * f) / 2;
+      const x0 = Math.round(cx - hw), x1 = Math.round(cx + hw);
+      for (let x = x0; x <= x1; x++) {
+        const u = (x - x0) / Math.max(1, x1 - x0);
+        let c = u < 0.4 ? P.thatch[3] : P.thatch[2];
+        if ((x + y * 2) % 3 === 0) c = P.thatch[1];
+        if (rnd() < 0.06) c = P.thatch[4];
+        PK.px(x, topY - capH + 1 + y, c);
+      }
+      PK.px(x0, topY - capH + 1 + y, P.thatch[4]);
+      PK.px(x1, topY - capH + 1 + y, P.thatch[0]);
+    }
+    // cap ring where the cap meets the brickwork, plus tail pole hint
+    PK.rect(cx - Math.round(cwBot / 2), topY - 1, cwBot, 1, P.wood[0]);
+    PK.px(cx - Math.round(cwBot / 2), topY - 1, P.wood[3]);
+    for (let d = 1; d <= Math.round(h * 0.3); d++)   // tail pole to the windward side
+      PK.px(cx + Math.round(cwBot / 2) + d, topY - capH + 2 + Math.round(d * 0.28), P.wood[1]);
+
+    // sails
+    const len = Math.max(14, Math.round(h * 0.62));
+    drawSails(cx, topY - Math.round(capH * 0.35), len, t * 0.55);
+  }
+
+  function drawFarMill(t) {
+    const x = L.farMillX, base = L.hy - 1, h = Math.max(7, Math.round(L.H * 0.085));
+    const wB = Math.max(3, Math.round(h * 0.34)), wT = Math.max(2, Math.round(h * 0.2));
+    for (let y = 0; y < h; y++) {
+      const f = y / Math.max(1, h - 1);
+      const hw = (wT + (wB - wT) * f) / 2;
+      for (let i = -Math.round(hw); i <= Math.round(hw); i++)
+        PK.px(x + i, base - h + y, i < 0 ? P.far[2] : P.far[1]);
+      PK.px(x - Math.round(hw), base - h + y, P.far[3]);        // lit left edge
+    }
+    PK.px(x - 1, base - h - 1, P.far[3]);                        // cap highlight
+    PK.px(x, base - h - 1, P.far[1]);
+    const cy = base - h, len = Math.round(h * 0.8);
+    for (let k = 0; k < 4; k++) {
+      const a = -t * 0.4 + k * Math.PI / 2;
+      for (let d = 1; d <= len; d++)
+        PK.px(x + Math.cos(a) * d, cy + Math.sin(a) * d, P.far[0]);
+    }
+  }
+
+  // ---- tulips ------------------------------------------------------------------------------
+  // tulip cup: two petal tips and a notch on top, round at the base.
+  // a = lit tip, b = body, c = shadow side, d = shaded base
+  const HEADS = {
+    1: ["a.a", "bcb", ".d."],
+    2: ["a.a", "bcb", "bcb", ".d."],
+    3: ["a.a.a", "bbcbc", "bbcbc", ".bcb.", "..d.."],
+    4: ["a.a.a", "bbcbc", "bbcbc", "bbcbc", ".bcb.", "..d.."],
+  };
+
+  function drawTulips(t) {
+    for (const row of L.rows) {
+      for (const f of row.list) {
+        const s = f.size;
+        const amp = Math.max(1, Math.round(s * 1.15));
+        const sway = Math.round(Math.sin(t * 1.9 + f.ph) * amp * (0.5 + f.k * 0.5));
+        const head = Math.max(sway - 1, Math.min(sway + 1, Math.round(Math.sin(t * 1.9 + f.ph + 0.9) * amp * (0.5 + f.k * 0.5))));
+        const stemH = 2 + s;
+        const pal = TULIPS[f.kind];
+        // shadow at the foot
+        PK.px(f.x, row.y, P.grass[0]);
+        // stem, bending with the sway
+        for (let i = 1; i <= stemH; i++) {
+          const off = Math.round((sway * i * i) / (stemH * stemH));
+          PK.px(f.x + off, row.y - i, i <= stemH * 0.4 ? P.leaf[1] : P.leaf[2]);
+        }
+        // leaves
+        const bend = (i) => Math.round((sway * i * i) / (stemH * stemH));
+        PK.px(f.x - 1 + bend(Math.round(stemH * 0.55)), row.y - Math.round(stemH * 0.55), P.leaf[2]);
+        PK.px(f.x + 1 + bend(Math.round(stemH * 0.7)), row.y - Math.round(stemH * 0.7), P.leaf[3]);
+        if (s >= 3) {
+          PK.px(f.x - 2 + bend(Math.round(stemH * 0.35)), row.y - Math.round(stemH * 0.35), P.leaf[1]);
+          PK.px(f.x + 2 + bend(Math.round(stemH * 0.5)), row.y - Math.round(stemH * 0.5), P.leaf[2]);
+        }
+        // flower head
+        const rows = HEADS[Math.min(4, Math.max(1, s))];
+        PK.sprite(rows, { a: pal[3], b: pal[2], c: pal[1], d: pal[0] },
+          f.x - Math.floor(rows[0].length / 2) + head, row.y - stemH - rows.length + 1);
+        PK.px(f.x + head - 1, row.y - stemH - rows.length + 1, pal[4]);
+      }
+    }
+  }
+
+  // ---- boot --------------------------------------------------------------------------------
+  const canvas = document.getElementById("c");
+  PK.fit(canvas, 150, (v) => {
+    layout(v);
+    buildBG(v);
+  });
+
+  PK.loop((t) => {
+    PK.blit(bg);
+    drawCanal(t);
+    drawFarMill(t);
+    drawClouds(t);
+    drawBirds(t);
+    drawWindmill(t);
+    drawTulips(t);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "title": "Choose the composition for the finance dashboard",
+  "question": "The roll assigned the Split Ledger. Keep it, take another dealt structure, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Split Ledger",
+      "kicker": "THE ROLL",
+      "lineage": "double-entry ledger pages; in/out columns meeting at a net",
+      "thesis": "The month is read as a ledger: money in on the left, money out on the right, the net carried on a spine between them.",
+      "palette": ["#0B4F47", "#00795C", "#0072B2", "#E69F00", "#D55E00", "#F4F6F5"],
+      "materials": ["tinted in/out regions", "hatched kept-money band"],
+      "viewport": "Header with month stepper; the KPI band splits into IN (income), a deep-teal net spine (balance, savings rate) and OUT (spending); the 6-month chart below paints income as a column with the spent portion solid and the kept portion hatched.",
+      "risk": "The two-sided band can read as decoration if the tint does not carry real state."
+    },
+    {
+      "id": "dealt-1",
+      "label": "Ledger Rail",
+      "kicker": "THE ROLL",
+      "lineage": "accounting sidebar; monthly close sheet",
+      "thesis": "A sticky this-month rail owns the headline numbers and the budgets; the working area beside it owns the charts and the transactions.",
+      "palette": ["#0B4F47", "#00795C", "#0072B2", "#E69F00", "#D55E00", "#F4F6F5"],
+      "materials": ["sticky summary column", "budget bars in the rail"],
+      "viewport": "Left 360px sticky rail: balance, income, spending, savings rate as stacked tiles plus the budget bars. Right column: 6-month chart, category chart, transactions.",
+      "risk": "The rail grows tall; budgets compete with the headline numbers for attention."
+    },
+    {
+      "id": "dealt-2",
+      "label": "Two-Band Month",
+      "kicker": "THE ROLL",
+      "lineage": "monthly statement masthead",
+      "thesis": "A full-width month band carries the stepper, the balance and the savings rate; the work sits in three zones under it.",
+      "palette": ["#0B4F47", "#00795C", "#0072B2", "#E69F00", "#D55E00", "#F4F6F5"],
+      "materials": ["coloured masthead band", "zone grid"],
+      "viewport": "Deep-teal masthead with the month stepper, balance and savings rate; below it a KPI strip, then the charts, then transactions and budgets.",
+      "risk": "The masthead can swallow the KPI row into a hero-metric clich."
+    }
+  ],
+  "buildPath": { "value": "code", "toggle": true }
+}

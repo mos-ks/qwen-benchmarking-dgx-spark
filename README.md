@@ -165,6 +165,20 @@ Single runs swing by a point or more (the same setup produced a 3.5 and a 7.5 li
 the means, not single cells. Thinking low wins on the windmill every time (8.0, 8.0 against 6.5, 7.0)
 and has not produced a collapse; kit v6 with thinking low is the best configuration so far.
 
+## Harness comparison (same kit, same supervisor, thinking low)
+
+The kit's supervisor was ported to Qwen Code (command hooks), Pi and oh-my-pi (extensions) through one
+shared script, [`harness/harnesses/supervise.py`](harness/harnesses/supervise.py), so only the harness differs.
+
+| Harness | Bonsai | Lighthouse | Windmill | Dashboard | Mean |
+|---|---|---|---|---|---|
+| OpenCode 1.18 (kit v7) | 7.5 | 7.5 | 7.0 | 7.5 | 7.4 |
+| Qwen Code 0.25 | 6.5 | 6.5 | 8.0 | 8.0 | 7.3 |
+| Pi 1.1 | 7.0 | 7.5 | 7.0 | 7.0 | 7.1 |
+| oh-my-pi 18.8 | 6.0 | 7.5 | | | 6.8 |
+
+No harness beats OpenCode, which also serves the HTTP API natively, so it stays the one harness.
+
 ## Critic calibration
 
 The supervisor's critic is the local model judging its own page, and a lenient critic stops the fix

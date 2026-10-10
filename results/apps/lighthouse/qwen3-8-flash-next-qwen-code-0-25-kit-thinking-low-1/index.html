@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lighthouse at Night</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #04060e; /* matches the darkest sky so letterbox bars blend in */
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #c {
+    display: block;
+    background: #04060e;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0);
+    white-space: nowrap; border: 0;
+  }
+</style>
+</head>
+<body>
+  <h1 class="visually-hidden">An animated pixel-art lighthouse on a rocky cliff by the sea at night, with a sweeping light beam, angled rain, breaking waves with foam, and a moon partly behind drifting clouds.</h1>
+  <canvas id="c" aria-label="Pixel-art night scene of a lighthouse on a rocky cliff by the sea"></canvas>
+
+<script>
+(function () {
+  "use strict";
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d", { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+
+  var mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var reduced = mq.matches;
+
+  // ---- Palette: limited, each material a 4-5 shade ramp (light = top-left) --
+  var PAL = {
+    sky:    ["#04060e", "#080d22", "#111a44", "#1d2b66", "#2e4189"],
+    horizonGlow: "#3a5390",
+    sea:    ["#040c1c", "#081d38", "#0f3760", "#175288", "#2874b0"],
+    crest:  "#3d93cf",
+    foam:   ["#5f93b6", "#9cc8dd", "#d6eefb", "#ffffff"],
+    stone:  ["#0d0d16", "#191a26", "#292b40", "#3b3e5a", "#565c81"],
+    stoneHi:"#6f769e",
+    white:  ["#28304a", "#414c6c", "#68759a", "#9aa7c7", "#d7e0f1"],
+    red:    ["#300d16", "#4d1720", "#75242c", "#a53b40", "#cf6359"],
+    warm:   ["#6e3418", "#b85a22", "#f0a338", "#ffe08a", "#fff6d8"],
+    beam:   ["#b98b4a", "#ffcf72", "#fff3cf"],
+    moon:   ["#8296b6", "#aebfd8", "#dbe5f4", "#ffffff"],
+    cloud:  ["#0f1428", "#19223f", "#26325c", "#37467c", "#50619c"],
+    outline:"#05060d"
+  };
+
+  var colorCache = {};
+  function rgb(hex) {
+    var c = colorCache[hex];
+    if (c) return c;
+    var h = hex.replace("#", "");
+    c = [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
+    colorCache[hex] = c;
+    return c;
+  }
+
+  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  function thr(x, y) { return (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16; }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  var W = 0, H = 0, img = null, D = null;
+
+  function setP(x, y, col) {
+    x |= 0; y |= 0;
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    var i = (y * W + x) * 4;
+    D[i] = col[0]; D[i + 1] = col[1]; D[i + 2] = col[2]; D[i + 3] = 255;
+  }
+  function blendP(x, y, col, a) {
+    x |= 0; y |= 0;
+    if (a <= 0 || x < 0 || y < 0 || x >= W || y >= H) return;
+    if (a > 1) a = 1;
+    var i = (y * W + x) * 4;
+    D[i]     = D[i]     + (col[0] - D[i])     * a;
+    D[i + 1] = D[i + 1] + (col[1] - D[i + 1]) * a;
+    D[i + 2] = D[i + 2] + (col[2] - D[i + 2]) * a;
+    D[i + 3] = 255;
+  }
+  function rect(x, y, w, h, col) { for (var j = 0; j < h; j++) for (var i = 0; i < w; i++) setP(x + i, y + j, col); }
+  function line(x0, y0, x1, y1, col) {
+    x0 |= 0; y0 |= 0; x1 |= 0; y1 |= 0;
+    var dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    var dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    var err = dx + dy, e2, k = 0;
+    while (k++ < 6000) { setP(x0, y0, col); if (x0 === x1 && y0 === y1) break; e2 = 2 * err; if (e2 >= dy) { err += dy; x0 += sx; } if (e2 <= dx) { err += dx; y0 += sy; } }
+  }
+  function disc(cx, cy, r, col) { var rr = r * r; for (var y = -r; y <= r; y++) for (var x = -r; x <= r; x++) if (x * x + y * y <= rr) setP(cx + x, cy + y, col); }
+  function poly(points, col) {
+    var minY = 1e9, maxY = -1e9, i;
+    for (i = 0; i < points.length; i++) { if (points[i][1] < minY) minY = points[i][1]; if (points[i][1] > maxY) maxY = points[i][1]; }
+    minY = Math.floor(minY); maxY = Math.ceil(maxY);
+    for (var y = minY; y <= maxY; y++) {
+      var xs = [];
+      for (i = 0; i < points.length; i++) {
+        var a = points[i], b = points[(i + 1) % points.length];
+        if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y)) { var t = (y - a[1]) / (b[1] - a[1]); xs.push(a[0] + t * (b[0] - a[0])); }
+      }
+      xs.sort(function (p, q) { return p - q; });
+      for (i = 0; i + 1 < xs.length; i += 2) { var sx = Math.round(xs[i]), ex = Math.round(xs[i + 1]); for (var x = sx; x <= ex; x++) setP(x, y, col); }
+    }
+  }
+  function vgrad(x0, x1, y0, y1, colors) {
+    var n = colors.length - 1, rgbs = colors.map(rgb), span = Math.max(1, (y1 - y0) - 1);
+    for (var y = y0; y <= y1; y++) {
+      var p = ((y - y0) / span) * n, idx = Math.min(n - 1, Math.floor(p)), f = p - idx, c0 = rgbs[idx], c1 = rgbs[idx + 1];
+      for (var x = x0; x <= x1; x++) setP(x, y, (f > thr(x, y)) ? c1 : c0);
+    }
+  }
+  function glow(cx, cy, r, colHex, strength) {
+    var col = rgb(colHex);
+    for (var y = -r; y <= r; y++) for (var x = -r; x <= r; x++) {
+      var d = Math.sqrt(x * x + y * y) / r; if (d >= 1) continue;
+      var inten = strength * (1 - d) * (1 - d);
+      if (inten > thr(cx + x, cy + y)) blendP(cx + x, cy + y, col, inten);
+    }
+  }
+  function angDiff(a, b) { var d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
+
+  // Solid warm beam wedge with a bright core and dithered soft falloff.
+  function beam(bx, by, angleDeg, len, halfSpreadDeg, alpha) {
+    var a0 = angleDeg * Math.PI / 180, hs = halfSpreadDeg * Math.PI / 180;
+    var C0 = rgb(PAL.beam[2]), C1 = rgb(PAL.beam[1]), C2 = rgb(PAL.beam[0]);
+    var r = Math.ceil(len);
+    var x0 = Math.max(0, Math.floor(bx - r)), x1 = Math.min(W - 1, Math.ceil(bx + r));
+    var y0 = Math.max(0, Math.floor(by - r)), y1 = Math.min(H - 1, Math.ceil(by + r));
+    for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) {
+      var dx = x - bx, dy = y - by, dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > r || dist < 1) continue;
+      var ad = Math.abs(angDiff(Math.atan2(dy, dx), a0)); if (ad > hs) continue;
+      var angF = 1 - ad / hs, distF = 1 - dist / r;
+      var inten = angF * angF * (0.25 + 0.75 * distF);
+      if (inten < 0.04) continue;
+      var col = (angF > 0.72 && distF > 0.55) ? C0 : (angF > 0.38 ? C1 : C2);
+      var a = inten * alpha;
+      var gate = angF > 0.6 ? 0 : thr(x, y) * 0.9; // solid core, dithered soft edge
+      if (a > gate) blendP(x, y, col, Math.min(0.85, a));
+    }
+    var steps = Math.max(2, Math.ceil(r * 0.6));
+    for (var s = 0; s < steps; s++) {
+      var d = s / (steps - 1) * len;
+      var px = Math.round(bx + Math.cos(a0) * d), py = Math.round(by + Math.sin(a0) * d);
+      blendP(px, py, C0, 0.55 * (1 - d / len));
+      if (s < 10) { blendP(px + 1, py, C0, 0.35); blendP(px, py + 1, C0, 0.35); }
+    }
+  }
+
+  var scene = {};
+
+  // ---- Scene layout: aspect-aware + centred so phones don't drift or spike --
+  function buildScene() {
+    var rand = mulberry32(1337);
+    var cx = Math.round(W * 0.5);
+    scene.cx = cx;
+
+    scene.horizonY = Math.round(H * 0.50);
+    scene.waterY = Math.round(H * 0.80);       // foreground waterline where the rock meets the sea
+    scene.rockBaseY = scene.waterY;
+    scene.plateauY = Math.round(H * 0.50);      // flat cliff top where the buildings stand
+
+    var cliffHalf = Math.round(Math.max(30, Math.min(W * 0.36, 96)));
+    var flatHalf = Math.round(cliffHalf * 0.54);
+    scene.cliffHalf = cliffHalf;
+    scene.flatHalf = flatHalf;
+
+    var top = new Int16Array(W);
+    for (var x = 0; x < W; x++) top[x] = scene.rockBaseY + 8;
+    for (var i = -flatHalf; i <= flatHalf; i++) { var xp = cx + i; if (xp >= 0 && xp < W) top[xp] = scene.plateauY; }
+
+    function side(dir) {
+      var xx = cx + dir * (flatHalf + 1), y = scene.plateauY, guard = 0;
+      while (guard++ < W && Math.abs(xx - cx) <= cliffHalf * 1.28) {
+        var stepW = 1 + Math.floor(rand() * 3);
+        for (var s = 0; s < stepW && Math.abs(xx - cx) <= cliffHalf * 1.28; s++) { if (xx < 0 || xx >= W) break; top[xx] = Math.min(y, scene.rockBaseY + 8); xx += dir; }
+        var rr = rand();
+        if (rr < 0.14) y -= 2 + Math.floor(rand() * 6);
+        else if (rr < 0.62) y += 1 + Math.floor(rand() * 5);
+        if (y >= scene.rockBaseY + 8) { while (xx >= 0 && xx < W && Math.abs(xx - cx) <= cliffHalf * 1.28) { top[xx] = scene.rockBaseY + 8; xx += dir; } break; }
+      }
+    }
+    side(-1); side(1);
+
+    var spikes = mulberry32(4242);
+    var spikeCount = 2 + Math.floor(spikes() * 2);
+    for (var sp = 0; sp < spikeCount; sp++) {
+      var dir = sp % 2 === 0 ? -1 : 1;
+      var base = Math.round(flatHalf + (cliffHalf - flatHalf) * (0.35 + spikes() * 0.5));
+      var px = cx + dir * base; if (px < 1 || px >= W - 1) continue;
+      var peakY = top[px] - (5 + Math.round(spikes() * 8));
+      top[px] = peakY;
+      if (px - 1 >= 0) top[px - 1] = Math.min(top[px - 1], peakY + 2 + Math.round(spikes() * 3));
+      if (px + 1 < W) top[px + 1] = Math.min(top[px + 1], peakY + 2 + Math.round(spikes() * 3));
+    }
+    scene.top = top;
+
+    var rmin = W, rmax = 0;
+    for (var xx2 = 0; xx2 < W; xx2++) if (top[xx2] <= scene.rockBaseY) { if (xx2 < rmin) rmin = xx2; if (xx2 > rmax) rmax = xx2; }
+    scene.rockLeftX = rmin; scene.rockRightX = rmax;
+
+    // Foreground angular rocks clustered at the waterline.
+    scene.foreRocks = [];
+    var fr = mulberry32(90210);
+    for (var f = 0; f < 5; f++) {
+      var fx = cx + Math.round((fr() * 2 - 1) * (cliffHalf * 1.05));
+      var fy = scene.waterY + Math.round(fr() * 6);
+      var fw = 8 + Math.round(fr() * 12), fh = 6 + Math.round(fr() * 11);
+      scene.foreRocks.push({ x: fx, y: fy, w: fw, h: fh, seed: Math.floor(fr() * 1e6) });
+    }
+
+    scene.moon = { x: Math.round(W * 0.22), y: Math.round(H * 0.17), r: Math.max(6, Math.round(Math.min(W, H) * 0.055)) };
+
+    var srnd = mulberry32(2024);
+    scene.stars = [];
+    var starCount = Math.round((W * scene.horizonY) / 85);
+    for (var st = 0; st < starCount; st++) scene.stars.push({ x: Math.floor(srnd() * W), y: Math.floor(srnd() * Math.max(6, scene.horizonY - 10)), phase: srnd() * 6.28, bright: srnd() });
+
+    var crnd = mulberry32(77);
+    scene.clouds = [];
+    for (var cl = 0; cl < 3; cl++) {
+      var puffs = [], np = 5 + Math.floor(crnd() * 4);
+      for (var p = 0; p < np; p++) puffs.push({ dx: Math.round((p - np / 2) * (5 + crnd() * 4)), dy: Math.round(crnd() * 3 - 1), r: 3 + Math.round(crnd() * 3) });
+      scene.clouds.push({ x0: crnd() * (W + 40) - 20, y: Math.round(H * (0.30 + cl * 0.05 + crnd() * 0.02)), speed: 2 + cl * 1.3 + crnd(), puffs: puffs, w: np * 6 });
+    }
+
+    // Buildings centred; tower at cx, keeper's house to its left, joined by a path.
+    var towerH = Math.min(Math.round(H * 0.30), Math.max(26, Math.round(cliffHalf * 0.85)));
+    var tbHalf = Math.min(13, Math.max(5, Math.round(cliffHalf * 0.20)));
+    var ttHalf = Math.min(9, Math.max(3, Math.round(cliffHalf * 0.12)));
+    var tcx = cx;
+    scene.tower = { cx: tcx, baseY: scene.plateauY, topY: scene.plateauY - towerH, baseHalf: tbHalf, topHalf: ttHalf, bandH: Math.max(3, Math.round(towerH / 7)) };
+    scene.lantern = { x: tcx, y: scene.plateauY - towerH - 6 };
+
+    var houseW = Math.min(18, Math.max(9, Math.round(cliffHalf * 0.26)));
+    var houseH = Math.min(14, Math.max(7, Math.round(houseW * 0.72)));
+    var houseX = tcx - tbHalf - houseW - 2;
+    if (houseX < cx - flatHalf + 1) houseX = cx - flatHalf + 1;
+    scene.house = { x: houseX, w: houseW, h: houseH, baseY: scene.plateauY };
+
+    scene.cracks = [];
+    var ck = mulberry32(314);
+    var cracks = 5 + Math.floor(ck() * 4);
+    for (var c = 0; c < cracks; c++) {
+      var cxx = cx + Math.round((ck() * 2 - 1) * cliffHalf);
+      var cyy = scene.plateauY + Math.round(ck() * (scene.rockBaseY - scene.plateauY) * 0.4);
+      var pts = [];
+      for (var k = 0; k < 5; k++) pts.push([cxx + Math.round((ck() * 2 - 1) * 2), cyy + k * (2 + Math.round(ck() * 2))]);
+      scene.cracks.push(pts);
+    }
+  }
+
+  // ---- Sky / stars / moon / clouds --------------------------------------
+  function drawSky() {
+    vgrad(0, W - 1, 0, scene.horizonY, PAL.sky);
+    var hg = rgb(PAL.horizonGlow);
+    for (var x = 0; x < W; x++) for (var y = scene.horizonY - 9; y <= scene.horizonY; y++) { var f = (y - (scene.horizonY - 9)) / 9; if (f > thr(x, y)) blendP(x, y, hg, 0.4 * f); }
+  }
+  function drawStars(t) {
+    var c1 = rgb("#8fa0c8"), c2 = rgb("#e7eefb");
+    for (var i = 0; i < scene.stars.length; i++) {
+      var s = scene.stars[i], tw = reduced ? 0.6 : (Math.sin(t * 1.7 + s.phase) + 1) / 2;
+      if (tw > 0.12) setP(s.x, s.y, tw > 0.72 ? c2 : c1);
+    }
+  }
+  function cloudBlob(cx2, cy2, puffs) {
+    for (var p = 0; p < puffs.length; p++) {
+      var pf = puffs[p], px = Math.round(cx2 + pf.dx), py = Math.round(cy2 + pf.dy);
+      for (var y = -pf.r; y <= pf.r; y++) for (var x = -pf.r; x <= pf.r; x++) {
+        var yy = y * 1.6; if (x * x + yy * yy > pf.r * pf.r) continue;
+        var col = y < -pf.r * 0.4 ? PAL.cloud[3] : y > pf.r * 0.45 ? PAL.cloud[1] : PAL.cloud[2];
+        setP(px + x, py + y, rgb(col));
+      }
+    }
+  }
+  function drawMoon() {
+    var m = scene.moon;
+    glow(m.x, m.y, Math.round(m.r * 3.4), PAL.moon[1], 0.45);
+    disc(m.x, m.y, m.r, rgb(PAL.moon[2]));
+    var rr = m.r * m.r, x, y;
+    for (y = -m.r; y <= m.r; y++) for (x = -m.r; x <= m.r; x++) {
+      if (x * x + y * y > rr) continue;
+      if (x + y < -m.r * 0.5) setP(m.x + x, m.y + y, rgb(PAL.moon[3]));
+      else if (x + y > m.r * 0.6) setP(m.x + x, m.y + y, rgb(PAL.moon[0]));
+      else if (x * 0.6 + y > m.r * 0.25) setP(m.x + x, m.y + y, rgb(PAL.moon[1]));
+    }
+    disc(m.x - Math.round(m.r * 0.35), m.y - Math.round(m.r * 0.15), Math.max(1, Math.round(m.r * 0.2)), rgb(PAL.moon[1]));
+    disc(m.x + Math.round(m.r * 0.25), m.y + Math.round(m.r * 0.3), Math.max(1, Math.round(m.r * 0.16)), rgb(PAL.moon[0]));
+    disc(m.x + Math.round(m.r * 0.1), m.y - Math.round(m.r * 0.45), Math.max(1, Math.round(m.r * 0.12)), rgb(PAL.moon[1]));
+
+    // Cloud that always sits in front of the moon's lower-right -> "partly behind clouds".
+    var R = m.r;
+    cloudBlob(m.x + Math.round(R * 0.45), m.y + Math.round(R * 0.4), [
+      { dx: 0, dy: 0, r: Math.round(R * 0.95) },
+      { dx: Math.round(R * 0.95), dy: -1, r: Math.round(R * 0.6) },
+      { dx: -Math.round(R * 0.95), dy: 1, r: Math.round(R * 0.6) },
+      { dx: Math.round(R * 1.8), dy: 0, r: Math.round(R * 0.45) },
+      { dx: -Math.round(R * 1.7), dy: 2, r: Math.round(R * 0.4) }
+    ]);
+  }
+  function drawClouds(t) {
+    for (var c = 0; c < scene.clouds.length; c++) {
+      var cl = scene.clouds[c], span = W + cl.w * 2;
+      var bx = ((cl.x0 + (reduced ? 0 : t * cl.speed)) % span) - cl.w;
+      cloudBlob(bx, cl.y, cl.puffs);
+    }
+  }
+
+  // ---- Sea: receding gradient + horizontal swell crests + sparkles -------
+  function drawSea(t) {
+    var hy = scene.horizonY, n = PAL.sea.length - 1, rgbs = PAL.sea.map(rgb), span = Math.max(1, (H - hy) - 1);
+    for (var y = hy; y < H; y++) {
+      var p = ((y - hy) / span) * n, idx = Math.min(n - 1, Math.floor(p)), f = p - idx, c0 = rgbs[idx], c1 = rgbs[idx + 1];
+      for (var x = 0; x < W; x++) setP(x, y, (f > thr(x, y)) ? c1 : c0);
+    }
+    var crestC = rgb(PAL.crest), crestDim = rgb(PAL.sea[4]);
+    for (var yy = hy + 1; yy < H; yy++) {
+      var depth = (yy - hy) / (H - hy);
+      for (var xx = 0; xx < W; xx++) {
+        var v = Math.sin(yy * 0.7 - (reduced ? 0 : t * 1.4) + Math.sin(xx * 0.16 + (reduced ? 0 : t * 0.7)) * 1.3);
+        if (v > 0.84) setP(xx, yy, depth > 0.45 ? crestDim : crestC);
+        var h = (xx * 73856093 ^ yy * 19349663) >>> 0;
+        if ((h & 1023) < 3) blendP(xx, yy, rgb(PAL.sea[4]), 0.5);
+      }
+    }
+    var m = scene.moon;
+    if (m.x > 2 && m.x < W - 2) {
+      var g = rgb(PAL.moon[1]);
+      for (var y2 = hy + 1; y2 < scene.waterY; y2++) {
+        var wob = Math.round(Math.sin(y2 * 0.5 + (reduced ? 0 : t * 2)) * (1 + (y2 - hy) * 0.04));
+        var fade = 0.30 * (1 - (y2 - hy) / (scene.waterY - hy));
+        for (var d = -1; d <= 1; d++) if (thr(m.x + wob + d, y2) < fade + 0.3) blendP(m.x + wob + d, y2, g, fade * 0.6);
+      }
+    }
+  }
+
+  // ---- Rocky cliff: one continuous left-lit shade field across the face ---
+  function drawRock() {
+    var top = scene.top, rand = mulberry32(99), waterY = scene.waterY;
+    var wr = Math.max(1, scene.rockRightX - scene.rockLeftX);
+    for (var x = 0; x < W; x++) {
+      var ty = top[x]; if (ty > waterY) continue;
+      var leftEdge = (x === 0 || top[x - 1] > waterY);
+      var rightEdge = (x === W - 1 || top[x + 1] > waterY);
+      var yspan = Math.max(1, waterY - ty);
+      for (var y = ty; y <= waterY && y < H; y++) {
+        var xRel = (x - scene.rockLeftX) / wr;
+        var yRel = (y - ty) / yspan;
+        var s = 0.60 * xRel + 0.55 * yRel;
+        var pos = s * 4, lo = Math.floor(pos), hi = Math.min(4, lo + 1), frac = pos - lo;
+        var idx = (thr(x, y) < frac) ? hi : lo; idx = Math.max(0, Math.min(4, idx));
+        if (rightEdge) idx = 0; else if (leftEdge) idx = 4;
+        setP(x, y, rgb(PAL.stone[idx]));
+      }
+      setP(x, ty, rgb(PAL.stoneHi)); if (ty + 1 <= waterY) setP(x, ty + 1, rgb(PAL.stone[4]));
+      if (waterY >= ty) setP(x, waterY, rgb(PAL.stone[0]));
+      if (waterY - 1 >= ty) setP(x, waterY - 1, rgb(PAL.stone[1]));
+    }
+    var cnt = Math.round(W * 5);
+    for (var i = 0; i < cnt; i++) {
+      var px = Math.floor(rand() * W), tyv = top[px]; if (tyv > waterY) continue;
+      var py = tyv + Math.floor(rand() * (waterY - tyv)); var r = rand();
+      if (r < 0.05) setP(px, py, rgb(PAL.stoneHi)); else if (r < 0.12) setP(px, py, rgb(PAL.stone[0]));
+    }
+    for (var c = 0; c < scene.cracks.length; c++) {
+      var pts = scene.cracks[c];
+      for (var k = 0; k < pts.length - 1; k++) { var a = pts[k], b = pts[k + 1]; if (b[1] <= waterY && b[1] >= top[b[0]]) line(a[0], a[1], b[0], b[1], rgb(PAL.stone[0])); }
+    }
+    for (var s2 = 0; s2 < scene.foreRocks.length; s2++) {
+      var rk = scene.foreRocks[s2];
+      var pts2 = [[rk.x - rk.w, rk.y], [rk.x - Math.round(rk.w * 0.4), rk.y - rk.h], [rk.x + Math.round(rk.w * 0.15), rk.y - Math.round(rk.h * 1.15)], [rk.x + Math.round(rk.w * 0.55), rk.y - Math.round(rk.h * 0.6)], [rk.x + rk.w, rk.y]];
+      poly(pts2, rgb(PAL.stone[2]));
+      poly([[rk.x - rk.w, rk.y], [rk.x - Math.round(rk.w * 0.4), rk.y - rk.h], [rk.x, rk.y]], rgb(PAL.stone[3]));
+      poly([[rk.x, rk.y], [rk.x + rk.w, rk.y], [rk.x + Math.round(rk.w * 0.55), rk.y - Math.round(rk.h * 0.6)]], rgb(PAL.stone[1]));
+      line(rk.x - rk.w, rk.y, rk.x - Math.round(rk.w * 0.4), rk.y - rk.h, rgb(PAL.stoneHi));
+      line(rk.x + Math.round(rk.w * 0.15), rk.y - Math.round(rk.h * 1.15), rk.x + rk.w, rk.y, rgb(PAL.stone[0]));
+    }
+  }
+
+  // ---- Foam: base waterline + flank foam + breaking swells that dissipate --
+  function drawFoam(t) {
+    var top = scene.top, white = PAL.foam.map(rgb), waterY = scene.waterY;
+    var surge = reduced ? 0 : Math.round(Math.sin(t * 1.1) * 1.5);
+    var wl = waterY + surge;
+
+    for (var x = scene.rockLeftX; x <= scene.rockRightX; x++) {
+      if (top[x] > waterY) continue;
+      for (var y = wl - 2; y <= wl + 2; y++) {
+        var n = Math.sin(x * 0.5 + (reduced ? 0 : t * 3.0)) + Math.sin(x * 0.17 - (reduced ? 0 : t * 1.7));
+        if (thr(x, y) < 0.30 + 0.30 * Math.min(1, Math.abs(n))) setP(x, y, white[y <= wl ? 3 : 2]);
+      }
+    }
+    for (var x2 = 0; x2 < W; x2++) {
+      var ty = top[x2]; if (ty > waterY) continue;
+      var lw = (x2 === 0 || top[x2 - 1] > waterY), rw = (x2 === W - 1 || top[x2 + 1] > waterY);
+      if (!lw && !rw) continue;
+      for (var y2 = Math.round(waterY - (waterY - ty) * 0.5); y2 <= waterY; y2++) {
+        var nn = Math.sin(y2 * 0.6 + (reduced ? 0 : t * 3.4));
+        if (thr(x2, y2) < 0.30 + 0.4 * Math.abs(nn)) setP(x2, y2, white[(y2 % 2 === 0) ? 3 : 2]);
+      }
+    }
+    var half = scene.cliffHalf;
+    for (var b = 0; b < 3; b++) {
+      var phase = t * 1.15 + b * 2.1, life = (Math.sin(phase) + 1) / 2;
+      var height = Math.round(1 + life * (4 + b));
+      var bx = scene.cx + Math.round(Math.sin(phase * 0.6 + b) * (half * 0.55)) + (b - 1) * Math.round(half * 0.4);
+      var capW = Math.round(3 + life * (6 + b * 2));
+      for (var dx = -capW; dx <= capW; dx++) {
+        var colh = Math.round((1 - Math.abs(dx) / capW) * height);
+        for (var dy = 0; dy <= colh; dy++) if (thr(bx + dx, wl - dy) < 0.45 + life * 0.4) setP(bx + dx, wl - dy, white[dy === colh ? 3 : 2]);
+      }
+      var spray = Math.round(capW * 1.1);
+      for (var s = 0; s < spray; s++) {
+        if (Math.sin(s * 20.3 + phase) < -0.2 + life) continue;
+        var rx = (Math.sin(s * 12.9898 + phase) * 43758.5453) % 1; if (rx < 0) rx += 1;
+        var ry = (Math.sin(s * 78.233 + phase) * 12543.123) % 1; if (ry < 0) ry += 1;
+        var sx = Math.round(bx + (rx * 2 - 1) * capW * 1.5);
+        var sy = wl - height - 2 - Math.round(ry * (3 + life * 5));
+        setP(sx, sy, white[3]);
+      }
+    }
+  }
+
+  // ---- Lighthouse --------------------------------------------------------
+  function drawTower() {
+    var t = scene.tower, outline = rgb(PAL.outline);
+    for (var y = t.topY; y <= t.baseY; y++) {
+      var tt = (y - t.topY) / (t.baseY - t.topY);
+      var half = Math.round(t.topHalf + (t.baseHalf - t.topHalf) * tt);
+      var left = t.cx - half, right = t.cx + half, span = Math.max(1, right - left);
+      var band = Math.floor((y - t.topY) / t.bandH) % 2, ramp = (band ? PAL.red : PAL.white).map(rgb);
+      for (var x = left; x <= right; x++) {
+        var fx = (x - left) / span; var idx = fx < 0.26 ? 4 : fx < 0.5 ? 3 : fx < 0.74 ? 2 : fx < 0.9 ? 1 : 0;
+        setP(x, y, ramp[idx]);
+      }
+      setP(right, y, ramp[0]);
+      setP(left, y, ramp[3]);
+      if ((y - t.topY) % t.bandH === t.bandH - 1) for (var xx = left; xx <= right; xx++) blendP(xx, y, outline, 0.3);
+    }
+    var dw = Math.max(2, Math.round(t.baseHalf * 0.5)), db = t.baseY;
+    rect(t.cx - dw, db - dw * 2, dw * 2 + 1, dw * 2 + 1, rgb(PAL.outline));
+    rect(t.cx - dw + 1, db - dw * 2, dw, dw * 2 + 1, rgb(PAL.warm[1]));
+    for (var sx = t.cx - t.baseHalf - 1; sx <= t.cx + t.baseHalf + 1; sx++) blendP(sx, t.baseY + 1, rgb(PAL.stone[0]), 0.5);
+  }
+  function drawLanternRoom() {
+    var t = scene.tower, deckHalf = t.topHalf + 3, gTop = t.topY - 9, gBot = t.topY - 3, ghalf = t.topHalf;
+    rect(t.cx - deckHalf, t.topY - 2, deckHalf * 2 + 1, 2, rgb(PAL.stone[1]));
+    rect(t.cx - deckHalf, t.topY - 2, deckHalf * 2 + 1, 1, rgb(PAL.stone[4]));
+    var railY = t.topY - 6;
+    for (var rx = t.cx - deckHalf; rx <= t.cx + deckHalf; rx++) { setP(rx, railY, rgb(PAL.stone[4])); if ((rx - (t.cx - deckHalf)) % 2 === 0) { setP(rx, railY + 1, rgb(PAL.stone[3])); setP(rx, railY + 2, rgb(PAL.stone[2])); } }
+    glow(t.cx, (gTop + gBot) >> 1, ghalf + 5, PAL.warm[3], 0.55);
+    for (var gy = gTop; gy <= gBot; gy++) for (var gx = t.cx - ghalf; gx <= t.cx + ghalf; gx++) setP(gx, gy, rgb(PAL.warm[3]));
+    for (var mx = t.cx - ghalf; mx <= t.cx + ghalf; mx += 2) rect(mx, gTop, 1, gBot - gTop + 1, rgb(PAL.outline));
+    poly([[t.cx - ghalf - 1, gTop], [t.cx + ghalf + 1, gTop], [t.cx + 1, gTop - 4], [t.cx - 1, gTop - 4]], rgb(PAL.stone[1]));
+    line(t.cx, gTop - 4, t.cx, gTop - 7, rgb(PAL.stone[4]));
+    setP(t.cx, gTop - 8, rgb(PAL.warm[4]));
+  }
+  function drawHouse() {
+    var h = scene.house, x0 = h.x, x1 = h.x + h.w, wallTop = h.baseY - h.h, mid = Math.round((x0 + x1) / 2);
+    for (var y = wallTop; y <= h.baseY; y++) for (var x = x0; x <= x1; x++) { var fx = (x - x0) / Math.max(1, h.w); setP(x, y, rgb(PAL.white[fx < 0.32 ? 3 : fx < 0.62 ? 2 : fx < 0.85 ? 1 : 0])); }
+    poly([[x0 - 1, wallTop], [x1 + 1, wallTop], [mid, wallTop - Math.round(h.h * 0.7)]], rgb(PAL.stone[1]));
+    line(x0 - 1, wallTop, mid, wallTop - Math.round(h.h * 0.7), rgb(PAL.stone[4]));
+    line(x1 + 1, wallTop, mid, wallTop - Math.round(h.h * 0.7), rgb(PAL.stone[0]));
+    var wy = wallTop + Math.round(h.h * 0.4);
+    rect(x0 + 2, wy, 2, 2, rgb(PAL.warm[3]));
+    rect(x1 - 3, wy, 2, 2, rgb(PAL.warm[3]));
+    rect(mid - 1, h.baseY - 3, 2, 3, rgb(PAL.warm[1]));
+    for (var sx = x0 - 1; sx <= x1 + 1; sx++) blendP(sx, h.baseY + 1, rgb(PAL.stone[0]), 0.5);
+  }
+  function drawPath() {
+    var t = scene.tower, h = scene.house, y = scene.plateauY;
+    for (var x = h.x + h.w; x <= t.cx - t.baseHalf; x++) { if (((x + y) & 1) === 0) setP(x, y + 1, rgb(PAL.stone[4])); else setP(x, y + 1, rgb(PAL.stone[3])); }
+  }
+
+  // ---- Rain --------------------------------------------------------------
+  var rain = [];
+  function initRain() {
+    rain = [];
+    var n = Math.max(45, Math.min(150, Math.round((W * H) / 240))), rnd = mulberry32(555);
+    for (var i = 0; i < n; i++) rain.push({ x: rnd() * W, y: rnd() * H, vx: -(8 + rnd() * 6), vy: 130 + rnd() * 80, len: 3 + Math.floor(rnd() * 3), c: rnd() });
+  }
+  function drawRain(dt) {
+    if (reduced) dt = 0;
+    var cA = rgb("#4a5c8c"), cB = rgb("#a6bbe6");
+    for (var i = 0; i < rain.length; i++) {
+      var p = rain[i]; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.y > H + 4) { p.y = -4; p.x = Math.random() * (W + 24); }
+      if (p.x < -4) p.x += W + 8;
+      var col = p.c > 0.5 ? cB : cA, ux = p.vx / p.vy;
+      for (var k = 0; k < p.len; k++) setP(Math.round(p.x - ux * k), Math.round(p.y - k), col);
+    }
+  }
+
+  // ---- Beams + lantern core ---------------------------------------------
+  function drawBeams(t) {
+    var L = scene.lantern, sweep = reduced ? 0 : Math.sin(t * 0.25);
+    var center = -90 + sweep * 58;
+    beam(L.x, L.y, center, Math.max(W, H) * 1.1, 9, 0.55);
+    beam(L.x, L.y, center + 180, Math.max(W, H) * 0.85, 9, 0.14);
+    var pulse = reduced ? 0.72 : 0.6 + 0.2 * (Math.sin(t * 3.0) + 1) / 2;
+    glow(L.x, L.y, 8, PAL.warm[4], pulse);
+    setP(L.x, L.y, rgb(PAL.warm[4]));
+  }
+
+  // ---- Fit + loop --------------------------------------------------------
+  function fit() {
+    var vw = window.innerWidth, vh = window.innerHeight, S = 176, aspect = vw / vh;
+    aspect = Math.max(0.62, Math.min(2.1, aspect));  // never an extreme-tall phone canvas -> stays centred
+    if (aspect >= 1) { H = S; W = Math.round(S * aspect); } else { W = S; H = Math.round(S / aspect); }
+    W = Math.max(96, W); H = Math.max(96, H);
+    var scale = Math.max(1, Math.floor(Math.min(vw / W, vh / H)));
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = (W * scale) + "px"; canvas.style.height = (H * scale) + "px";
+    ctx.imageSmoothingEnabled = false;
+    img = ctx.createImageData(W, H); D = img.data;
+    buildScene(); initRain();
+  }
+
+  function render(t, dt) {
+    drawSky(); drawStars(t); drawMoon(); drawClouds(t); drawSea(t);
+    drawRock(); drawPath(); drawHouse(); drawTower(); drawLanternRoom();
+    drawBeams(t); drawFoam(t); drawRain(dt);
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var start = performance.now(), last = start;
+  function frame(now) {
+    var t = (now - start) / 1000, dt = Math.min(0.05, (now - last) / 1000); last = now;
+    render(t, dt);
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("resize", fit);
+  if (mq.addEventListener) mq.addEventListener("change", function (e) { reduced = e.matches; });
+  fit();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

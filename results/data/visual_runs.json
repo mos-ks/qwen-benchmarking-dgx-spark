@@ -647,5 +647,115 @@
   "score": 7.5,
   "outcome": "done",
   "note": "picked (critic 7 vs 7, pick broke the tie): KPI cards, category bars with icons, highlighted month bars, transactions, budgets; both drafts were of similar quality; 5 min over budget. Rerun after the memory watchdog stopped vLLM during the first attempt"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 Qwen Code 0.25 + kit, thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Qwen Code 0.25 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 23.6,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "neat pads, pot with shadow, but a small tree under a vast empty sky"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 Pi 1.1 + kit, thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Pi 1.1 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 26.7,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "large tree with many shaded pads on a pot and stone slab, but set in a desert with cacti and raked sand"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 oh-my-pi 18.8 + kit, thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "oh-my-pi 18.8 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 29.0,
+  "score": 6.0,
+  "outcome": "done",
+  "note": "thin tree in a small pot on a lawn, small in the frame, dotted sun"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 Qwen Code 0.25 + kit, thinking low \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Qwen Code 0.25 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 32.1,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "striped tower with lantern, house, flat rock island, stylised wavy sea, moon; framed in a box, thin beam"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 Pi 1.1 + kit, thinking low \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Pi 1.1 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 28.3,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "slim striped tower with lantern room and long beam, house on a faceted cliff, moon behind clouds, rain, foam"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 oh-my-pi 18.8 + kit, thinking low \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "oh-my-pi 18.8 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 20.5,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "big striped tower with glowing lantern, faceted cliff, foamed outcrops, large moon behind a cloud, rain; dark boxy house, faint beam"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 Qwen Code 0.25 + kit, thinking low \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Qwen Code 0.25 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 27.4,
+  "score": 8.0,
+  "outcome": "done",
+  "note": "lattice sails, tulip rows in perspective, canal with reflections, sunset, distant mill and skyline, birds"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 Pi 1.1 + kit, thinking low \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Pi 1.1 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 15.2,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "lattice sails, sunset with a reflected sun, distant mill, tulip rows; a stray second tower base in the foreground"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 Qwen Code 0.25 + kit, thinking low \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Qwen Code 0.25 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 31.1,
+  "score": 8.0,
+  "outcome": "done",
+  "note": "KPI cards with sparklines and icons, donut with legend, highlighted month bars, transactions, budget; 8 min over budget"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 Pi 1.1 + kit, thinking low \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "Pi 1.1 + kit, thinking low",
+  "attempt": "#1",
+  "minutes": 32.2,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "spent/kept stacked bars, category bars, split KPI cards; an oversized clock pill in the header; 9 min over budget"
  }
 ]

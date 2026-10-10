@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7fb6e2">
+<title>Bonsai · a quiet wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #7fb6e2; overflow: hidden; }
+  canvas { display: block; }
+  #cap {
+    position: fixed;
+    left: 50%;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    font: 500 10px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    color: rgba(52,38,22,.5);
+    text-shadow: 0 1px 0 rgba(255,255,255,.35);
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Pixel-art bonsai in a shallow pot with leaves and wind drifting past"></canvas>
+<div id="cap">Bonsai &middot; tap for a gust</div>
+<script src="pixel-kit.js"></script>
+<script src="scene.js"></script>
+</body>
+</html>

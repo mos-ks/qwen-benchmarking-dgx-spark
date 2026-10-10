@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #243c56; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+"use strict";
+const R = PK.ramps;
+const canvas = document.getElementById("c");
+
+// smooth sky: hard bands of a fine ramp (no dither grid, reads clean at 1x)
+const skyBand = ["#3f83c8", "#4f8fd0", "#5f9bd8", "#70a9de", "#82b7e5", "#96c4eb", "#a9d2f0", "#c0e0f5", "#d8ecf8"];
+const grass     = ["#1e3524", "#2c4c31", "#3a6140", "#4f7d4c"];
+const soil      = "#33231a";
+const hillFar   = "#a4bfc4";
+const hillNear  = "#7ea38c";
+
+let W = 0, H = 0, cx = 0, gy = 0, by = 0, y0 = 0, U = 1;
+let scenery, tree;
+const m = (v) => Math.round(v * U);
+
+// ---- particle fields (created once, re-anchored on resize) -----------------
+function baseVel(d) { for (const p of d.particles) if (p.bvx === undefined) { p.bvx = p.vx; p.bvy = p.vy; } }
+const streaksBack  = PK.drift({ n: 10, seed: 71, area: [0, 0, 1, 1], vx: [-9, -5],   vy: [0.8, 2.2], len: [2, 4] });
+const streaksFront = PK.drift({ n: 8,  seed: 72, area: [0, 0, 1, 1], vx: [-26, -15], vy: [1, 3],     len: [4, 8] });
+const leaves       = PK.drift({ n: 26, seed: 73, area: [0, 0, 1, 1], vx: [-15, -5],  vy: [2, 8],     len: [1, 2] });
+baseVel(streaksBack); baseVel(streaksFront); baseVel(leaves);
+let clouds = [];
+let gusts = [];
+
+// ---- static scenery layer ---------------------------------------------------
+function buildScenery() {
+  const halfW = m(15);
+  scenery = PK.layer(W, H, () => {
+    for (let y = 0; y <= gy + 1; y++) {
+      PK.rect(0, y, W, 1, skyBand[Math.min(skyBand.length - 1, Math.floor((y / (gy + 2)) * skyBand.length))]);
+    }
+    // soft sun, upper-left, matching the kit's top-left key light
+    const sx = Math.round(W * 0.16), sy = Math.round(H * 0.13);
+    PK.glow(sx, sy, 9, R.warmLight[4], 0.4);
+    PK.glow(sx, sy, 5, R.warmLight[3], 0.5);
+    PK.disc(sx, sy, 2, "#fff2c0");
+
+    // far hills, low contrast
+    PK.ellipse(Math.round(W * 0.24), gy + 8, Math.round(W * 0.36), 15, hillFar);
+    PK.ellipse(Math.round(W * 0.78), gy + 10, Math.round(W * 0.34), 12, hillFar);
+    PK.ellipse(Math.round(W * 0.55), gy + 12, Math.round(W * 0.30), 10, hillNear);
+
+    // ground body
+    PK.gradient(0, gy, W, H, grass);
+    PK.rect(0, gy, W, 1, "#78b86a");
+    PK.rect(0, gy + 1, W, 1, "#55884b");
+
+    // stubble row just below the ground line
+    for (let x = ((cx % 3) + 3) % 3; x < W; x += 3) PK.px(x, gy + 2, grass[1]);
+    // structured dash rows instead of random noise: regular grid, staggered by row
+    for (let y = gy + 4; y < H - 1; y += 4) {
+      const off = (y * 5) % 9;
+      for (let x = off; x < W; x += 9 + ((x + y) % 4)) {
+        PK.rect(x, y, 2, 1, grass[0]);
+        PK.px(x + 4, y + 2, grass[3]);
+      }
+    }
+    // grass tufts framing the pot and the scene corners
+    const tuft = (x, base) => {
+      PK.line(x, base, x - 1, base - 3, R.foliage[1]);
+      PK.line(x, base, x, base - 4, R.foliage[2]);
+      PK.line(x, base, x + 1, base - 3, R.foliage[3]);
+    };
+    tuft(cx - halfW - 5, gy + 3); tuft(cx - halfW - 10, gy + 2);
+    tuft(cx + halfW + 4, gy + 3); tuft(cx + halfW + 9, gy + 2);
+    tuft(Math.round(W * 0.12), gy + 4); tuft(Math.round(W * 0.88), gy + 4);
+
+    // pebbles
+    const peb = (x, y, w) => {
+      PK.rect(x, y, w, 1, R.stone[2]);
+      PK.rect(x + 1, y + 1, Math.max(1, w - 2), 1, R.stone[1]);
+      PK.px(x, y, R.stone[3]);
+    };
+    peb(cx - halfW - 14, gy + 5, 4); peb(cx + halfW + 12, gy + 6, 3);
+    peb(cx + halfW - 6, gy + 9, 4); peb(cx - halfW + 2, gy + 11, 3);
+
+    // flanking rocks
+    PK.rock(cx - halfW - 24, gy + 2, 17, 7, R.stone, { seed: 21, rough: 2, cracks: 1, ledges: 0 });
+    PK.rock(cx + halfW + 8, gy + 2, 12, 5, R.stone, { seed: 33, rough: 2, cracks: 0, ledges: 0 });
+
+    // contact shadow under the pot (kept below the ground line so it reads as ground, not air)
+    PK.ellipse(cx, gy + 2, Math.round(17 * U), 2, "#101f16");
+    PK.ellipse(cx, gy + 3, Math.round(21 * U), 1, "#1a2f21");
+  });
+}
+
+// ---- pot --------------------------------------------------------------------
+// Shallow rectangular bonsai pot: thick rim lip, tapered body, three feet.
+// Feet end on row gy-1, sitting flush on the ground line at row gy.
+function drawPot() {
+  const halfW = m(15), x0 = cx - halfW, pw = halfW * 2;
+  // rim
+  PK.rect(x0, y0, pw, 1, R.clay[3]);
+  PK.rect(x0, y0, 2, 1, R.clay[4]);
+  PK.rect(x0 + pw - 3, y0, 3, 1, R.clay[1]);
+  PK.px(x0 - 1, y0, R.clay[0]);
+  PK.px(x0 + pw, y0, R.clay[0]);
+  PK.rect(x0, y0 + 1, pw, 2, R.clay[2]);
+  PK.rect(x0, y0 + 1, 1, 2, R.clay[3]);
+  PK.px(x0 + 1, y0 + 2, R.clay[3]);
+  PK.rect(x0 + pw - 3, y0 + 1, 3, 2, R.clay[1]);
+  PK.rect(x0, y0 + 3, pw, 1, R.clay[0]);
+  // tapered body, widest at the rim
+  const ins = [0, 1, 1, 2, 2];
+  for (let yy = 0; yy < 5; yy++) {
+    const in2 = Math.round(ins[yy] * Math.max(1, U)), l = x0 + 1 + in2, r = x0 + pw - 1 - in2, y = y0 + 4 + yy;
+    PK.rect(l + 1, y, r - l - 1, 1, R.clay[2]);
+    PK.rect(l, y, 1, 1, R.clay[3]);
+    PK.px(l + 1, y, R.clay[4]);
+    if (yy < 4) PK.px(l + 2, y, R.clay[3]);
+    PK.rect(r - 1, y, 2, 1, R.clay[1]);
+    if (yy < 4) PK.rect(r + 1, y, 1, 1, R.clay[0]);
+  }
+  // feet
+  const feet = [x0 + 2, cx - 1, x0 + pw - 5];
+  for (const fx of feet) { PK.rect(fx, gy - 2, 3, 2, R.clay[1]); PK.px(fx, gy - 2, R.clay[2]); }
+}
+
+// ---- trunk, roots, branches (static) ----------------------------------------
+let pads = [];
+function buildTree() {
+  tree = PK.layer(W, H, () => {
+    drawPot();
+    // soil mound with a mossy top
+    const sw = m(13);
+    PK.rect(cx - sw, y0 - 2, sw * 2, 2, soil);
+    PK.line(cx - sw, y0 - 2, cx + sw - 1, y0 - 2, R.foliage[1]);
+    const rnd = PK.rng(5);
+    for (let i = 0; i < 20; i++) {
+      const x = cx - sw + Math.floor(rnd() * sw * 2), y = y0 - 2 + Math.floor(rnd() * 2);
+      PK.px(x, y, rnd() < 0.5 ? R.foliage[2] : R.foliage[3]);
+    }
+    // root flare over the pot lip
+    PK.limb(cx - 1, by + 2, cx - m(5), by + 3, cx - m(8), by + 5, 5 * U, 1, R.bark, 14);
+    PK.limb(cx + 2, by + 2, cx + m(6), by + 3, cx + m(9), by + 5, 4.5 * U, 1, R.bark, 15);
+    PK.limb(cx, by + 2, cx + 1, by + 4, cx + 2, by + 5, 3.5 * U, 1, R.bark, 16);
+    // S-curved trunk: thick base tapering to a slender apex
+    const t1 = PK.limb(cx, by, cx + m(5), by - m(9), cx + m(3), by - m(18), 11 * U, 5 * U, R.bark, 11);
+    const t2 = PK.limb(cx + m(3), by - m(18), cx - m(7), by - m(26), cx - m(4), by - m(34), 5 * U, 2.8 * U, R.bark, 12);
+    const t3 = PK.limb(cx - m(4), by - m(34), cx + m(3), by - m(41), cx + m(1), by - m(48), 2.8 * U, 1, R.bark, 13);
+    // volume lines: lit highlight rim on the left, shade line down the right
+    for (const pts of [t1, t2, t3]) {
+      for (const p of pts) {
+        if (p.r < 1.2) continue;
+        const lx = Math.round(p.x - p.r), ly = Math.round(p.y);
+        PK.px(lx, ly, R.bark[4]);
+        if (p.r >= 2) PK.px(lx, ly - 1, R.bark[4]);
+        if (p.r >= 3) PK.px(lx + 1, ly, R.bark[3]);
+        const rx = Math.round(p.x + p.r), ry = Math.round(p.y);
+        PK.px(rx, ry, R.bark[0]);
+        if (p.r >= 3) PK.px(rx - 1, ry, R.bark[0]);
+      }
+    }
+    // alternating branches
+    PK.limb(cx + m(3), by - m(14), cx - m(5), by - m(17), cx - m(14), by - m(21), 3.2 * U, 1, R.bark, 21);
+    PK.limb(cx - m(3), by - m(27), cx + m(6), by - m(30), cx + m(15), by - m(34), 3.2 * U, 1, R.bark, 22);
+    PK.limb(cx, by - m(38), cx - m(5), by - m(40), cx - m(11), by - m(43), 2.4 * U, 1, R.bark, 23);
+    PK.limb(cx - m(1), by - m(32), cx + m(4), by - m(36), cx + m(9), by - m(39), 2.2 * U, 1, R.bark, 24);
+  });
+
+  pads = [
+    { ax: cx - m(14), ay: by - m(21), x: cx - m(15), y: by - m(23), rx: m(11),  ry: m(5.5), seed: 31, amp: 3.0, sp: 1.15, bob: 1 },
+    { ax: cx + m(15), ay: by - m(34), x: cx + m(16), y: by - m(36), rx: m(11),  ry: m(5.5), seed: 32, amp: 2.8, sp: 0.95, bob: 1 },
+    { ax: cx - m(11), ay: by - m(43), x: cx - m(11), y: by - m(45), rx: m(8),   ry: m(4.5), seed: 33, amp: 2.4, sp: 1.35, bob: 0 },
+    { ax: cx + m(9),  ay: by - m(39), x: cx + m(10), y: by - m(41), rx: m(7),   ry: m(4),   seed: 34, amp: 2.4, sp: 1.20, bob: 0 },
+    { ax: cx + m(1),  ay: by - m(48), x: cx + m(1),  y: by - m(51), rx: m(9.5), ry: m(5),   seed: 35, amp: 2.0, sp: 0.85, bob: 0 },
+  ].map((p, i) => ({ ...p, ph: i * 1.7 }));
+
+  clouds = [
+    { x: W * 0.18, y: H * 0.16, s: 1.0, v: 1.6 },
+    { x: W * 0.62, y: H * 0.10, s: 1.5, v: 1.1 },
+    { x: W * 0.85, y: H * 0.27, s: 0.8, v: 2.1 },
+  ];
+}
+
+// hand-built pad with unmistakable volume: dark skirt offset bottom-right,
+// mid body, sunlit cap and highlight speckles toward the top-left light
+function drawPad(x, y, rx, ry, seed) {
+  const rnd = PK.rng(seed);
+  const r = Math.max(2, Math.round(Math.min(rx, ry) * 0.55));
+  const n = Math.max(6, Math.min(14, Math.round((rx * ry) / (r * r)) + 3));
+  const blobs = [];
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd());
+    blobs.push({
+      x: Math.round(x + Math.cos(a) * d * Math.max(0, rx - r)),
+      y: Math.round(y + Math.min(Math.sin(a) * d * Math.max(0, ry - r), (ry - r) * 0.25)),
+      r: r + (rnd() < 0.5 ? 0 : -1),
+    });
+  }
+  blobs.sort((p, q) => q.y - p.y);
+  for (const b of blobs) PK.disc(b.x + 1, b.y + 2, b.r + 1, R.foliage[0]);
+  for (const b of blobs) PK.disc(b.x, b.y, b.r, R.foliage[1]);
+  for (const b of blobs) {
+    PK.disc(b.x - 1, b.y - 1, Math.max(1, b.r - 1), R.foliage[2]);
+    if (b.r >= 3) PK.disc(b.x - 2, b.y - 3, Math.max(1, b.r - 2), R.foliage[3]);
+    for (let k = 0; k < Math.max(1, b.r - 1); k++) {
+      const hx = b.x - 2 + Math.round((rnd() * 2 - 1) * (b.r - 1));
+      const hy = b.y - 3 + Math.round((rnd() - 0.85) * (b.r - 1));
+      PK.px(hx, hy, rnd() < 0.45 ? R.foliage[4] : R.foliage[3]);
+    }
+  }
+}
+
+function drawPads(t, gust) {
+  for (const p of pads) {
+    const hf = Math.min(1, (by - p.y) / m(52));
+    const dx = Math.round(Math.sin(t * p.sp + p.ph) * p.amp * (0.55 + 0.45 * gust) * (0.45 + 0.55 * hf));
+    const dy = p.bob ? Math.round(Math.sin(t * 0.8 + p.ph * 1.3) * 0.9) : 0;
+    // living twig from the rigid branch tip into the swaying pad
+    PK.limb(p.ax, p.ay, (p.ax + p.x + dx) / 2, (p.ay + p.y + dy) / 2 - 2, p.x + dx, p.y + dy, 2, 1.1, R.bark, p.seed + 5);
+    drawPad(p.x + dx, p.y + dy, p.rx, p.ry, p.seed);
+    // a couple of sprig clumps on the windward edge
+    PK.pad(p.x + dx - Math.round(p.rx * 0.7), p.y + dy - 1, 3, 2, R.foliage, { seed: p.seed + 40, r: 2, n: 3 });
+  }
+}
+
+function drawClouds(t) {
+  for (const c of clouds) {
+    const span = W + 90;
+    const x = (((c.x - c.v * t) % span) + span) % span - 45;
+    const s = c.s, y = c.y;
+    PK.ellipse(x, y, 8 * s, 3 * s, "#dfeaf4");
+    PK.ellipse(x + 3 * s, y - 1, 5 * s, 2.5 * s, "#f2f8fc");
+    PK.ellipse(x - 2 * s, y - 1.5 * s, 4 * s, 2 * s, "#ffffff");
+    PK.rect(x - 7 * s, y + Math.round(2 * s), Math.round(13 * s), 1, "#b8cfdd");
+  }
+}
+
+// gently curved, dithered-fading streaks so wind reads as moving air, not dashes
+function drawStreaks(d, t, cols) {
+  for (const p of d.particles) {
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    for (let s = 0; s <= p.len; s++) {
+      const x = Math.round(p.x - (p.vx / sp) * s);
+      const y = Math.round(p.y - (p.vy / sp) * s + 2 * Math.sin(p.x * 0.18 + p.k * 6.283 + t * 2.5));
+      if (s === 0) { PK.px(x, y, cols[0]); PK.px(x - 1, y, cols[1]); continue; }
+      if (PK.bayer(x, y) < 0.15 + 0.25 * p.k + (p.len - s) * 0.2) PK.px(x, y, s === p.len ? cols[2] : cols[1]);
+    }
+  }
+}
+
+function drawLeaves(t, gust) {
+  for (const p of leaves.particles) {
+    p.vx = p.bvx * (0.5 + 0.8 * gust);
+    p.vy = p.bvy + 5 * Math.sin(t * 2.5 + p.k * 10);
+    const head = p.k < 0.33 ? R.foliage[4] : p.k < 0.66 ? R.foliage[3] : R.foliage[2];
+    PK.px(p.x, p.y, head);
+    PK.px(p.x + 1, p.y + (p.k > 0.5 ? 1 : 0), R.foliage[1]);
+    if (p.len >= 2) PK.px(p.x + 2, p.y + (p.k > 0.5 ? 1 : 0), R.foliage[1]);
+  }
+}
+
+// soft dithered gust puffs drifting fast across the sky: wind you can see moving
+function drawGusts(dt) {
+  const span = W + 40;
+  for (const g of gusts) {
+    g.x -= g.v * dt;
+    if (g.x < -20) g.x += span;
+    const gx = Math.round(g.x), gy2 = Math.round(g.y);
+    PK.glow(gx, gy2, 5, "#dcebf6", 0.4);
+    PK.glow(gx + 3, gy2, 3, "#f0f8fd", 0.45);
+  }
+}
+
+// ---- boot -------------------------------------------------------------------
+PK.fit(canvas, 150, (v) => {
+  W = v.W; H = v.H;
+  cx = Math.round(W / 2);
+  gy = Math.round(H * (H > W ? 0.80 : 0.78));
+  // grow the subject on portrait viewports so it keeps its share of the frame
+  U = Math.min(1.6, Math.max(1, H / (W * 1.35)));
+  y0 = gy - 10;          // pot rim top; feet land on row gy - 1, flush on the ground
+  by = y0 - 2;           // trunk base (soil surface)
+  buildScenery();
+  buildTree();
+  const a = [0, 4, W, gy + 3];
+  streaksBack.setArea(a);
+  streaksFront.setArea(a);
+  leaves.setArea([0, 4, W, gy + 1]);
+  gusts = [
+    { x: W * 0.2, y: H * 0.3, v: 26 },
+    { x: W * 0.7, y: H * 0.18, v: 34 },
+    { x: W * 0.5, y: H * 0.5, v: 20 },
+  ];
+});
+
+PK.loop((t, dt) => {
+  const gust = Math.max(0, 0.6 + 0.35 * Math.sin(t * 0.45) + 0.25 * Math.sin(t * 1.3 + 1));
+  PK.blit(scenery);
+  drawClouds(t);
+  drawGusts(dt);
+  streaksBack.step(dt);
+  for (const p of streaksBack.particles) p.vx = p.bvx * (0.55 + 0.6 * gust);
+  drawStreaks(streaksBack, t, ["#cfe0ee", "#b3cadd", "#93aec6"]);
+  PK.blit(tree);
+  drawPads(t, gust);
+  leaves.step(dt);
+  drawLeaves(t, gust);
+  streaksFront.step(dt);
+  for (const p of streaksFront.particles) p.vx = p.bvx * (0.55 + 0.6 * gust);
+  drawStreaks(streaksFront, t, ["#eef7fd", "#d5e7f3", "#b3cadd"]);
+});
+</script>
+</body>
+</html>

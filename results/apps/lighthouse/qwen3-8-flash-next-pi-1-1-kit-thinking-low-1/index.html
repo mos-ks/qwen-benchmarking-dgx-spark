@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>Lighthouse at Night — Pixel Art</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #05060f;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas
+      id="scene"
+      role="img"
+      aria-label="Pixel-art night scene: a red and white striped lighthouse with a lit lantern room stands on a rocky
+      cliff above the sea; its beam sweeps across the sky, rain falls at a slight angle, waves break into foam
+      against the rocks, clouds drift past a moon partly hidden behind them, and a small keeper's house with lit
+      windows sits on a rock shelf below."
+    ></canvas>
+    <script src="pixel-kit.js"></script>
+    <script src="scene.js"></script>
+  </body>
+</html>

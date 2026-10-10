@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Pixel bonsai · wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #4f8fd0; overflow: hidden; }
+  #c { display: block; }
+  /* Subtle vignette to seat the scene; pointer-events none so it never blocks anything. */
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 100% at 50% 42%, transparent 55%, rgba(10, 18, 34, 0.28) 100%);
+  }
+  #cap {
+    position: fixed; left: 0; right: 0; top: max(14px, env(safe-area-inset-top));
+    text-align: center; pointer-events: none; user-select: none;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px; letter-spacing: 0.42em; text-indent: 0.42em;
+    color: rgba(255, 255, 255, 0.62);
+    text-shadow: 0 1px 2px rgba(10, 18, 34, 0.35);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="vignette"></div>
+<div id="cap">WIND&nbsp;·&nbsp;BONSAI</div>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var R = PK.ramps;
+  var canvas = document.getElementById("c");
+
+  // --- particles (placeholder area; real area set on resize) ------------------------------
+  var leaves = PK.drift({ n: 34, seed: 51, area: [0, 0, 10, 10], vx: [-17, -8], vy: [-3, 6], len: [1, 2] });
+  // three wind layers at different speeds/sizes -> parallax depth
+  var windFar  = PK.drift({ n: 16, seed: 31, area: [0, 0, 10, 10], vx: [-12, -8],  vy: [-1, 1], len: [3, 6] });
+  var windMid  = PK.drift({ n: 16, seed: 53, area: [0, 0, 10, 10], vx: [-21, -14], vy: [-1, 2], len: [5, 9] });
+  var windNear = PK.drift({ n: 11, seed: 77, area: [0, 0, 10, 10], vx: [-34, -24], vy: [-1, 3], len: [7, 13] });
+
+  // Foliage pads relative to the soil line (dx, dy in reference px @ short side 140).
+  // Drawn back-to-front. Positioned far enough apart that open sky shows between every pad.
+  var pads = [
+    { dx: -12, dy: -11, rx:  8, ry: 5, seed: 17 }, // lower-left
+    { dx:  18, dy: -16, rx: 10, ry: 6, seed: 33 }, // lower-right
+    { dx: -17, dy: -24, rx:  9, ry: 6, seed: 9  }, // upper-left
+    { dx:   4, dy: -33, rx: 10, ry: 7, seed: 21 }, // crown (top)
+  ];
+  var LEAFC = ["#3f7a34", "#4a8a3c", "#78b84a", "#8fbf4a", "#d0a63a"];
+  var leafCol = function (k) { return LEAFC[Math.min(LEAFC.length - 1, Math.floor(k * LEAFC.length))]; };
+
+  // Three ramps per pad so every pad reads with a shadowed underside, a mid body, and a lit cap.
+  // Pushed for strong top-to-bottom contrast so each pad reads as a rounded cloud, not a flat blob.
+  var F_DARK  = ["#0b1d12", "#142c1c", "#1f4526", "#2f5f2f", "#4f8239"]; // underside / back clumps
+  var F_BASE  = ["#1d3b2a", "#2f5d34", "#4a8a3c", "#78b84a", "#b8e070"]; // main body
+  var F_LIGHT = ["#3a6b34", "#57a03f", "#8cc85a", "#c2e878", "#e6f7ad"]; // lit cap on the light side
+
+  // A foliage pad with distinct bottom shadow + top highlight for 3D volume.
+  // (cx, cy, rx, ry are already scaled to whole pixels by the caller.)
+  function drawPad(cx, cy, rx, ry, seed) {
+    rx = Math.max(3, rx); ry = Math.max(2, ry);
+    // shadowed underside, drawn first so the body clumps overlap it and only a dark rim shows below
+    PK.pad(cx + 1, cy + Math.max(1, Math.round(ry * 0.5)), rx, Math.max(2, Math.round(ry * 0.7)), F_DARK, { seed: seed + 1 });
+    // mid-tone body
+    PK.pad(cx, cy, rx, ry, F_BASE, { seed: seed });
+    // lit cap, offset toward the top-left key light
+    PK.pad(cx - Math.round(rx * 0.25), cy - Math.round(ry * 0.5),
+           Math.max(3, Math.round(rx * 0.62)), Math.max(2, Math.round(ry * 0.5)), F_LIGHT, { seed: seed + 2 });
+  }
+
+  var L = null, bgSky = null, bgTree = null;
+
+  // --- scene layout + static layers ---------------------------------------------------------
+  function layout(v) {
+    var S = Math.min(v.W, v.H);
+    var u = S / 140;
+    var sc = function (x) { return Math.round(x * u); };
+    var cx = Math.round(v.W / 2);
+    var gy = Math.round(v.H * (v.portrait ? 0.70 : 0.80)); // ground line
+
+    var rimW = sc(48), bodyW = sc(40), rimH = sc(3), bodyH = sc(9), footH = sc(2);
+    var bodyBot = gy - footH;
+    var bodyTop = bodyBot - bodyH;
+    var rimY = bodyTop - rimH;
+    var rimTop = rimY; // top surface of the rim / soil line
+
+    L = { v: v, u: u, sc: sc, cx: cx, gy: gy, rimY: rimY, rimTop: rimTop, rimW: rimW, bodyW: bodyW };
+
+    // ---- sky layer: sky gradient, sun wash, distant hills, ground, contact shadow, grass ----
+    bgSky = PK.layer(v.W, v.H, function () {
+      PK.gradient(0, 0, v.W, gy, PK.skies.day);
+
+      // faint warm sun wash tucked into the top-left corner (key light side) — small and soft,
+      // so it reads as sunlight and never competes with the bonsai
+      PK.glow(Math.round(v.W * 0.11), Math.round(gy * 0.12), sc(9), "#fff2c0", 0.16);
+
+      // distant hills: two muted, low-contrast domes sitting on the horizon
+      PK.ellipse(Math.round(cx - sc(34)), gy + sc(6), sc(58), sc(16), "#93b7ad");
+      PK.ellipse(Math.round(cx + sc(30)), gy + sc(7), sc(52), sc(13), "#84ac9d");
+      // hazier far dome
+      PK.ellipse(Math.round(cx - sc(2)), gy + sc(9), sc(74), sc(11), "#a7c6bc");
+
+      // ground: lighter at the horizon, darkening downward
+      PK.gradient(0, gy, v.W, v.H, ["#7fa35e", "#688a4c", "#527140", "#3d5934", "#2b4326"]);
+      // crisp grass edge on the horizon
+      PK.rect(0, gy, v.W, 1, "#8fb36a");
+
+      // contact shadow under the pot
+      PK.ellipse(cx, gy + sc(1), sc(26), sc(3), "#243a22");
+
+      // a few grass tufts near the base for foreground life
+      var rnd = PK.rng(101);
+      for (var i = 0; i < 26; i++) {
+        var gx = Math.round(rnd() * v.W);
+        var gh = 1 + Math.floor(rnd() * 3);
+        var gc = rnd() < 0.5 ? "#4f6f3c" : "#6d9150";
+        if (Math.abs(gx - cx) < sc(24)) gc = "#3d5a30"; // keep the soil area clean
+        for (var k = 0; k < gh; k++) PK.px(gx, gy - k, gc);
+      }
+
+      // crisp pixelated drop shadow hugging the pot base, offset to the lower-right (light is top-left)
+      PK.ellipse(cx + sc(4), gy + sc(2), sc(23), sc(4), "#1f3520");
+      PK.ellipse(cx + sc(3), gy + sc(1), sc(17), sc(2), "#16281a");
+      var srnd = PK.rng(222);
+      for (var s = 0; s < 26; s++) {
+        var sxp = cx + sc(Math.round(srnd() * 44 - 24));
+        var syp = gy + 1 + Math.round(srnd() * 3);
+        PK.px(sxp, syp, srnd() < 0.5 ? "#1f3520" : "#16281a");
+      }
+    });
+
+    // ---- tree layer (transparent elsewhere): pot, trunk, root flare, branches --------------
+    bgTree = PK.layer(v.W, v.H, function () {
+      drawPot();
+      // root flare (nebari) spreading into the soil
+      PK.limb(cx - 1, rimY + 2, cx - sc(4), rimY + 3, cx - sc(7), rimY + 4, sc(5), sc(2), R.bark, 6);
+      PK.limb(cx + 1, rimY + 2, cx + sc(4), rimY + 3, cx + sc(6), rimY + 4, sc(4), sc(2), R.bark, 7);
+
+      // main trunk: thick at the base, strongly tapered to a thin top, right-leaning curve
+      var trunkTopX = cx + sc(3), trunkTopY = rimY - sc(27);
+      PK.limb(cx - 2, rimY + 2, cx + sc(11), Math.round((rimY + 2 + trunkTopY) / 2),
+              trunkTopX, trunkTopY, sc(12), sc(2.5), R.bark, 4);
+
+      // branches: distinct limbs from the trunk out to each foliage pad (tips tuck under the pads)
+      PK.limb(cx - sc(1), rimY - sc(8), cx - sc(6), rimY - sc(9), cx - sc(12), rimY - sc(11),
+              sc(3), sc(1), R.bark, 17);    // to the lower-left pad
+      PK.limb(cx + sc(1), rimY - sc(10), cx + sc(10), rimY - sc(12), cx + sc(18), rimY - sc(16),
+              sc(4), sc(1), R.bark, 2);     // to the lower-right pad
+      PK.limb(cx, rimY - sc(18), cx - sc(9), rimY - sc(21), cx - sc(17), rimY - sc(24),
+              sc(3.5), sc(1), R.bark, 8);   // to the upper-left pad
+      PK.limb(cx + sc(1), rimY - sc(21), cx + sc(3), rimY - sc(28), cx + sc(4), rimY - sc(33),
+              sc(2.5), sc(1), R.bark, 12);  // crown stem up to the top pad
+    });
+
+    function drawPot() {
+      var bw = bodyW, botW = Math.round(bodyW * 0.74);
+      var xl = cx - Math.round(bw / 2), xr = cx + Math.round(bw / 2);
+      var bl = cx - Math.round(botW / 2), br = cx + Math.round(botW / 2);
+
+      // trapezoid body, wide at top and tapering to a narrower base
+      PK.poly([[xl, bodyTop], [xr, bodyTop], [br, bodyBot], [bl, bodyBot]], R.clay[2]);
+      for (var y = bodyTop; y < bodyBot; y++) {
+        var tt = (y - bodyTop) / Math.max(1, bodyBot - bodyTop);
+        var lx = Math.round(xl + (bl - xl) * tt);
+        var rx = Math.round(xr + (br - xr) * tt);
+        var w = Math.max(1, rx - lx);
+        PK.rect(lx, y, Math.max(1, Math.round(w * 0.26)), 1, R.clay[3]);          // lit left
+        PK.rect(rx - Math.max(1, Math.round(w * 0.30)), y, Math.max(1, Math.round(w * 0.30)), 1, R.clay[1]); // shadow right
+        if (y - bodyTop < 2) PK.rect(lx, y, w, 1, R.clay[3]);                     // lighter soil-shoulder rows
+      }
+      PK.rect(bl, bodyBot - 1, Math.max(1, br - bl), 1, R.clay[0]);              // base shadow
+
+      // rim slab, slightly wider than the body
+      var rl = cx - Math.round(rimW / 2);
+      PK.rect(rl, rimY, rimW, rimH, R.clay[2]);
+      PK.rect(rl, rimY, Math.max(1, Math.round(rimW * 0.26)), rimH, R.clay[3]);  // lit left
+      PK.rect(rl + rimW - Math.max(1, Math.round(rimW * 0.22)), rimY, Math.max(1, Math.round(rimW * 0.22)), rimH, R.clay[1]);
+      PK.rect(rl, rimY, rimW, 1, R.clay[4]);                                     // rim top glint
+      PK.rect(rl, rimY + rimH - 1, rimW, 1, R.clay[0]);                          // rim underside
+      PK.rect(rl + 2, rimY, rimW - 4, 1, "#2a1c12");                            // dark soil in the rim
+
+      // feet
+      var inw = Math.round(bw * 0.10);
+      PK.rect(cx - Math.round(bw / 2) + inw, bodyBot, sc(9), footH, R.clay[1]);
+      PK.rect(cx + Math.round(bw / 2) - sc(9) - inw, bodyBot, sc(9), footH, R.clay[1]);
+    }
+
+    // keep drifting systems within the live scene box
+    var skyBox = [0, 0, v.W, gy];
+    windFar.setArea(skyBox); windMid.setArea(skyBox); windNear.setArea(skyBox);
+    leaves.setArea([0, sc(4), v.W, gy + sc(4)]);
+  }
+
+  var view = PK.fit(canvas, 140, layout);
+
+  // --- animation ----------------------------------------------------------------------------
+  PK.loop(function (t, dt) {
+    PK.blit(bgSky);
+
+    // three parallax wind layers, all in the air behind the tree: far (faint/slow) -> near (bright/fast)
+    windFar.step(dt);  windFar.streaks(["#b6d2ec", "#e8f3fc"]);
+    windMid.step(dt);  windMid.streaks(["#8fb4dd", "#f2f9ff"]);
+    windNear.step(dt); windNear.streaks(["#6f9dce", "#ffffff"]);
+
+    PK.blit(bgTree);
+
+    // foliage pads sway: higher pads travel further, with a slow gust envelope plus a leaf flutter
+    var gust = 0.6 + 0.4 * Math.sin(t * 0.3);
+    for (var i = 0; i < pads.length; i++) {
+      var p = pads[i];
+      var px0 = L.cx + L.sc(p.dx);
+      var py0 = L.rimY + L.sc(p.dy);
+      var hf = Math.max(0.35, (L.rimY - py0) / Math.max(1, L.sc(30)));
+      var amp = 3.6 * gust * hf;
+      var dx = Math.round(Math.sin(t * 1.15 + p.seed) * amp);
+      var dy = Math.round(Math.sin(t * 0.8 + p.seed * 1.7) * amp * 0.4);
+      var fx = Math.round(Math.sin(t * 2.3 + p.seed) * 1);       // rustle the pad silhouette
+      var fy = Math.round(Math.sin(t * 2.7 + p.seed * 0.5) * 1);
+      drawPad(px0 + dx, py0 + dy, L.sc(p.rx) + fx, Math.max(2, L.sc(p.ry) + fy), p.seed);
+    }
+
+    // leaves blow past in front of everything
+    leaves.step(dt);
+    for (var j = 0; j < leaves.particles.length; j++) {
+      var q = leaves.particles[j];
+      var bob = Math.sin(t * 2 + q.k * 6.283);
+      var x = Math.round(q.x), y = Math.round(q.y + bob);
+      var col = leafCol(q.k);
+      PK.px(x, y, col);
+      PK.px(x + 1, y + 1, col);
+      PK.px(x, y + 1, "#1d3b2a");
+    }
+  });
+})();
+</script>
+</body>
+</html>
