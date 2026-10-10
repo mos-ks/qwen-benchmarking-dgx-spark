@@ -62,7 +62,17 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 5. **A "write less code" skill hurts visual work.** Ponytail tells the agent to build the smallest
    version that does the core job. On from-scratch pixel art that cut craft (stacked round pads, a
    flat slab pot) without saving time: 6.0 and 6.5 against kit v4's 7.0 and 7.0.
-6. **Easy, well-scoped coding tasks do not separate anything.** Every model and harness passed five
+6. **Thinking at low effort beats thinking off.** Every Flash-Next run before kit v5 had thinking
+   switched off. Across kits v5 to v7, thinking low averages 7.4 over twelve runs against 6.9 for
+   thinking off over nine, never collapsed, and won the held-out windmill brief every time. Medium
+   effort was not better (7.1) and swung more.
+7. **Give the agent tested building blocks, not more critique.** The critic kept naming the same
+   unmet shapes (jagged rocks, breaking foam) and the model kept failing to draw them; shipping a
+   small drawing library (kit v5) fixed those shapes at once.
+8. **A small critic needs anchors.** Replaying saved screenshots showed the plain self-critic calling
+   7/10 pages 8/10 and stopping the fix loop; three judge-scored example screenshots fixed that
+   (Spearman 0.63 to 0.74). A binary checklist made it worse.
+9. **Easy, well-scoped coding tasks do not separate anything.** Every model and harness passed five
    small agent tasks and a feature added to an existing codebase. Differences only appear on
    from-scratch and visual work.
 
@@ -178,8 +188,10 @@ Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
 - In server mode with nobody at the UI, three permission defaults block forever: `question`
   (the model asks the user something), `external_directory` (it opens a screenshot outside the
   project) and `doom_loop`. [`harness/opencode.json`](harness/opencode.json) denies all three.
-- Qwen3.8 with thinking on sometimes ends a turn with an announcement and no tool call; thinking off
-  avoids it. vLLM's `tool_choice: "required"` returned an empty tool-call list on the build used
+- Qwen3.8-27B with thinking on sometimes ends a turn with an announcement and no tool call; thinking
+  off avoided it, and that choice was carried over to Flash-Next for too long. Flash-Next's chat
+  template defaults to `reasoning_effort: xhigh` when thinking is on; `low` (set through
+  `chat_template_kwargs`, or a top-level `reasoning_effort` on vLLM) is the kit default now. vLLM's `tool_choice: "required"` returned an empty tool-call list on the build used
   (`auto` works).
 - Qwen3.8-Flash-Next takes nearly all of the Spark's memory; under four parallel agent sessions
   (each with a headless browser for screenshots) the recipe's memory watchdog stopped it twice. It

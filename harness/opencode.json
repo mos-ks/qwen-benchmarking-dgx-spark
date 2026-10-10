@@ -10,13 +10,13 @@
       },
       "models": {
         "qwen3-coder": {
-          "name": "Spark coder (fast)",
+          "name": "Spark coder (thinking low)",
           "limit": { "context": 262144, "output": 32768 },
-          "options": { "chat_template_kwargs": { "enable_thinking": false } }
+          "options": { "chat_template_kwargs": { "enable_thinking": true, "reasoning_effort": "low" } }
         },
         "qwen3-coder-think": {
           "id": "qwen3-coder",
-          "name": "Spark coder (thinking)",
+          "name": "Spark coder (thinking xhigh)",
           "limit": { "context": 262144, "output": 32768 },
           "options": { "chat_template_kwargs": { "enable_thinking": true } }
         }
