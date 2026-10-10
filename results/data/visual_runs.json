@@ -427,5 +427,27 @@
   "score": 6.0,
   "outcome": "done",
   "note": "KPI cards with sparklines, highlighted month bars; the category donut renders as an empty grey ring"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v6 \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v6",
+  "attempt": "#1",
+  "minutes": 23.5,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "leaning barked trunk with side branches, four shaded pads, footed pot on a wooden shelf, dithered sky; pads have flat cut-off tops, heavy grey clouds"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 kit v6 \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v6",
+  "attempt": "#1",
+  "minutes": 24.9,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "brick tower with door and lit window, lattice sails (one skewed), sunset with sun glow, canal, path through dense tulip rows, birds; blocky tulips"
  }
 ]

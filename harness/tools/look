@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["playwright==1.62.0"]
+# dependencies = ["playwright==1.62.0", "pillow==12.0.0"]
 # ///
 """look: let a coding agent see the page it built.
 
@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from PIL import Image, ImageChops, ImageStat
 from playwright.sync_api import sync_playwright
 
 ENDPOINT = os.environ.get("LOOK_ENDPOINT", "http://127.0.0.1:8000/v1")
@@ -31,11 +32,42 @@ ENDPOINT = os.environ.get("LOOK_ENDPOINT", "http://127.0.0.1:8000/v1")
 MAX_ROUNDS = int(os.environ.get("LOOK_MAX_ROUNDS", "4"))
 MODEL = os.environ.get("LOOK_MODEL", "qwen3-coder")
 
+# Judge-scored example screenshots shown before the page. Replaying 35 saved runs, anchoring raised
+# agreement with the judge (Spearman 0.63 -> 0.74) and stopped the critic from calling 7/10 pages 8/10.
+# An anchor from the same brief as the goal is never shown (it would leak the reference).
+ANCHORS = Path(__file__).resolve().parent / "anchors"
+
+
+def anchor_content(goal: str) -> list[dict]:
+    index = ANCHORS / "anchors.json"
+    if not index.exists():
+        return []
+    goal_l = goal.lower()
+    pool = [a for a in json.loads(index.read_text()) if a["keyword"] not in goal_l and (ANCHORS / a["file"]).exists()]
+    picks = []
+    for want in (9.0, 7.0, 4.0):
+        if not pool:
+            break
+        a = min(pool, key=lambda a: (abs(a["score"] - want), a["file"]))
+        pool.remove(a)
+        picks.append(a)
+    if not picks:
+        return []
+    content: list[dict] = [{"type": "text", "text": "Calibration examples from OTHER briefs, each scored by an expert judge. Use them to anchor your scale; a typical first attempt by a small model lands around 5-7, not 8-9.\n"}]
+    for a in picks:
+        b64 = base64.b64encode((ANCHORS / a["file"]).read_bytes()).decode()
+        content.append({"type": "text", "text": f"Example ({a['brief']} brief): expert score {a['score']:.1f}. {a['note']}"})
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}})
+    content.append({"type": "text", "text": "Now the page to review.\n"})
+    return content
+
+
 CRITIC_PROMPT = """You are a demanding senior visual designer reviewing screenshots of a web page a developer just built.
 Goal of the page: {goal}
 
 You see {n} screenshots: desktop frames taken {gap_ms} ms apart (so you can judge animation), then a phone-sized frame.
 Console/page errors captured while loading: {errors}
+Measured by the harness (trust these over your impression of the images): {facts}
 
 Judge only what is visible. First list the concrete requirements stated in the goal and check each one.
 Score 1-10 against what a top designer would ship for this goal: 10 = portfolio piece; 8 = clearly the
@@ -52,7 +84,7 @@ PHONE: does the layout hold at phone size?
 Be specific and blunt. Do not praise. If it does not clearly read as the goal, say so first."""
 
 
-def shoot(target: str, frames: int, gap_ms: int) -> tuple[list[Path], list[str]]:
+def shoot(target: str, frames: int, gap_ms: int) -> tuple[list[Path], list[str], dict]:
     url = target if "://" in target else Path(target).resolve().as_uri()
     # Inside the project, not /tmp: an agent that opens a screenshot outside its project hits an
     # external_directory permission prompt that nobody answers in server mode.
@@ -60,6 +92,7 @@ def shoot(target: str, frames: int, gap_ms: int) -> tuple[list[Path], list[str]]
     out.mkdir(exist_ok=True)
     shots: list[Path] = []
     errors: list[str] = []
+    facts: dict = {}
     with sync_playwright() as p:
         browser = p.chromium.launch()
         for w, h, tag, n in ((1280, 800, "desktop", frames), (390, 844, "phone", 1)):
@@ -74,15 +107,32 @@ def shoot(target: str, frames: int, gap_ms: int) -> tuple[list[Path], list[str]]
                 shots.append(f)
                 if i < n - 1:
                     page.wait_for_timeout(gap_ms)
+            if tag == "phone":
+                facts["phone_overflow"] = page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1")
             page.close()
         browser.close()
-    return shots, errors
+    return shots, errors, facts
 
 
-def critique(goal: str, shots: list[Path], errors: list[str], gap_ms: int) -> str:
-    content: list[dict] = [{
+def measure(shots: list[Path], facts: dict) -> str:
+    """Deterministic facts a small vision model misjudges: a blank page, a frozen animation, overflow."""
+    desktop = [Image.open(f).convert("RGB") for f in shots if f.name.startswith("desktop")]
+    lum = ImageStat.Stat(desktop[-1].convert("L"))
+    blank = lum.stddev[0] < 4 or len(desktop[-1].getcolors(1 << 16) or range(9)) < 8
+    parts = [f"blank page: {'YES' if blank else 'no'}"]
+    if len(desktop) > 1:
+        diff = ImageChops.difference(desktop[0], desktop[-1]).convert("L").point(lambda v: 255 if v > 8 else 0)
+        changed = sum(diff.histogram()[255:]) / (diff.width * diff.height)
+        parts.append(f"pixels changed between the desktop frames: {changed:.1%}" + (" (NOTHING MOVES)" if changed < 0.002 else ""))
+    if "phone_overflow" in facts:
+        parts.append(f"horizontal overflow at phone width: {'YES' if facts['phone_overflow'] else 'no'}")
+    return "; ".join(parts)
+
+
+def critique(goal: str, shots: list[Path], errors: list[str], gap_ms: int, facts: str) -> str:
+    content: list[dict] = anchor_content(goal) + [{
         "type": "text",
-        "text": CRITIC_PROMPT.format(goal=goal, n=len(shots), gap_ms=gap_ms, errors="; ".join(errors[:10]) or "none"),
+        "text": CRITIC_PROMPT.format(goal=goal, n=len(shots), gap_ms=gap_ms, errors="; ".join(errors[:10]) or "none", facts=facts),
     }]
     for f in shots:
         b64 = base64.b64encode(f.read_bytes()).decode()
@@ -119,14 +169,16 @@ def main() -> int:
         return 0
     counter.write_text(str(used + 1))
     try:
-        shots, errors = shoot(a.target, max(1, a.frames), a.gap_ms)
+        shots, errors, raw_facts = shoot(a.target, max(1, a.frames), a.gap_ms)
+        facts = measure(shots, raw_facts)
     except Exception as exc:  # report, do not traceback into the agent's context
         print(f"look: could not render {a.target}: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 3
     print("screenshots saved in .look/ (the critique below already describes them)")
     print("errors:", "; ".join(errors[:10]) or "none")
+    print("checks:", facts)
     try:
-        print(critique(a.goal, shots, errors, a.gap_ms))
+        print(critique(a.goal, shots, errors, a.gap_ms, facts))
         if used + 1 >= MAX_ROUNDS:
             print(f"\nThis was round {used + 1} of {MAX_ROUNDS}, the last one. Fix the top item if it is quick, then finish and report; do not call look again.")
         else:

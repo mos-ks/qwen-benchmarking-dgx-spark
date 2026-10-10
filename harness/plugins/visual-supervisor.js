@@ -4,7 +4,7 @@
 // Why a plugin and not a rule: models told "check your page with look" mostly do not (one run
 // called look 0 times and shipped a blank page with a JS error, another called it 19 times and
 // ran out of time). The harness decides when to look and how often; the model only fixes.
-import { appendFileSync, existsSync, statSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const MAX_ROUNDS = Number(process.env.VISUAL_SUPERVISOR_ROUNDS ?? 4);
@@ -18,7 +18,13 @@ const PAGE = process.env.VISUAL_SUPERVISOR_PAGE ?? "index.html";
 // script for the whole 45 minutes and never stopped, so the supervisor never got a turn.
 const WRAP_UP_MIN = Number(process.env.VISUAL_SUPERVISOR_WRAP_UP_MIN ?? 20);
 const NUDGE_EVERY_MIN = Number(process.env.VISUAL_SUPERVISOR_NUDGE_EVERY_MIN ?? 3);
-const sessions = new Map(); // sessionID -> { started, rounds, done, nudged }
+// Keep the best round: models often make a page worse while "fixing" it (scores 8 then 7), so the
+// harness snapshots the project after every critique that beats the best so far, restores that
+// snapshot when a round scores lower, and leaves the best version on disk when supervision ends.
+const SNAP = ".supervisor-best";
+const SNAP_MAX_BYTES = 20 * 1024 * 1024;
+const SKIP = new Set(["node_modules", "dist", "build"]);
+const sessions = new Map(); // sessionID -> { started, rounds, done, nudged, best, bestCritique }
 const LOG = process.env.VISUAL_SUPERVISOR_LOG;
 function log(msg) {
   if (LOG) appendFileSync(LOG, `${new Date().toISOString()} ${msg}\n`);
@@ -44,9 +50,40 @@ function session(id) {
   return s;
 }
 
+function projectEntries(directory) {
+  return readdirSync(directory).filter((n) => !n.startsWith(".") && !SKIP.has(n));
+}
+
+function sizeOf(path) {
+  const st = lstatSync(path);
+  if (st.isSymbolicLink()) return 0;
+  if (!st.isDirectory()) return st.size;
+  return readdirSync(path).reduce((sum, n) => sum + sizeOf(join(path, n)), 0);
+}
+
+function snapshot(directory) {
+  const entries = projectEntries(directory);
+  const bytes = entries.reduce((sum, n) => sum + sizeOf(join(directory, n)), 0);
+  if (bytes > SNAP_MAX_BYTES) return false;
+  const dst = join(directory, SNAP);
+  rmSync(dst, { recursive: true, force: true });
+  mkdirSync(dst, { recursive: true });
+  for (const n of entries) cpSync(join(directory, n), join(dst, n), { recursive: true });
+  return true;
+}
+
+// Overwrites the snapshotted files only; files created after the snapshot are left alone.
+function restore(directory) {
+  const src = join(directory, SNAP);
+  if (!existsSync(src)) return false;
+  for (const n of readdirSync(src)) cpSync(join(src, n), join(directory, n), { recursive: true, force: true });
+  return true;
+}
+
 function wroteThePage(directory, s) {
   const page = join(directory, PAGE);
-  return existsSync(page) && statSync(page).mtimeMs >= s.started;
+  // The kernel stamps files with a coarse clock that can trail Date.now() by a few ms.
+  return existsSync(page) && statSync(page).mtimeMs >= s.started - 2000;
 }
 
 export const VisualSupervisor = async ({ client, $, directory }) => ({
@@ -94,10 +131,8 @@ async function handle({ client, $, directory, event }) {
     log(`idle ${id} page=${existsSync(page)} rounds=${s.rounds}`);
     // Only sessions that wrote or changed the page in this session: everything else is not UI work.
     if (!wroteThePage(directory, s)) return;
-    if (s.rounds >= MAX_ROUNDS) {
-      s.done = true;
-      return;
-    }
+    // After the last fix round there is one more look, so a final regression is still reverted.
+    const lastLook = s.rounds >= MAX_ROUNDS;
 
     const request = (await firstUserRequest(client, id)).slice(0, 1500);
     const goal = request || "the page the user asked for";
@@ -111,23 +146,40 @@ async function handle({ client, $, directory, event }) {
     const score = Number((out.match(/SCORE:\s*(\d+(?:\.\d+)?)/i) || [])[1] ?? NaN);
     const elapsedMin = (Date.now() - s.started) / 60000;
     log(`score=${score} elapsed=${elapsedMin.toFixed(1)}min`);
-    if ((Number.isFinite(score) ? score >= TARGET_SCORE : /VERDICT:\s*GOOD/i.test(out)) || elapsedMin >= BUDGET_MIN) {
-      s.done = true;
-      return;
+    const critique = out.replace(/^screenshots:.*$/m, "").trim();
+    let regressed = false;
+    if (Number.isFinite(score)) {
+      if (s.best === undefined || score > s.best) {
+        if (snapshot(directory)) {
+          s.best = score;
+          s.bestCritique = critique;
+          log(`best=${score} snapshot saved`);
+        }
+      } else if (score < s.best && restore(directory)) {
+        regressed = true;
+        log(`score ${score} < best ${s.best}: restored the best version`);
+      }
     }
-    if (!/VERDICT:/i.test(out)) {
-      // look could not render or reach the model; say nothing rather than send noise.
+    const finished =
+      (Number.isFinite(score) ? score >= TARGET_SCORE : /VERDICT:\s*GOOD/i.test(out)) || elapsedMin >= BUDGET_MIN;
+    if (finished || lastLook || !/VERDICT:/i.test(out)) {
+      // Done, or look could not render or reach the model: stop, and leave the best version on disk.
       s.done = true;
       return;
     }
     log(`verdict not good, round ${s.rounds + 1}`);
     s.rounds += 1;
-    const critique = out.replace(/^screenshots:.*$/m, "").trim();
-    const text =
-      `Automatic visual check, round ${s.rounds} of ${MAX_ROUNDS} (sent by the harness, not the user). The target is ${TARGET_SCORE}/10 and there is time left to reach it. ` +
-      `A vision model looked at ${PAGE} in a browser:\n\n${critique}\n\n` +
-      `Fix the console errors first, then the unmet requirements, then the top fixes. Keep what already works. ` +
-      `Do not run look yourself; the harness checks again when you stop.`;
+    const head = `Automatic visual check, round ${s.rounds} of ${MAX_ROUNDS} (sent by the harness, not the user). The target is ${TARGET_SCORE}/10 and there is time left to reach it. `;
+    const text = regressed
+      ? head +
+        `Your last changes made the page worse (${score}/10, below the best version so far at ${s.best}/10), so the harness restored the best version on disk. ` +
+        `This was the critique of that best version:\n\n${s.bestCritique}\n\n` +
+        `Make one different, smaller fix for the most important unmet requirement. Re-read the files first: they changed. ` +
+        `Do not run look yourself; the harness checks again when you stop.`
+      : head +
+        `A vision model looked at ${PAGE} in a browser:\n\n${critique}\n\n` +
+        `Fix the console errors first, then the unmet requirements, then the top fixes. Keep what already works. ` +
+        `Do not run look yourself; the harness checks again when you stop.`;
     // Not awaited: the follow-up turn ends in its own session.idle, which re-enters this handler.
     client.session.prompt({ path: { id }, body: { parts: [{ type: "text", text }] } }).catch(() => {});
   }
