@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai in the Breeze</title>
+<style>
+  html, body { height: 100%; background: #b0d4ee; }
+  #caption {
+    position: fixed; left: 0; right: 0; bottom: 12px; text-align: center;
+    font: 600 11px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.35em; text-transform: uppercase;
+    color: #6a4a30; opacity: 0.55; pointer-events: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="caption">bonsai in the breeze</div>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  var R = PK.ramps;
+  var SKY = PK.skies.day;
+  var hills = ["#a9c3d1", "#c1d3de", "#d5e3ea", "#e4eff3", "#f0f7fa"];
+  var LEAVES = ["#2f5d34", "#4a8a3c", "#78b84a", "#b8e070"];
+  var STREAKS = ["#b9d7ec", "#a8cbe8", "#f2f9fe"];
+
+  var bg, view, groundY, cx, soilY, m = 1, pads;
+
+  var leavesBack = PK.drift({ n: 12, seed: 21, area: [0, 0, 1, 1], vx: [-15, -7], vy: [4, 10], len: [1, 3] });
+  var leavesFront = PK.drift({ n: 16, seed: 31, area: [0, 0, 1, 1], vx: [-18, -9], vy: [5, 12], len: [1, 3] });
+  var gusts = PK.drift({ n: 18, seed: 41, area: [0, 0, 1, 1], vx: [-36, -20], vy: [-1.5, 1.5], len: [4, 9] });
+  var clouds = [
+    { u: 0.20, v: 0.13, s: 1.0 },
+    { u: 0.58, v: 0.24, s: 1.3 },
+    { u: 0.83, v: 0.08, s: 0.8 },
+    { u: 0.38, v: 0.36, s: 0.9 },
+    { u: 0.72, v: 0.45, s: 0.7 }
+  ];
+
+  view = PK.fit(document.getElementById("c"), 140, function (v) {
+    groundY = Math.round(v.H * (v.portrait ? 0.74 : 0.78));
+    cx = Math.round(v.W / 2 + (v.portrait ? 0 : 3));
+    m = v.portrait && v.H > v.W * 1.6 ? 2 : 1;
+    soilY = groundY - 13 * m;
+
+    pads = [
+      { x: cx + 17 * m, y: soilY - 13 * m, rx: 11 * m, ry: 5 * m, seed: 11, ph: 0.2, sp: 1.3 },
+      { x: cx - 16 * m, y: soilY - 21 * m, rx: 10 * m, ry: 5 * m, seed: 22, ph: 2.1, sp: 1.1 },
+      { x: cx + 11 * m, y: soilY - 31 * m, rx: 8 * m, ry: 4 * m, seed: 33, ph: 4.0, sp: 1.5 },
+      { x: cx + 1 * m, y: soilY - 41 * m, rx: 11 * m, ry: 5 * m, seed: 44, ph: 1.2, sp: 1.2 }
+    ];
+
+    leavesBack.setArea([0, 0, v.W, v.H]);
+    leavesFront.setArea([0, 0, v.W, v.H]);
+    gusts.setArea([0, 2, v.W, groundY - 8 * m]);
+
+    bg = PK.layer(v.W, v.H, function () {
+      drawScenery(v);
+    });
+  });
+
+  function drawScenery(v) {
+    PK.gradient(0, 0, v.W, groundY + 1, SKY);
+
+    var sunX = Math.round(v.W * (v.portrait ? 0.24 : 0.18));
+    var sunY = Math.round(v.H * 0.16);
+    PK.glow(sunX, sunY, 16 * m, "#ffe08a", 0.5);
+    PK.glow(sunX, sunY, 9 * m, "#fff2c0", 0.8);
+    PK.disc(sunX, sunY, 4 * m, "#fff8d8");
+
+    PK.rock(Math.round(v.W * 0.08) - 18 * m, groundY, 58 * m, 15 * m, hills, { seed: 5, rough: 2, ledges: 0, cracks: 0 });
+    PK.rock(Math.round(v.W * 0.80) - 18 * m, groundY, 62 * m, 19 * m, hills, { seed: 6, rough: 2, ledges: 0, cracks: 0 });
+
+    PK.rect(0, groundY, v.W, v.H - groundY, "#cfa878");
+    PK.rect(0, groundY, v.W, 1, "#e6cd9e");
+    PK.gradient(0, v.H - 6 * m, v.W, v.H, ["#c19a68", "#a07a4e"]);
+    var rnd = PK.rng(99);
+    for (var y = groundY + 2; y < v.H - 6 * m; y++) {
+      for (var x = 0; x < v.W; x++) {
+        var r = rnd();
+        if (r < 0.02) PK.px(x, y, "#b8905a");
+        else if (r < 0.032) PK.px(x, y, "#8a6442");
+        else if (r < 0.04) PK.px(x, y, "#e2c88e");
+        else if ((y % (4 * m)) === 0 && (x % (2 * m)) === 0 && bayerish(x, y)) PK.px(x, y, "#c19a68");
+      }
+    }
+    for (var row = groundY + 5 * m; row < v.H - 7 * m; row += 5 * m) {
+      for (var rx2 = (row * 3) % (3 * m); rx2 < v.W; rx2 += 2 * m) {
+        if (((row + rx2) & 1) === 0) PK.px(rx2, row, "#b8905a");
+      }
+    }
+
+    PK.rock(cx - 30 * m - 12, groundY, 11 * m, 6 * m, R.stone, { seed: 51 });
+    PK.rock(cx + 30 * m + 3, groundY, 8 * m, 4 * m, R.stone, { seed: 52 });
+    tuft(cx - 24 * m, groundY);
+    tuft(cx + 22 * m, groundY);
+    tuft(cx + 41 * m, groundY);
+    PK.disc(cx - 19 * m, groundY - m, m, "#8b90a6");
+    PK.disc(cx + 17 * m, groundY - m, m, "#8b90a6");
+
+    drawPot(cx, groundY);
+    drawBonsai(cx, soilY);
+    drawRim(cx, groundY);
+  }
+
+  function bayerish(x, y) {
+    var B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    return B[(y & 3) * 4 + (x & 3)] < 4;
+  }
+
+  function tuft(x, gy) {
+    var h = 2 * m + (x % 3 === 0 ? m : 0);
+    PK.px(x, gy - 1, "#2f5d34");
+    PK.px(x, gy - h, "#4a8a3c");
+    PK.line(x, gy - 1, x, gy - h + 1, "#2f5d34");
+    PK.px(x + 1, gy - h + 1, "#4a8a3c");
+    PK.px(x - 1, gy - 1, "#2f5d34");
+  }
+
+  function drawPot(cx, gy) {
+    PK.rect(cx - 13 * m + 3, gy, 30 * m - 2, m, "#96724a");
+    PK.rect(cx - 10 * m + 3, gy + m, 26 * m - 3, m, "#a5804f");
+
+    PK.rect(cx - 11 * m, gy - 2 * m, 3 * m, 2 * m, R.clay[1]);
+    PK.rect(cx + 8 * m, gy - 2 * m, 3 * m, 2 * m, R.clay[1]);
+
+    PK.poly([[cx - 13 * m, gy - 8 * m], [cx + 13 * m, gy - 8 * m], [cx + 9 * m, gy - 2 * m], [cx - 9 * m, gy - 2 * m]], R.clay[2]);
+    PK.poly([[cx + 5 * m, gy - 8 * m], [cx + 13 * m, gy - 8 * m], [cx + 9 * m, gy - 2 * m], [cx + 3 * m, gy - 2 * m]], R.clay[1]);
+    PK.poly([[cx - 13 * m, gy - 8 * m], [cx - 10 * m, gy - 8 * m], [cx - 7 * m, gy - 2 * m], [cx - 9 * m, gy - 2 * m]], R.clay[3]);
+    PK.rect(cx - 9 * m, gy - 3 * m, 18 * m, m, R.clay[0]);
+    var rnd = PK.rng(77);
+    for (var i = 0; i < 10; i++) {
+      var bxp = cx - 8 * m + Math.floor(rnd() * 17 * m);
+      var byp = gy - 7 * m + Math.floor(rnd() * 4 * m);
+      PK.px(bxp, byp, rnd() < 0.5 ? R.clay[1] : R.clay[3]);
+    }
+
+    PK.rect(cx - 13 * m, gy - 13 * m, 27 * m, 2 * m, "#4a3226");
+    var mr = PK.rng(88);
+    for (var k = 0; k < 14; k++) {
+      var mx = cx - 12 * m + Math.floor(mr() * 25 * m);
+      PK.px(mx, gy - 13 * m, mr() < 0.4 ? "#2f5d34" : "#5a4030");
+    }
+  }
+
+  function drawRim(cx, gy) {
+    PK.rect(cx - 15 * m, gy - 11 * m, 30 * m, m, R.clay[4]);
+    PK.rect(cx - 15 * m, gy - 10 * m, 30 * m, m, R.clay[3]);
+    PK.rect(cx - 15 * m, gy - 9 * m, 30 * m, m, R.clay[1]);
+    PK.rect(cx + 9 * m, gy - 11 * m, 6 * m, m, R.clay[2]);
+    PK.rect(cx + 11 * m, gy - 10 * m, 4 * m, m, R.clay[2]);
+    PK.rect(cx + 14 * m, gy - 11 * m, m, 3 * m, R.clay[0]);
+  }
+
+  function drawBonsai(cx, soilY) {
+    var bark = R.bark;
+    PK.limb(cx + 5 * m, soilY + 3 * m, cx + 1 * m, soilY + 5 * m, cx - 2 * m, soilY + 4 * m, 3 * m, 1.5 * m, bark, 3);
+    PK.limb(cx + 5 * m, soilY + 3 * m, cx + 8 * m, soilY + 5 * m, cx + 10 * m, soilY + 4 * m, 3 * m, 1.5 * m, bark, 4);
+    PK.limb(cx + 5 * m, soilY + 2 * m, cx + 13 * m, soilY - 8 * m, cx + 4 * m, soilY - 17 * m, 11 * m, 5 * m, bark, 1);
+    PK.limb(cx + 4 * m, soilY - 17 * m, cx - 4 * m, soilY - 24 * m, cx - 4 * m, soilY - 31 * m, 5 * m, 2.5 * m, bark, 2);
+    PK.limb(cx - 4 * m, soilY - 31 * m, cx - 2 * m, soilY - 36 * m, cx + 1 * m, soilY - 40 * m, 2.5 * m, 1 * m, bark, 5);
+    PK.limb(cx + 5 * m, soilY - 14 * m, cx + 12 * m, soilY - 17 * m, cx + 17 * m, soilY - 14 * m, 3 * m, 1 * m, bark, 6);
+    PK.limb(cx + 2 * m, soilY - 20 * m, cx - 7 * m, soilY - 23 * m, cx - 15 * m, soilY - 21 * m, 3 * m, 1 * m, bark, 7);
+    PK.limb(cx - 2 * m, soilY - 28 * m, cx + 5 * m, soilY - 32 * m, cx + 11 * m, soilY - 32 * m, 2 * m, 1 * m, bark, 8);
+  }
+
+  function drawLeaves(d, t, dt) {
+    d.step(dt);
+    var ps = d.particles;
+    for (var i = 0; i < ps.length; i++) {
+      var p = ps[i];
+      var dy = p.y + Math.round(Math.sin(t * 2.2 + p.k * 6.283) * m);
+      var c = LEAVES[(Math.floor(p.k * 4) + Math.floor(t * 2.5 + p.k * 8)) % 4];
+      PK.px(p.x, dy, c);
+      if (p.len > 1) PK.px(p.x + 1, dy, LEAVES[(Math.floor(p.k * 4) + 1) % 4]);
+      if (p.len > 2) PK.px(p.x + 2, dy + 1, LEAVES[(Math.floor(p.k * 4) + 2) % 4]);
+    }
+  }
+
+  function drawGusts(dt) {
+    gusts.step(dt);
+    var ps = gusts.particles;
+    for (var i = 0; i < ps.length; i++) {
+      var p = ps[i];
+      var sp = Math.hypot(p.vx, p.vy) || 1;
+      var ux = p.vx / sp, uy = p.vy / sp;
+      var L = Math.round(p.len * (m === 2 ? 1.5 : 1));
+      for (var s = 0; s < L; s++) {
+        var f = s / L;
+        var c = s === 0 ? STREAKS[2] : f < 0.45 ? STREAKS[1] : STREAKS[0];
+        PK.px(p.x - ux * s, p.y - uy * s, c);
+      }
+      if (p.k > 0.5) {
+        PK.px(p.x - ux * 2, p.y - uy * 2 + 1, STREAKS[0]);
+        PK.px(p.x - ux * 4, p.y - uy * 4 + 1, STREAKS[0]);
+      }
+    }
+  }
+
+  function drawClouds(t) {
+    var span = view.W + 60 * m;
+    for (var i = 0; i < clouds.length; i++) {
+      var c = clouds[i];
+      var x = Math.round((((c.u * view.W - t * (1.5 + i * 0.5)) % span) + span) % span) - 30 * m;
+      var y = Math.round(c.v * view.H);
+      var s = c.s * (m === 2 ? 1.5 : 1);
+      PK.ellipse(x - 5 * s, y + 2, 5 * s, 2 * s, "#b0b4c4");
+      PK.ellipse(x + 4 * s, y + 2, 6 * s, 2 * s, "#b0b4c4");
+      PK.ellipse(x - 4 * s, y, 5 * s, 3 * s, "#dfe2ea");
+      PK.ellipse(x + 4 * s, y - 1, 6 * s, 3 * s, "#dfe2ea");
+      PK.ellipse(x - 1 * s, y - 2, 4 * s, 2 * s, "#ffffff");
+    }
+  }
+
+  PK.loop(function (t, dt) {
+    PK.blit(bg);
+    drawClouds(t);
+    drawGusts(dt);
+    drawLeaves(leavesBack, t, dt);
+    for (var i = 0; i < pads.length; i++) {
+      var p = pads[i];
+      var amp = m + (soilY - p.y) / 28;
+      var ox = Math.round(Math.sin(t * p.sp + p.ph) * amp);
+      var oy = Math.round(Math.sin(t * p.sp * 0.7 + p.ph * 2) * 0.7 * m);
+      PK.pad(p.x + ox, p.y + oy, p.rx, p.ry, R.foliage, { seed: p.seed });
+      var capx = p.x + ox - Math.round(p.rx * 0.3);
+      var capy = p.y + oy - Math.round(p.ry * 0.5);
+      PK.disc(capx, capy, Math.max(1, Math.round(p.rx * 0.3)), R.foliage[3]);
+      PK.disc(capx - m, capy - m, Math.max(1, Math.round(p.rx * 0.15)), R.foliage[4]);
+      PK.ellipse(p.x + ox, p.y + oy + p.ry - 2 * m, Math.max(2, p.rx - 4 * m), m, R.foliage[0]);
+    }
+    drawLeaves(leavesFront, t, dt);
+  });
+})();
+</script>
+</body>
+</html>

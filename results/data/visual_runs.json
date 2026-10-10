@@ -559,5 +559,27 @@
   "score": 7.5,
   "outcome": "done",
   "note": "month pills, KPI cards with deltas, category bars with an axis, income vs spending, transactions, budgets near the limit; a transaction title collides with its date, 3 min over budget"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v7 + thinking medium \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v7 + thinking medium",
+  "attempt": "#1",
+  "minutes": 17.3,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "neat twisting trunk, shaded pads and pot, but the tree fills under a third of the screen above a wide sand band; dotted-grid sun"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 kit v7 + thinking medium \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v7 + thinking medium",
+  "attempt": "#1",
+  "minutes": 26.3,
+  "score": 6.0,
+  "outcome": "done",
+  "note": "brick tower, tulip rows, canal with a sun reflection, distant mills; the sails render as a dark filled disc and the sky reads as night, not sunset"
  }
 ]
