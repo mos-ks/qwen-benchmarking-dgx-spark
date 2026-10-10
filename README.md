@@ -127,6 +127,26 @@ Third-party skills used (not redistributed here; install from their repos):
 
 Small samples (2 to 3 runs per cell); treat differences under about one point as noise.
 
+## Critic calibration
+
+The supervisor's critic is the local model judging its own page, and a lenient critic stops the fix
+loop early. `harness/tools/critic_replay.py` replays the saved screenshots of all 35 judged runs
+through four critic designs and compares them with the judge's scores (the judge is itself not
+blind, so this measures agreement with the judge used everywhere in this repo):
+
+| critic | Spearman vs judge | mean offset | MAE | pairwise agreement |
+|---|---|---|---|---|
+| absolute 1-10 (kit v4 and v5) | 0.63 | +0.12 | 0.93 | 0.90 |
+| absolute + three judge-scored example screenshots from other briefs | 0.74 | -0.11 | 0.82 | 0.91 |
+| binary checklist generated from the brief | 0.25 | +1.55 | 2.43 | 0.82 |
+| direct pairwise, both orders must agree | | | | 0.88 |
+
+The binary checklist, which several papers recommend for large judges, was the worst here: the
+model passed almost every check, including 12 of 12 on a windmill page without lattice sails or tulip
+rows. Anchoring with scored examples helped most where it matters for stopping: on pages the judge
+gave 7.0, the plain critic said 8 (stop) on five of seven, the anchored critic said 7 on all seven.
+Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
+
 ## Harness traps found on the way
 
 - Qwen Code 0.25 hides some tool schemas behind `tool_search`; Qwen3-Coder-Next then calls those
@@ -156,7 +176,8 @@ Small samples (2 to 3 runs per cell); treat differences under about one point as
 - Kit v5 on the windmill brief: 6.5 in 30.9 min, up from kit v4's 5.0. The drawing library carried over to a scene it was not built for.
 - Kit v5.1 on the dashboard (from minute 20, tool results carry a note to stop self-checking and finish): 8.0 in 26.7 min and 7.5 in 21.7 min. Both stopped on their own, against kit v4's 45-minute timeout.
 - Kit v5 with thinking on at `reasoning_effort: low` (every earlier run had thinking off): windmill 8.0 in 17.8 min (from 6.5 in 30.9 min, with real lattice sails and tulip rows in perspective), bonsai 7.0 in 23.0 min (from 7.5 in 11.9 min). One run each; the windmill jump is the largest single gain so far, on the brief no harness change was tuned on.
-- In progress: thinking low on lighthouse and dashboard; an offline replay of every saved screenshot through four critic designs (absolute score, checklist, anchored, pairwise) to fix the lenient self-critic.
+- Thinking low on the other two briefs: lighthouse 7.5 in 20.7 min (same score, 5 min faster), dashboard 6.0 (the category donut rendered as an empty ring) against 8.0 and 7.5 with thinking off. Across the four briefs thinking low moved scores by +1.5, -0.5, 0 and about -1.75: not a consistent win on single runs, so the next rounds use two runs per cell.
+- Critic calibration (offline, no new pages): every saved screenshot replayed through four critic designs and compared with the judge, see [Critic calibration](#critic-calibration).
 - This repository is updated as runs finish.
 
 ## Reproduce

@@ -405,5 +405,27 @@
   "score": 7.0,
   "outcome": "done",
   "note": "thick trunk with root flare, four shaded pads, stone slab, mountains, wind streaks; the pot reads as planks, stray orange stubs, a third of the screen is empty grass"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v5.1 + thinking low \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v5.1 + thinking low",
+  "attempt": "#1",
+  "minutes": 20.7,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "striped tower with railing and lantern room, keeper's house, rock island with foam, moon behind clouds, rain, sweeping beam; the beam starts mid-tower, stray dot grid on the rock"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 kit v5.1 + thinking low \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v5.1 + thinking low",
+  "attempt": "#1",
+  "minutes": 26.5,
+  "score": 6.0,
+  "outcome": "done",
+  "note": "KPI cards with sparklines, highlighted month bars; the category donut renders as an empty grey ring"
  }
 ]

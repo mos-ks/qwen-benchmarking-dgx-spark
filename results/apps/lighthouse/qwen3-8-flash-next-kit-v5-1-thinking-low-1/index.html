@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Lighthouse at Night</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #06071a; overflow: hidden; }
+  canvas { display: block; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+"use strict";
+const R = PK.ramps;
+const SKY = PK.skies.night;
+
+// ---- scene palettes (dark -> light, cool shadows / warm lights) ------------------------------
+const cloud  = ["#10142c", "#1b2140", "#2b3358", "#3d4774", "#59639a"];
+const seaR   = R.nightWater;
+const rockR  = R.nightStone;
+const metal  = R.stone;
+const glass  = R.warmLight;
+const MOON   = { body: "#e6ecf7", shade: "#b3bdda", crater: "#94a0c6", glow: "#7c88bd" };
+const BEAM   = ["#463c54", "#d2a25c", "#fff2cc"];
+const RAIN   = ["#33487a", "#a3bbe6"];
+const FOAM   = ["#bcd8ea", "#ffffff"];
+
+// ---- drifting cloud clumps (kept across resizes) ---------------------------------------------
+const clouds = Array.from({ length: 7 }, (_, i) => {
+  const rnd = PK.rng(1000 + i * 37);
+  return {
+    nx: rnd(),
+    ny: 0.08 + rnd() * 0.22,          // fraction of height in the upper sky
+    s:  0.7 + rnd() * 0.9,            // size scale
+    sp: 1.5 + rnd() * 2.5,            // drift speed px/s
+    seed: 20 + i * 13,
+  };
+});
+
+// ---- rain particles (clearly angled ~18 deg with the wind) -----------------------------------
+const rain = PK.drift({ n: 120, seed: 7, area: [0, 0, 1, 1], vx: [-42, -30], vy: [125, 165], len: [4, 7] });
+
+// ---- keeper's house (procedural: lit walls, pitched roof, chimney) ---------------------------
+function drawHouse(hx, baseY, w, wallH, roofH) {
+  const apexX = hx + Math.floor(w / 2);
+  const wallTop = baseY - wallH;
+  const wallR = R.whitePaint, roofD = "#2b2f48", roofM = "#565d82", roofL = "#8a93b8";
+  // pitched roof (triangle, lit on the moon-facing left slope)
+  for (let r = 0; r <= roofH; r++) {
+    const y = wallTop - roofH + r;
+    const hw = Math.round((r / roofH) * (Math.floor(w / 2) + 1));
+    PK.rect(apexX - hw, y, hw * 2 + 1, 1, roofD);
+    PK.rect(apexX - hw, y, 1, 1, roofL);
+    if (hw > 2) PK.rect(apexX - hw + 1, y, 2, 1, roofM);
+  }
+  PK.rect(hx - 1, wallTop, w + 2, 1, roofD);                 // eave
+  // walls, shaded left (lit) to right (shadow), dark right silhouette edge
+  for (let i = 0; i < w; i++) {
+    const t = i / Math.max(1, w - 1);
+    let idx = Math.max(1, Math.min(4, Math.round((1 - t) * 3.4)));
+    if (i === 0 || i === w - 1) idx = 0;
+    for (let y = wallTop; y < baseY; y++) PK.px(hx + i, y, wallR[idx]);
+  }
+  PK.rect(hx, baseY, w, 1, rockR[0]);                         // contact shadow
+  // door
+  const dh = Math.min(wallH - 1, 5);
+  PK.rect(apexX - 1, baseY - dh, 3, dh, "#1a1420");
+  PK.rect(apexX - 1, baseY - dh, 1, dh, "#3a2c34");
+  // two lit windows
+  for (const wx of [hx + 1, hx + w - 3]) {
+    PK.rect(wx, wallTop + 2, 2, 2, "#16121f");
+    PK.rect(wx, wallTop + 2, 2, 2, "#ffcf5e");
+    PK.px(wx, wallTop + 2, "#fff2c0");
+  }
+  // chimney stack poking through the right slope
+  const chX = apexX + 2, chTopY = wallTop - roofH - 2;
+  PK.rect(chX, chTopY, 3, roofH + 3, "#3a3f5f");
+  PK.rect(chX, chTopY, 3, 1, "#8a93b8");
+  PK.rect(chX + 2, chTopY, 1, roofH + 3, "#22263a");
+  return { chimneyX: chX + 1, chimneyTopY: chTopY };
+}
+
+
+// ---- tower body drawn with red/white stripes + shading ---------------------------------------
+function drawTower(cx, baseY, h, baseW, topW) {
+  const stripe = 6;
+  for (let row = 0; row < h; row++) {
+    const y = baseY - row;
+    const f = row / (h - 1);
+    const w = Math.round(baseW + (topW - baseW) * f);
+    const half = Math.floor(w / 2);
+    const band = Math.floor(row / stripe) % 2;
+    const ramp = band ? R.brickRed : R.whitePaint;
+    for (let o = -half; o <= half; o++) {
+      const t = (o + half) / Math.max(1, w - 1);           // 0 left (lit) .. 1 right (shadow)
+      let idx = Math.max(1, Math.min(4, Math.round((1 - t) * 3.6)));
+      if (o === -half || o === half) idx = 0;              // crisp silhouette edge
+      const c = ramp[idx];
+      PK.px(cx + o, y, c);
+      if (band === 0 && idx >= 2 && ((cx + o) * 3 + y * 7) % 47 === 0) PK.px(cx + o, y, ramp[2]);
+    }
+  }
+  // door + a couple of lit windows
+  const doorW = 3, doorH = Math.max(5, Math.round(h * 0.11));
+  PK.rect(cx - 1, baseY - doorH + 1, doorW, doorH, "#1a1420");
+  PK.rect(cx - 1, baseY - doorH + 1, 1, doorH, "#3a2c34");
+  for (const wy of [baseY - Math.round(h * 0.55), baseY - Math.round(h * 0.8)]) {
+    PK.rect(cx - 1, wy, 2, 3, "#16121f");
+    PK.rect(cx - 1, wy, 2, 2, "#ffcf6a");
+    PK.px(cx - 1, wy, "#fff2c0");
+  }
+}
+
+// ---- top of the lighthouse: deck, railing, glass room, roof, finial --------------------------
+function drawTop(cx, T, topW) {
+  const deckW = topW + 5, roomW = Math.max(5, topW - 1), roomH = 7;
+  // gallery platform (stone slab, lit top)
+  PK.rect(cx - Math.floor(deckW / 2), T - 1, deckW, 2, metal[2]);
+  PK.rect(cx - Math.floor(deckW / 2), T - 1, deckW, 1, metal[3]);
+  PK.rect(cx - Math.floor(deckW / 2), T, deckW, 1, metal[0]);
+  // lantern room glass (bloom added per-frame over this)
+  PK.rect(cx - Math.floor(roomW / 2), T - 4 - roomH, roomW, roomH, glass[1]);
+  for (let x = -Math.floor(roomW / 2); x <= Math.floor(roomW / 2); x++) {
+    PK.px(cx + x, T - 4 - roomH, glass[3]);
+    PK.px(cx + x, T - 5, glass[2]);
+  }
+  // vertical mullions
+  for (let x = -Math.floor(roomW / 2); x <= Math.floor(roomW / 2); x += 2)
+    for (let y = 0; y < roomH; y++) PK.px(cx + x, T - 4 - roomH + y, metal[0]);
+  // railing: top rail + posts over the lower part of the room
+  const railY = T - 4;
+  PK.rect(cx - Math.floor(deckW / 2), railY, deckW, 1, metal[4]);
+  for (let x = -Math.floor(deckW / 2); x <= Math.floor(deckW / 2); x += 2)
+    PK.rect(cx + x, railY, 1, 3, metal[2]);
+  // domed roof: three narrowing rows
+  PK.rect(cx - Math.floor(roomW / 2) - 1, T - 5 - roomH, roomW + 2, 1, metal[1]);
+  PK.rect(cx - Math.floor(roomW / 2),     T - 6 - roomH, roomW,     1, metal[2]);
+  PK.rect(cx - 1,                          T - 7 - roomH, 3,         1, metal[3]);
+  PK.rect(cx,                              T - 9 - roomH, 1,         2, metal[3]);   // finial
+  return T - 4 - Math.round(roomH / 2);                       // lantern centre y (beam origin)
+}
+
+// ---- keep layout + prebuilt layers around the current viewport --------------------------------
+let view = { W: 0, H: 0 };
+let L = null, skyLayer = null, fgLayer = null;
+
+function buildLayers(v) {
+  const W = v.W, H = v.H;
+  const horizonY = Math.round(H * 0.50);
+  const waterY   = Math.round(H * 0.73);
+  const cx       = Math.round(W * 0.44);
+  const towerBaseW = Math.max(13, Math.round(H * 0.078));
+  const towerTopW  = Math.max(7,  Math.round(H * 0.042));
+  const towerH     = Math.round(H * 0.30);
+  const cliffW     = Math.max(70, Math.round(W * 0.62));
+  const cliffH     = Math.round(H * 0.24);
+  const cliffX     = Math.round(cx - cliffW / 2);
+  const mx = Math.round(W * 0.74), my = Math.round(H * 0.17);
+  const moonR = Math.max(5, Math.round(Math.min(W, H) * 0.055));
+
+  // sky + moon (static)
+  skyLayer = PK.layer(W, H, () => {
+    PK.gradient(0, 0, W, horizonY + 4, SKY);
+    PK.glow(mx, my, moonR * 3, MOON.glow, 0.5);
+    PK.disc(mx, my, moonR, MOON.body);
+    PK.disc(mx - Math.round(moonR * 0.4), my - Math.round(moonR * 0.3), moonR - 1, MOON.body);
+    for (let a = 0; a < Math.PI; a += 0.15) {                 // shaded limb (light from top-left)
+      PK.px(mx + Math.cos(a) * moonR * 0.7, my + Math.sin(a) * moonR * 0.7, MOON.shade);
+      PK.px(mx + Math.cos(a) * moonR * 0.55, my + Math.sin(a) * moonR * 0.5, MOON.shade);
+    }
+    for (const [dx, dy, r] of [[-2, -1, 1], [2, 2, 1], [0, 3, 1], [3, -2, 1], [-3, 2, 1]])
+      PK.disc(mx + dx, my + dy, r, MOON.crater);
+  });
+
+  // foreground: sea-cliff, boulders, keeper's house, lighthouse (static, over the sea)
+  let hx, hby, chimneyX, chimneyTopY;
+  fgLayer = PK.layer(W, H, () => {
+    const cliff = PK.rock(cliffX, waterY + 3, cliffW, cliffH, rockR, { seed: 41, profile: "mound" });
+    // flatten a level pad for the tower so it stands square
+    const tby = cliff.top(Math.round(cx) - cliffX);
+    const padW = towerBaseW + 7;
+    PK.rect(cx - Math.floor(padW / 2), tby, padW, 4, rockR[2]);
+    PK.rect(cx - Math.floor(padW / 2), tby, padW, 1, rockR[3]);
+    PK.rect(cx - Math.floor(padW / 2), tby + 3, padW, 1, rockR[0]);
+    drawTower(cx, tby + 1, towerH, towerBaseW, towerTopW);
+    drawTop(cx, tby + 1 - towerH, towerTopW);
+
+    // keeper's house on the right shoulder of the cliff (big enough to read as a dwelling)
+    const houseW  = Math.max(11, Math.round(H * 0.15));
+    const wallH   = Math.max(7, Math.round(H * 0.085));
+    const roofH   = Math.max(4, Math.round(H * 0.05));
+    const hCenter = cx + Math.round(towerBaseW / 2) + houseW / 2 + 3;
+    hx = Math.round(hCenter - houseW / 2);
+    hby = cliff.top(Math.round(hCenter) - cliffX) + 1;
+    const ch = drawHouse(hx, hby, houseW, wallH, roofH);
+    chimneyX = ch.chimneyX; chimneyTopY = ch.chimneyTopY;
+
+    // scattered boulders so the base reads as rocky (also give foam something to break on)
+    PK.rock(cx - cliffW * 0.5 - 12, waterY + 6, 24, 14, rockR, { seed: 5 });
+    PK.rock(cx + cliffW * 0.5 - 4,  waterY + 7, 22, 12, rockR, { seed: 9 });
+    PK.rock(cx + cliffW * 0.28, waterY + 4, 12, 6, rockR, { seed: 3 });
+
+    // extra facets catching the moon on the left flank so the cliff isn't a flat mass
+    const rndF = PK.rng(77);
+    for (let k = 0; k < 26; k++) {
+      const fx = cliffX + 3 + Math.floor(rndF() * (cx - 4 - cliffX));
+      const fy = cliff.top(fx - cliffX) + 2 + Math.floor(rndF() * (waterY - cliff.top(fx - cliffX) - 3));
+      if (fy >= waterY) continue;
+      PK.px(fx, fy, rndF() < 0.5 ? rockR[3] : rockR[4]);
+      PK.px(fx + 1, fy + 1, rockR[3]);
+    }
+  });
+
+  rain.setArea([0, -10, W, H]);
+  return { cx, horizonY, waterY, towerTopW, towerBaseW, towerH, cliffX, cliffW, cliffH,
+           mx, my, moonR, chimneyX, chimneyTopY };
+}
+
+const c = document.getElementById("c");
+view = PK.fit(c, 150, (v) => { L = buildLayers(v); });
+
+// ---- animation -------------------------------------------------------------------------------
+PK.loop((t, dt) => {
+  if (!L) return;
+  const { cx, horizonY, waterY, towerTopW, towerH, mx, my, moonR } = L;
+  const W = view.W, H = view.H;
+
+  PK.blit(skyLayer);
+
+  // twinkling stars across the sky
+  PK.stars(0, 0, W, horizonY, Math.round(W * 0.22), t);
+
+  // drifting clouds partly cover the moon
+  for (const cl of clouds) {
+    const cw = Math.round((16 + 10 * cl.s));
+    let x = ((cl.nx * (W + cw * 2) + t * cl.sp) % (W + cw * 2)) - cw;
+    const y = Math.round(cl.ny * H);
+    PK.pad(x, y, cw, 6 * cl.s, cloud, { seed: cl.seed });
+    PK.pad(x - cw * 0.5, y + 2, cw * 0.7, 5 * cl.s, cloud, { seed: cl.seed + 1 });
+    PK.pad(x + cw * 0.5, y + 2, cw * 0.7, 5 * cl.s, cloud, { seed: cl.seed + 2 });
+  }
+
+  // a slow cloud that lingers over the moon so it clearly reads as "partly behind clouds"
+  {
+    const cw = Math.max(18, Math.round(moonR * 4));
+    const x = mx - Math.round(moonR) + Math.round(Math.sin(t * 0.06) * moonR * 0.6);
+    const y = my + Math.round(moonR * 0.5);
+    PK.pad(x, y, cw, Math.max(5, moonR), cloud, { seed: 901 });
+    PK.pad(x - cw * 0.4, y + 2, cw * 0.6, Math.max(4, moonR * 0.7), cloud, { seed: 902 });
+    PK.pad(x + cw * 0.45, y + 2, cw * 0.6, Math.max(4, moonR * 0.7), cloud, { seed: 903 });
+  }
+
+  // moon glint on the sea
+  for (let y = horizonY + 3; y < waterY; y += 2) {
+    const wob = Math.round(Math.sin(t * 3 + y) * 2);
+    PK.px(mx + wob, y, seaR[4]);
+    PK.px(mx - wob, y + 1, seaR[3]);
+  }
+
+  // rolling sea
+  PK.sea(0, horizonY + 1, W, H, t, seaR);
+
+  // crisp horizon line: separates the sea from the sky
+  for (let x = 0; x < W; x++) {
+    const hy = horizonY + Math.round(Math.sin((x + t * 6) / 14) * 1.2);
+    PK.px(x, hy, seaR[3]);
+    if ((x + Math.round(t * 6)) % 9 < 2) PK.px(x, hy - 1, seaR[4]);
+  }
+
+  // foam surging where water meets the rocks
+  PK.foam(L.cliffX, L.cliffX + L.cliffW, waterY + 2, t, FOAM, 11);
+  PK.foam(cx - Math.round(view.W * 0.34) - 12, cx - Math.round(view.W * 0.34) + 12, waterY + 7, t, FOAM, 21);
+  PK.foam(cx + Math.round(view.W * 0.31) - 4, cx + Math.round(view.W * 0.31) + 18, waterY + 8, t, FOAM, 22);
+
+  PK.blit(fgLayer);
+
+  // warm lantern light spilling onto the cliff face and chimney smoke from the keeper's house
+  const flick = 0.9 + 0.1 * Math.sin(t * 7);
+  PK.glow(cx, waterY - Math.round(L.cliffH * 0.45), L.towerBaseW + 9, "#a9772f", 0.16 * flick);
+  for (let k = 0; k < 8; k++) {
+    const life = (t * 3 + k * 1.7) % 10;
+    if (life > 6) continue;
+    const sy = L.chimneyTopY - 1 - k - Math.floor(life * 0.6);
+    const sx = L.chimneyX + Math.round(Math.sin(t * 0.9 + k * 0.7) * (1 + life * 0.4));
+    PK.px(sx, sy, life < 3 ? "#7c84a4" : "#4c526e");
+  }
+
+  // sweeping beacon: oscillate around straight-up so the beam reads across the sky
+  const T = L.waterY + 1 - L.towerH;                       // approx deck line
+  const lanternY = Math.round(T - 4 - Math.round(7 / 2));  // matches drawTop
+  const len = Math.hypot(W, H);
+  const ang = -Math.PI / 2 + Math.sin(t * 0.35) * (Math.PI * 0.36);
+
+  // ground the beams: brighten the water where each ray crosses the sea
+  for (const a of [ang, ang + Math.PI]) {
+    const ca = Math.cos(a), sa = Math.sin(a);
+    for (let d = 12; d < len; d += 3) {
+      const x = Math.round(cx + ca * d), y = Math.round(lanternY + sa * d);
+      if (x < 0 || x >= W) continue;
+      if (y > horizonY + 2 && y < waterY + 3) {
+        PK.px(x, y, seaR[4]);
+        PK.px(x + (ca < 0 ? -1 : 1), y + 1, seaR[3]);
+      }
+    }
+  }
+  PK.beam(cx, lanternY, ang, len, 0.12, BEAM, 0.5 * flick);
+  PK.beam(cx, lanternY, ang + Math.PI, len, 0.12, BEAM, 0.18 * flick);
+
+  // warm bloom around the lantern room
+  PK.glow(cx, lanternY, Math.max(4, towerTopW + 2), "#ffe6a0", 0.7 * flick);
+  PK.glow(cx, lanternY, Math.max(2, Math.round(towerTopW * 0.5)), "#fff7d0", 0.95);
+
+  // angled rain over the whole scene
+  rain.step(dt);
+  rain.streaks(RAIN);
+});
+</script>
+</body>
+</html>
