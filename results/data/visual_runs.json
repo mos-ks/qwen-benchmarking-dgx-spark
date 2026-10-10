@@ -636,5 +636,16 @@
   "score": 7.5,
   "outcome": "done",
   "note": "picked (critic 8 vs 8, pick broke the tie, correctly): big striped tower on a jagged cliff, keeper's house, golden sweeping beam, moon behind a cloud, outcrops, rain, foam; the tower's base sinks into the rock"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 kit v7 + thinking low, best of 2 \u00b7 best",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v7 + thinking low, best of 2",
+  "attempt": "best",
+  "minutes": 28.4,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "picked (critic 7 vs 7, pick broke the tie): KPI cards, category bars with icons, highlighted month bars, transactions, budgets; both drafts were of similar quality; 5 min over budget. Rerun after the memory watchdog stopped vLLM during the first attempt"
  }
 ]

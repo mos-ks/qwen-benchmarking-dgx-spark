@@ -152,6 +152,7 @@ unless noted. Opus 5.5 averages 9.1 on the same briefs.
 | kit v6, thinking low | 7.5 | 7.0 | 8.0 | 8.0 | 7.6 |
 | kit v7, thinking low | 7.5 | 7.5 | 7.0 | 7.5 | 7.4 |
 | kit v7, thinking medium | 6.5 | 8.0 | 6.0 | 8.0 | 7.1 |
+| kit v7, thinking low, best of 2 (calibrated critic picks) | 7.0 | 7.5 | 7.0 | 7.5 | 7.3 |
 
 Single runs swing by a point or more (the same setup produced a 3.5 and a 7.5 lighthouse), so read
 the means, not single cells. Thinking low wins on the windmill every time (8.0, 8.0 against 6.5, 7.0)
@@ -213,7 +214,7 @@ Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
 - Kit v6, thinking off: bonsai 7.0, lighthouse 3.5 (the agent first stopped at minute 27, after the supervisor's budget, so no fix round ran), windmill 7.0, dashboard 7.5. Thinking low: 7.5, 7.0, 8.0, 8.0.
 - Kit v7 (one mid-course critique at minute 10, folded into the agent's next tool result, so every run gets feedback even if it never stops), thinking low: bonsai 7.5, lighthouse 7.5, windmill 7.0, dashboard 7.5. Same mean as kit v6 within noise; no run below 7.
 - Kit v7 with thinking medium: bonsai 6.5 (tree too small), lighthouse 8.0 in 15 min, windmill 6.0 (sails drawn as a dark disc), dashboard 8.0. Mean 7.1, against 7.4 for low: medium is not better and swings more.
-- In progress: best-of-2 with kit v7 and thinking low (two attempts per brief in parallel, the calibrated critic picks the winner).
+- Best-of-2 with kit v7 and thinking low (two attempts per brief in parallel, the calibrated critic picks, `pick` breaks ties): 7.0, 7.5, 7.0, 7.5. No gain over single runs: the two drafts were usually close, and the critic picked the weaker windmill. Its wall clock is the slower draft plus selection, so the dashboard ran 5 minutes over budget.
 - This repository is updated as runs finish.
 
 ## Reproduce

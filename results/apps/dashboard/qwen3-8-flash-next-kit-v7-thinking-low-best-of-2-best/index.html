@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Alex Morgan · Personal Finance</title>
+<style>
+  /* ---------- Design tokens ---------- */
+  :root {
+    color-scheme: light;
+
+    /* type scale (modular-ish) */
+    --fs-12: 0.75rem;
+    --fs-13: 0.8125rem;
+    --fs-14: 0.875rem;
+    --fs-16: 1rem;
+    --fs-18: 1.125rem;
+    --fs-22: 1.375rem;
+    --fs-28: 1.75rem;
+    --fs-34: 2.125rem;
+
+    /* spacing scale (4/8 rhythm) */
+    --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px; --sp-9: 48px;
+
+    --radius-sm: 8px;
+    --radius: 14px;
+    --radius-lg: 20px;
+    --pill: 999px;
+
+    /* light theme surfaces */
+    --bg: #f4f6fa;
+    --bg-grad-1: #eef2fb;
+    --bg-grad-2: #f6f8fc;
+    --surface: #ffffff;
+    --surface-2: #f5f7fb;
+    --surface-3: #eaeef6;
+    --border: #e6e9f0;
+    --border-strong: #d6dbe6;
+
+    --text: #0f1729;
+    --text-muted: #55637a;
+    --text-faint: #8a97ad;
+
+    --brand: #2563eb;
+    --brand-strong: #1d4ed8;
+    --brand-soft: rgba(37, 99, 235, 0.10);
+    --ring: rgba(37, 99, 235, 0.45);
+
+    --positive: #12854c;
+    --positive-soft: rgba(18, 133, 76, 0.12);
+    --negative: #cf2b3f;
+    --negative-soft: rgba(207, 43, 63, 0.12);
+    --warning: #a8620a;
+    --amber: #d98508;
+
+    /* chart tokens */
+    --chart-income: #12a150;
+    --chart-spend: #6366f1;
+    --cat-bar: #2563eb;
+    --cat-bar-top: #1d4ed8;
+    --grid: #e7ebf2;
+    --track: #e9edf5;
+    --highlight: rgba(37, 99, 235, 0.07);
+
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);
+    --shadow: 0 4px 16px rgba(16, 24, 40, 0.08), 0 1px 3px rgba(16, 24, 40, 0.05);
+    --shadow-pop: 0 12px 34px rgba(16, 24, 40, 0.18);
+
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  /* dark via system */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #0a1120;
+      --bg-grad-1: #0b1424;
+      --bg-grad-2: #0a1120;
+      --surface: #111b2d;
+      --surface-2: #16223a;
+      --surface-3: #1d2c48;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+
+      --text: #e8eefb;
+      --text-muted: #a4b2ca;
+      --text-faint: #6d7d98;
+
+      --brand: #5b9bff;
+      --brand-strong: #7db0ff;
+      --brand-soft: rgba(91, 155, 255, 0.16);
+      --ring: rgba(125, 176, 255, 0.55);
+
+      --positive: #35c98a;
+      --positive-soft: rgba(53, 201, 138, 0.16);
+      --negative: #ff6b7d;
+      --negative-soft: rgba(255, 107, 125, 0.16);
+      --warning: #f4b13a;
+      --amber: #f0a12b;
+
+      --chart-income: #35c98a;
+      --chart-spend: #8b93ff;
+      --cat-bar: #4d8dff;
+      --cat-bar-top: #6ba0ff;
+      --grid: rgba(255, 255, 255, 0.07);
+      --track: rgba(255, 255, 255, 0.08);
+      --highlight: rgba(91, 155, 255, 0.10);
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+      --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+      --shadow-pop: 0 16px 44px rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  /* explicit override toggles (win over media query) */
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f4f6fa; --bg-grad-1: #eef2fb; --bg-grad-2: #f6f8fc;
+    --surface: #ffffff; --surface-2: #f5f7fb; --surface-3: #eaeef6;
+    --border: #e6e9f0; --border-strong: #d6dbe6;
+    --text: #0f1729; --text-muted: #55637a; --text-faint: #8a97ad;
+    --brand: #2563eb; --brand-strong: #1d4ed8; --brand-soft: rgba(37, 99, 235, 0.10);
+    --ring: rgba(37, 99, 235, 0.45);
+    --positive: #12854c; --positive-soft: rgba(18, 133, 76, 0.12);
+    --negative: #cf2b3f; --negative-soft: rgba(207, 43, 63, 0.12);
+    --warning: #a8620a; --amber: #d98508;
+    --chart-income: #12a150; --chart-spend: #6366f1;
+    --cat-bar: #2563eb; --cat-bar-top: #1d4ed8;
+    --grid: #e7ebf2; --track: #e9edf5; --highlight: rgba(37, 99, 235, 0.07);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a1120; --bg-grad-1: #0b1424; --bg-grad-2: #0a1120;
+    --surface: #111b2d; --surface-2: #16223a; --surface-3: #1d2c48;
+    --border: rgba(255, 255, 255, 0.08); --border-strong: rgba(255, 255, 255, 0.16);
+    --text: #e8eefb; --text-muted: #a4b2ca; --text-faint: #6d7d98;
+    --brand: #5b9bff; --brand-strong: #7db0ff; --brand-soft: rgba(91, 155, 255, 0.16);
+    --ring: rgba(125, 176, 255, 0.55);
+    --positive: #35c98a; --positive-soft: rgba(53, 201, 138, 0.16);
+    --negative: #ff6b7d; --negative-soft: rgba(255, 107, 125, 0.16);
+    --warning: #f4b13a; --amber: #f0a12b;
+    --chart-income: #35c98a; --chart-spend: #8b93ff;
+    --cat-bar: #4d8dff; --cat-bar-top: #6ba0ff;
+    --grid: rgba(255, 255, 255, 0.07); --track: rgba(255, 255, 255, 0.08); --highlight: rgba(91, 155, 255, 0.10);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: var(--fs-16);
+    line-height: 1.5;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 100% -10%, var(--bg-grad-1), transparent 60%),
+      radial-gradient(900px 500px at -10% 0%, var(--bg-grad-1), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: var(--sp-6) var(--sp-5) var(--sp-9); }
+
+  /* ---------- Header ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 30;
+    backdrop-filter: saturate(1.4) blur(10px);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner {
+    max-width: 1180px; margin: 0 auto;
+    display: flex; align-items: center; gap: var(--sp-4);
+    padding: var(--sp-3) var(--sp-5);
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: var(--sp-3); margin-right: auto; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 12px; flex: none;
+    display: grid; place-items: center; color: #fff; font-weight: 700;
+    background: linear-gradient(140deg, var(--brand), var(--brand-strong));
+    box-shadow: var(--shadow-sm); letter-spacing: 0.02em;
+  }
+  .brand .who { font-size: var(--fs-18); font-weight: 650; line-height: 1.15; }
+  .brand .sub { font-size: var(--fs-12); color: var(--text-faint); letter-spacing: 0.02em; }
+
+  .controls { display: flex; align-items: center; gap: var(--sp-2); }
+  .month-select {
+    appearance: none; -webkit-appearance: none;
+    font: inherit; font-size: var(--fs-14); font-weight: 600; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--pill); padding: 9px 38px 9px 16px; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a97ad' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 14px center;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  .month-select:hover { border-color: var(--brand); }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+    background: var(--surface); border: 1px solid var(--border-strong); color: var(--text-muted);
+    cursor: pointer; transition: color .18s, border-color .18s, transform .1s;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--brand); }
+  .icon-btn:active { transform: scale(.94); }
+  .icon-btn svg { width: 20px; height: 20px; }
+
+  /* ---------- Section / cards ---------- */
+  .section-title {
+    display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3);
+    margin: var(--sp-8) 0 var(--sp-4);
+  }
+  .section-title:first-of-type { margin-top: var(--sp-6); }
+  .section-title h2 { font-size: var(--fs-18); }
+  .section-title .hint { font-size: var(--fs-13); color: var(--text-faint); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* KPI grid */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4); }
+  .kpi { padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+  .kpi .label { font-size: var(--fs-13); color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: var(--sp-2); }
+  .kpi .label .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .kpi .value { font-size: var(--fs-28); font-weight: 700; letter-spacing: -0.02em; }
+  .kpi .foot { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-13); margin-top: 2px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: var(--pill);
+    font-size: var(--fs-12); font-weight: 650; line-height: 1;
+  }
+  .chip.up { color: var(--positive); background: var(--positive-soft); }
+  .chip.down { color: var(--negative); background: var(--negative-soft); }
+  .chip.flat { color: var(--text-muted); background: var(--surface-3); }
+  .chip svg { width: 12px; height: 12px; }
+  .foot .vs { color: var(--text-faint); }
+
+  /* charts grid */
+  .charts { display: grid; grid-template-columns: 1.05fr 1fr; gap: var(--sp-4); }
+  .chart-card { padding: var(--sp-5); display: flex; flex-direction: column; min-width: 0; }
+  .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+  .chart-head h3 { font-size: var(--fs-16); }
+  .chart-head p { margin: 2px 0 0; font-size: var(--fs-12); color: var(--text-faint); }
+  .chart-body { position: relative; width: 100%; }
+  .chart-body svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .legend { display: flex; gap: var(--sp-4); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); color: var(--text-muted); }
+  .legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  .bar-hit { cursor: pointer; }
+  .bar-hit:focus { outline: none; }
+  .bar-hit:focus-visible + .focus-ring, .bar-hit:focus .focus-ring { opacity: 1; }
+
+  /* bottom grid: transactions + budgets */
+  .bottom { display: grid; grid-template-columns: 1.25fr 1fr; gap: var(--sp-4); align-items: start; }
+
+  .tx-card, .budget-card { padding: var(--sp-5); }
+  .tx-list { display: flex; flex-direction: column; }
+  .tx {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--sp-3);
+    padding: var(--sp-3) 0; border-top: 1px solid var(--border);
+  }
+  .tx:first-child { border-top: 0; }
+  .tx .badge { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); }
+  .tx .badge svg { width: 20px; height: 20px; }
+  .tx .meta { min-width: 0; }
+  .tx .meta .t { font-weight: 600; font-size: var(--fs-14); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx .meta .s { font-size: var(--fs-12); color: var(--text-faint); display: flex; align-items: center; gap: 6px; }
+  .tx .meta .s .cat { color: var(--text-muted); font-weight: 600; }
+  .tx .amt { font-weight: 650; font-size: var(--fs-14); white-space: nowrap; }
+  .tx .amt.in { color: var(--positive); }
+  .tx .amt.out { color: var(--text); }
+  .count { font-size: var(--fs-12); color: var(--text-faint); margin-top: var(--sp-3); text-align: center; }
+
+  .budget-row { padding: var(--sp-3) 0; border-top: 1px solid var(--border); }
+  .budget-row:first-child { border-top: 0; padding-top: var(--sp-1); }
+  .budget-top { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+  .budget-top .badge { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); }
+  .budget-top .badge svg { width: 17px; height: 17px; }
+  .budget-top .name { font-weight: 600; font-size: var(--fs-14); }
+  .budget-top .vals { font-size: var(--fs-13); text-align: right; }
+  .budget-top .vals .spent { font-weight: 650; }
+  .budget-top .vals .lim { color: var(--text-faint); }
+  .track { height: 9px; border-radius: var(--pill); background: var(--track); overflow: hidden; }
+  .fill { height: 100%; border-radius: var(--pill); transform-box: fill-box; transform-origin: left center; transition: width .5s cubic-bezier(.2,.7,.2,1), background-color .2s; animation: growX .7s cubic-bezier(.2,.7,.25,1) both; }
+
+  /* chart entrance animation */
+  .bar-grow-y { transform-box: fill-box; transform-origin: bottom center; animation: growY .7s cubic-bezier(.2,.7,.25,1) both; }
+  .bar-grow-x { transform-box: fill-box; transform-origin: left center; animation: growX .7s cubic-bezier(.2,.7,.25,1) both; }
+  @keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .budget-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: var(--fs-12); }
+  .status { display: inline-flex; align-items: center; gap: 5px; font-weight: 650; }
+  .status svg { width: 12px; height: 12px; }
+  .status.ok { color: var(--text-muted); }
+  .status.warn { color: var(--warning); }
+  .status.over { color: var(--negative); }
+  .remain { color: var(--text-faint); }
+  .remain.over { color: var(--negative); font-weight: 600; }
+
+  /* tooltip */
+  .tooltip {
+    position: fixed; z-index: 50; pointer-events: none; opacity: 0; transform: translateY(4px);
+    background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-pop); border-radius: 10px; padding: 8px 10px; font-size: var(--fs-13);
+    transition: opacity .12s ease, transform .12s ease; min-width: 90px;
+  }
+  .tooltip[data-show="1"] { opacity: 1; transform: translateY(0); }
+  .tooltip .tt-title { font-size: var(--fs-12); color: var(--text-faint); margin-bottom: 3px; }
+  .tooltip .tt-row { display: flex; align-items: center; gap: 7px; }
+  .tooltip .tt-row i { width: 9px; height: 9px; border-radius: 3px; }
+  .tooltip .tt-row .v { margin-left: auto; font-weight: 700; }
+
+  .footer { margin-top: var(--sp-9); text-align: center; color: var(--text-faint); font-size: var(--fs-12); }
+
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 980px) {
+    .charts { grid-template-columns: 1fr; }
+    .bottom { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 460px) {
+    .wrap { padding: var(--sp-5) var(--sp-4) var(--sp-8); }
+    .topbar-inner { padding: var(--sp-3) var(--sp-4); }
+    .kpis { grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); }
+    .kpi { padding: var(--sp-4); }
+    .kpi .value { font-size: var(--fs-22); }
+    .brand .who { font-size: var(--fs-16); }
+  }
+  @media (max-width: 340px) {
+    .kpis { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="avatar" aria-hidden="true">AM</div>
+        <div>
+          <div class="who">Alex Morgan</div>
+          <div class="sub">Personal finances · <span id="rangeLabel">Last 6 months</span></div>
+        </div>
+      </div>
+      <div class="controls">
+        <label class="visually-hidden" for="monthSelect">Select month</label>
+        <select id="monthSelect" class="month-select" aria-label="Select month"></select>
+        <button id="themeBtn" class="icon-btn" type="button" aria-label="Switch color theme (currently following system)">
+          <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="main">
+    <div class="section-title">
+      <h2 id="periodHeading">Overview</h2>
+      <span class="hint" id="periodHint">—</span>
+    </div>
+
+    <section class="kpis" id="kpis" aria-label="Key metrics"></section>
+
+    <section class="charts" aria-label="Charts">
+      <div class="card chart-card">
+        <div class="chart-head">
+          <div>
+            <h3>Spending by category</h3>
+            <p id="catSub">Where the money went this month</p>
+          </div>
+        </div>
+        <div class="chart-body" id="catChart" role="img" aria-label="Spending by category bar chart"></div>
+        <div id="catTable" class="visually-hidden"></div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="chart-head">
+          <div>
+            <h3>Income vs spending</h3>
+            <p>Monthly totals over the last 6 months</p>
+          </div>
+          <div class="legend">
+            <span><i style="background:var(--chart-income)"></i>Income</span>
+            <span><i style="background:var(--chart-spend)"></i>Spending</span>
+          </div>
+        </div>
+        <div class="chart-body" id="trendChart" role="img" aria-label="Income versus spending column chart"></div>
+        <div id="trendTable" class="visually-hidden"></div>
+      </div>
+    </section>
+
+    <section class="bottom" aria-label="Details">
+      <div class="card tx-card">
+        <div class="chart-head">
+          <div><h3>Recent transactions</h3><p id="txSub">Most recent activity this month</p></div>
+        </div>
+        <div class="tx-list" id="txList"></div>
+        <div class="count" id="txCount"></div>
+      </div>
+
+      <div class="card budget-card">
+        <div class="chart-head">
+          <div><h3>Budget progress</h3><p id="budgetSub">Limit vs spent this month</p></div>
+        </div>
+        <div id="budgetList"></div>
+      </div>
+    </section>
+
+    <p class="footer">Sample data for demonstration · Figures are illustrative and do not reflect a real account.</p>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =====================================================================
+   * 1. Icons — inline SVG inner markup (stroke, sized to a 24×24 viewBox)
+   * =================================================================== */
+  var ICONS = {
+    home: '<path d="M3 10.6 12 3.2l9 7.4"/><path d="M5.4 9.2V20.2h13.2V9.2"/><path d="M10 20.2v-5h4v5"/>',
+    cart: '<path d="M3 4h2.3l2 12.1a1.6 1.6 0 0 0 1.6 1.3h8.5a1.6 1.6 0 0 0 1.6-1.3L21 8.1H6.1"/><circle cx="9.6" cy="20" r="1.3"/><circle cx="16.9" cy="20" r="1.3"/>',
+    cup: '<path d="M4 9.2h12.2v4.3a4.6 4.6 0 0 1-4.6 4.6H8.6A4.6 4.6 0 0 1 4 13.5z"/><path d="M16.2 10.6h1.7a2.3 2.3 0 0 1 0 4.6h-1.7"/><path d="M7 3.4v1.9M11 3.4v1.9"/>',
+    car: '<path d="M4 13.4 5.6 8A2 2 0 0 1 7.5 6.5h9A2 2 0 0 1 18.4 8L20 13.4"/><path d="M4 13.4h16V17H4z"/><circle cx="7.6" cy="18.6" r="1.3"/><circle cx="16.4" cy="18.6" r="1.3"/>',
+    bolt: '<path d="M13 2.5 5 14h5.4L10 21.5 19 10h-5.4z"/>',
+    bag: '<path d="M6 8h12l-1 12.2H7z"/><path d="M9 8V6.6a3 3 0 0 1 6 0V8"/>',
+    play: '<circle cx="12" cy="12" r="8.8"/><path d="M10 8.6 16 12l-6 3.4z"/>',
+    heart: '<path d="M12 20.4S4.6 16 4.6 10.3A4 4 0 0 1 12 7.6a4 4 0 0 1 7.4 2.7C19.4 16 12 20.4 12 20.4z"/>',
+    wallet: '<path d="M12 4v9.6"/><path d="M8.4 10.3 12 14l3.6-3.7"/><path d="M5 16.6v2a1.9 1.9 0 0 0 1.9 1.9h10.2a1.9 1.9 0 0 0 1.9-1.9v-2"/>',
+    briefcase: '<rect x="3.6" y="8" width="16.8" height="11" rx="1.6"/><path d="M9 8V6.6A1.7 1.7 0 0 1 10.7 5h2.6A1.7 1.7 0 0 1 15 6.6V8"/><path d="M3.6 12.6h16.8"/>',
+    code: '<path d="M9 8 5.2 12 9 16"/><path d="M15 8l3.8 4L15 16"/>',
+    percent: '<path d="M6.5 17.5 17.5 6.5"/><circle cx="7.6" cy="7.6" r="2"/><circle cx="16.4" cy="16.4" r="2"/>',
+    check: '<path d="M5 12.5 10 17.5 19 7.5"/>',
+    alert: '<path d="M12 4 2.5 20h19z"/><path d="M12 10v4"/><path d="M12 17.4h.01"/>'
+  };
+  function svgIcon(name, opts) {
+    opts = opts || {};
+    var inner = ICONS[name] || ICONS.wallet;
+    var cls = opts.cls ? ' class="' + opts.cls + '"' : '';
+    var sw = opts.sw || 1.8;
+    return '<svg' + cls + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>';
+  }
+
+  /* =====================================================================
+   * 2. Categories & budgets
+   * =================================================================== */
+  var CATS = {
+    housing:       { label: 'Housing',       icon: 'home',  budget: 1600 },
+    utilities:     { label: 'Utilities',     icon: 'bolt',  budget: 280 },
+    groceries:     { label: 'Groceries',     icon: 'cart',  budget: 560 },
+    dining:        { label: 'Dining out',    icon: 'cup',   budget: 260 },
+    transport:     { label: 'Transport',     icon: 'car',   budget: 200 },
+    shopping:      { label: 'Shopping',      icon: 'bag',   budget: 300 },
+    entertainment: { label: 'Entertainment', icon: 'play',  budget: 200 },
+    health:        { label: 'Health',        icon: 'heart', budget: 160 }
+  };
+  var EXPENSE_KEYS = Object.keys(CATS);
+  var INCOME_ICONS = { salary: 'briefcase', freelance: 'code', interest: 'percent' };
+
+  /* =====================================================================
+   * 3. Sample data — one person, 7 months (Apr–Oct 2026).
+   *    The last 6 months are shown; April only powers the first delta.
+   *    Amounts are whole dollars for expenses, cents where realistic.
+   * =================================================================== */
+  var START_BALANCE = 7850; // balance at the end of March 2026
+
+  var MONTHS = [
+    { key: '2026-04', label: 'Apr', full: 'April 2026',
+      income: [
+        { t: 'Acme Corp — Salary', sub: 'salary', cat: 'income', amt: 4800, day: 1 },
+        { t: 'Bank interest', sub: 'interest', cat: 'income', amt: 9.25, day: 27 }
+      ],
+      expenses: [
+        { t: 'Apartment rent', cat: 'housing', amt: 1450, day: 1 },
+        { t: 'Equinox — Membership', cat: 'health', amt: 49, day: 2 },
+        { t: 'Netflix', cat: 'entertainment', amt: 15.49, day: 3 },
+        { t: 'Spotify', cat: 'entertainment', amt: 10.99, day: 3 },
+        { t: 'PG&E — Electric', cat: 'utilities', amt: 96.40, day: 5 },
+        { t: 'Comcast — Internet', cat: 'utilities', amt: 60, day: 6 },
+        { t: 'T-Mobile', cat: 'utilities', amt: 45, day: 8 },
+        { t: 'Trader Joe\u2019s', cat: 'groceries', amt: 128.55, day: 6 },
+        { t: 'Costco', cat: 'groceries', amt: 214.30, day: 13 },
+        { t: 'Safeway', cat: 'groceries', amt: 96.20, day: 22 },
+        { t: 'Chipotle', cat: 'dining', amt: 22.10, day: 9 },
+        { t: 'Sweetgreen', cat: 'dining', amt: 16.80, day: 17 },
+        { t: 'Starbucks', cat: 'dining', amt: 6.45, day: 24 },
+        { t: 'Uber', cat: 'transport', amt: 24.30, day: 11 },
+        { t: 'Shell', cat: 'transport', amt: 52.00, day: 19 },
+        { t: 'Amazon', cat: 'shopping', amt: 132.40, day: 15 }
+      ] },
+    { key: '2026-05', label: 'May', full: 'May 2026',
+      income: [
+        { t: 'Acme Corp — Salary', sub: 'salary', cat: 'income', amt: 4800, day: 1 },
+        { t: 'Freelance — Landing page', sub: 'freelance', cat: 'income', amt: 750, day: 19 },
+        { t: 'Bank interest', sub: 'interest', cat: 'income', amt: 10.10, day: 27 }
+      ],
+      expenses: [
+        { t: 'Apartment rent', cat: 'housing', amt: 1450, day: 1 },
+        { t: 'Equinox — Membership', cat: 'health', amt: 49, day: 2 },
+        { t: 'Netflix', cat: 'entertainment', amt: 15.49, day: 3 },
+        { t: 'Spotify', cat: 'entertainment', amt: 10.99, day: 3 },
+        { t: 'AMC Theatres', cat: 'entertainment', amt: 32, day: 18 },
+        { t: 'PG&E — Electric', cat: 'utilities', amt: 104.80, day: 5 },
+        { t: 'Comcast — Internet', cat: 'utilities', amt: 60, day: 6 },
+        { t: 'T-Mobile', cat: 'utilities', amt: 45, day: 8 },
+        { t: 'Whole Foods', cat: 'groceries', amt: 142.10, day: 5 },
+        { t: 'Trader Joe\u2019s', cat: 'groceries', amt: 98.40, day: 12 },
+        { t: 'Costco', cat: 'groceries', amt: 188.65, day: 21 },
+        { t: 'Blue Bottle Coffee', cat: 'dining', amt: 14.20, day: 7 },
+        { t: 'Olive Garden', cat: 'dining', amt: 61.50, day: 16 },
+        { t: 'Ramen Bar', cat: 'dining', amt: 27.80, day: 25 },
+        { t: 'Lyft', cat: 'transport', amt: 19.40, day: 10 },
+        { t: 'Chevron', cat: 'transport', amt: 58.20, day: 20 },
+        { t: 'Target', cat: 'shopping', amt: 96.30, day: 14 },
+        { t: 'CVS Pharmacy', cat: 'health', amt: 28.90, day: 23 }
+      ] },
+    { key: '2026-06', label: 'Jun', full: 'June 2026',
+      income: [
+        { t: 'Acme Corp — Salary', sub: 'salary', cat: 'income', amt: 4800, day: 1 },
+        { t: 'Bank interest', sub: 'interest', cat: 'income', amt: 11.40, day: 27 }
+      ],
+      expenses: [
+        { t: 'Apartment rent', cat: 'housing', amt: 1450, day: 1 },
+        { t: 'Equinox — Membership', cat: 'health', amt: 49, day: 2 },
+        { t: 'Netflix', cat: 'entertainment', amt: 15.49, day: 3 },
+        { t: 'Spotify', cat: 'entertainment', amt: 10.99, day: 3 },
+        { t: 'Steam — Summer Sale', cat: 'entertainment', amt: 59.97, day: 22 },
+        { t: 'PG&E — Electric', cat: 'utilities', amt: 132.60, day: 5 },
+        { t: 'Comcast — Internet', cat: 'utilities', amt: 60, day: 6 },
+        { t: 'T-Mobile', cat: 'utilities', amt: 45, day: 8 },
+        { t: 'Costco', cat: 'groceries', amt: 236.80, day: 4 },
+        { t: 'Whole Foods', cat: 'groceries', amt: 121.35, day: 11 },
+        { t: 'Safeway', cat: 'groceries', amt: 88.90, day: 19 },
+        { t: 'Chipotle', cat: 'dining', amt: 24.60, day: 8 },
+        { t: 'Chipotle', cat: 'dining', amt: 21.40, day: 15 },
+        { t: 'Sweetgreen', cat: 'dining', amt: 17.90, day: 21 },
+        { t: 'Starbucks', cat: 'dining', amt: 8.20, day: 27 },
+        { t: 'Uber', cat: 'transport', amt: 31.10, day: 9 },
+        { t: 'Shell', cat: 'transport', amt: 55.00, day: 18 },
+        { t: 'Uniqlo', cat: 'shopping', amt: 143.00, day: 13 },
+        { t: 'Amazon', cat: 'shopping', amt: 78.55, day: 24 }
+      ] },
+    { key: '2026-07', label: 'Jul', full: 'July 2026',
+      income: [
+        { t: 'Acme Corp — Salary', sub: 'salary', cat: 'income', amt: 4800, day: 1 },
+        { t: 'Freelance — Brand refresh', sub: 'freelance', cat: 'income', amt: 1200, day: 17 },
+        { t: 'Bank interest', sub: 'interest', cat: 'income', amt: 12.80, day: 28 }
+      ],
+      expenses: [
+        { t: 'Apartment rent', cat: 'housing', amt: 1450, day: 1 },
+        { t: 'Equinox — Membership', cat: 'health', amt: 49, day: 2 },
+        { t: 'Dentist — Cleaning', cat: 'health', amt: 120, day: 16 },
+        { t: 'Netflix', cat: 'entertainment', amt: 15.49, day: 3 },
+        { t: 'Spotify', cat: 'entertainment', amt: 10.99, day: 3 },
+        { t: 'AMC Theatres', cat: 'entertainment', amt: 42, day: 6 },
+        { t: 'Concert — The Killers', cat: 'entertainment', amt: 95, day: 20 },
+        { t: 'PG&E — Electric', cat: 'utilities', amt: 148.20, day: 5 },
+        { t: 'Comcast — Internet', cat: 'utilities', amt: 60, day: 6 },
+        { t: 'T-Mobile', cat: 'utilities', amt: 45, day: 8 },
+        { t: 'Costco', cat: 'groceries', amt: 205.40, day: 5 },
+        { t: 'Trader Joe\u2019s', cat: 'groceries', amt: 112.75, day: 12 },
+        { t: 'Whole Foods', cat: 'groceries', amt: 96.60, day: 23 },
+        { t: 'Olive Garden', cat: 'dining', amt: 74.30, day: 4 },
+        { t: 'Ramen Bar', cat: 'dining', amt: 29.40, day: 11 },
+        { t: 'Chipotle', cat: 'dining', amt: 23.10, day: 18 },
+        { t: 'Starbucks', cat: 'dining', amt: 12.75, day: 26 },
+        { t: 'Uber', cat: 'transport', amt: 42.20, day: 7 },
+        { t: 'Metro Card', cat: 'transport', amt: 30, day: 9 },
+        { t: 'Best Buy', cat: 'shopping', amt: 219.99, day: 14 },
+        { t: 'Etsy', cat: 'shopping', amt: 64.00, day: 21 }
+      ] },
+    { key: '2026-08', label: 'Aug', full: 'August 2026',
+      income: [
+        { t: 'Acme Corp — Salary', sub: 'salary', cat: 'income', amt: 4800, day: 1 },
+        { t: 'Bank interest', sub: 'interest', cat: 'income', amt: 13.20, day: 27 }
+      ],
+      expenses: [
+        { t: 'Apartment rent', cat: 'housing', amt: 1450, day: 1 },
+        { t: 'Equinox — Membership', cat: 'health', amt: 49, day: 2 },
+        { t: 'CVS Pharmacy', cat: 'health', amt: 34.20, day: 19 },
+        { t: 'Netflix', cat: 'entertainment', amt: 15.49, day: 3 },
+        { t: 'Spotify', cat: 'entertainment', amt: 10.99, day: 3 },
+        { t: 'PG&E — Electric', cat: 'utilities', amt: 141.10, day: 5 },
+        { t: 'Comcast — Internet', cat: 'utilities', amt: 60, day: 6 },
+        { t: 'T-Mobile', cat: 'utilities', amt: 45, day: 8 },
+        { t: 'Costco', cat: 'groceries', amt: 221.85, day: 4 },
+        { t: 'Safeway', cat: 'groceries', amt: 104.30, day: 13 },
+        { t: 'Trader Joe\u2019s', cat: 'groceries', amt: 89.65, day: 22 },
+        { t: 'Blue Bottle Coffee', cat: 'dining', amt: 15.80, day: 6 },
+        { t: 'Sweetgreen', cat: 'dining', amt: 19.20, day: 12 },
+        { t: 'Olive Garden', cat: 'dining', amt: 58.75, day: 20 },
+        { t: 'Uber', cat: 'transport', amt: 27.60, day: 9 },
+        { t: 'Shell', cat: 'transport', amt: 54.30, day: 17 },
+        { t: 'Amazon', cat: 'shopping', amt: 156.20, day: 15 },
+        { t: 'Target', cat: 'shopping', amt: 88.40, day: 25 }
+      ] },
+    { key: '2026-09', label: 'Sep', full: 'September 2026',
+      income: [
+        { t: 'Acme Corp — Salary', sub: 'salary', cat: 'income', amt: 4800, day: 1 },
+        { t: 'Freelance — App UI', sub: 'freelance', cat: 'income', amt: 640, day: 16 },
+        { t: 'Bank interest', sub: 'interest', cat: 'income', amt: 12.10, day: 27 }
+      ],
+      expenses: [
+        { t: 'Apartment rent', cat: 'housing', amt: 1450, day: 1 },
+        { t: 'Equinox — Membership', cat: 'health', amt: 49, day: 2 },
+        { t: 'Netflix', cat: 'entertainment', amt: 15.49, day: 3 },
+        { t: 'Spotify', cat: 'entertainment', amt: 10.99, day: 3 },
+        { t: 'AMC Theatres', cat: 'entertainment', amt: 28, day: 21 },
+        { t: 'PG&E — Electric', cat: 'utilities', amt: 118.90, day: 5 },
+        { t: 'Comcast — Internet', cat: 'utilities', amt: 60, day: 6 },
+        { t: 'T-Mobile', cat: 'utilities', amt: 45, day: 8 },
+        { t: 'Costco', cat: 'groceries', amt: 198.40, day: 5 },
+        { t: 'Whole Foods', cat: 'groceries', amt: 134.20, day: 12 },
+        { t: 'Safeway', cat: 'groceries', amt: 92.10, day: 20 },
+        { t: 'Chipotle', cat: 'dining', amt: 25.30, day: 8 },
+        { t: 'Ramen Bar', cat: 'dining', amt: 31.10, day: 14 },
+        { t: 'Sweetgreen', cat: 'dining', amt: 18.40, day: 19 },
+        { t: 'Lyft', cat: 'transport', amt: 22.80, day: 10 },
+        { t: 'Chevron', cat: 'transport', amt: 51.00, day: 18 },
+        { t: 'Best Buy', cat: 'shopping', amt: 189.99, day: 13 },
+        { t: 'Uniqlo', cat: 'shopping', amt: 74.00, day: 24 }
+      ] },
+    { key: '2026-10', label: 'Oct', full: 'October 2026',
+      income: [
+        { t: 'Acme Corp — Salary', sub: 'salary', cat: 'income', amt: 4800, day: 1 },
+        { t: 'Freelance — Dashboard kit', sub: 'freelance', cat: 'income', amt: 900, day: 8 },
+        { t: 'Bank interest', sub: 'interest', cat: 'income', amt: 14.05, day: 27 }
+      ],
+      expenses: [
+        { t: 'Apartment rent', cat: 'housing', amt: 1450, day: 1 },
+        { t: 'Equinox — Membership', cat: 'health', amt: 49, day: 2 },
+        { t: 'Netflix', cat: 'entertainment', amt: 15.49, day: 3 },
+        { t: 'Spotify', cat: 'entertainment', amt: 10.99, day: 3 },
+        { t: 'AMC Theatres', cat: 'entertainment', amt: 44, day: 11 },
+        { t: 'Concert — Ticketmaster', cat: 'entertainment', amt: 78, day: 19 },
+        { t: 'PG&E — Electric', cat: 'utilities', amt: 108.60, day: 5 },
+        { t: 'Comcast — Internet', cat: 'utilities', amt: 60, day: 6 },
+        { t: 'T-Mobile', cat: 'utilities', amt: 45, day: 8 },
+        { t: 'Costco', cat: 'groceries', amt: 214.80, day: 4 },
+        { t: 'Trader Joe\u2019s', cat: 'groceries', amt: 121.60, day: 12 },
+        { t: 'Whole Foods', cat: 'groceries', amt: 98.25, day: 21 },
+        { t: 'Olive Garden', cat: 'dining', amt: 98.60, day: 6 },
+        { t: 'Ramen Bar', cat: 'dining', amt: 33.50, day: 13 },
+        { t: 'Chipotle', cat: 'dining', amt: 27.20, day: 18 },
+        { t: 'Sweetgreen', cat: 'dining', amt: 19.90, day: 24 },
+        { t: 'Starbucks', cat: 'dining', amt: 14.60, day: 27 },
+        { t: 'Blue Bottle Coffee', cat: 'dining', amt: 16.80, day: 10 },
+        { t: 'Uber', cat: 'transport', amt: 26.40, day: 9 },
+        { t: 'Shell', cat: 'transport', amt: 48.90, day: 17 },
+        { t: 'Amazon', cat: 'shopping', amt: 164.75, day: 15 },
+        { t: 'Best Buy — Monitor stand', cat: 'shopping', amt: 69.00, day: 10 },
+        { t: 'Etsy', cat: 'shopping', amt: 102.30, day: 22 }
+      ] }
+  ];
+
+  /* =====================================================================
+   * 4. Derive totals, running balance and category breakdowns
+   * =================================================================== */
+  MONTHS.forEach(function (m) {
+    m.incomeTotal = 0; m.expenseTotal = 0; m.byCat = {};
+    EXPENSE_KEYS.forEach(function (k) { m.byCat[k] = 0; });
+    m.transactions = [];
+    m.income.forEach(function (tx) {
+      m.incomeTotal += tx.amt;
+      m.transactions.push({ t: tx.t, cat: tx.cat, sub: tx.sub, amt: tx.amt, type: 'in', day: tx.day, kind: CATS[tx.cat] ? tx.cat : null });
+    });
+    m.expenses.forEach(function (tx) {
+      m.expenseTotal += tx.amt;
+      m.byCat[tx.cat] += tx.amt;
+      m.transactions.push({ t: tx.t, cat: tx.cat, sub: tx.sub, amt: tx.amt, type: 'out', day: tx.day, kind: tx.cat });
+    });
+    m.savings = m.incomeTotal - m.expenseTotal;
+    m.savingsRate = m.incomeTotal > 0 ? (m.savings / m.incomeTotal) * 100 : 0;
+  });
+  (function () {
+    var run = START_BALANCE;
+    MONTHS.forEach(function (m) { run += m.savings; m.balanceEnd = run; });
+  })();
+
+  var DISPLAY = MONTHS.slice(MONTHS.length - 6); // last 6 months
+  var state = { monthIndex: DISPLAY.length - 1 }; // default: latest month
+
+  /* =====================================================================
+   * 5. Formatting helpers
+   * =================================================================== */
+  var nf0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  var nf2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var compact = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
+  var dateFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+  function money(v) { return nf0.format(v); }
+  function money2(v) { return nf2.format(v); }
+  function signChar(v) { return v > 0 ? '+' : (v < 0 ? '\u2212' : ''); }
+  function signedMoney(v) { return (v > 0 ? '+' : (v < 0 ? '\u2212' : '')) + nf0.format(Math.abs(v)); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  function niceStep(x) {
+    if (x <= 0) return 1;
+    var pow = Math.pow(10, Math.floor(Math.log10(x)));
+    var n = x / pow;
+    var s;
+    if (n <= 1) s = 1; else if (n <= 2) s = 2; else if (n <= 2.5) s = 2.5; else if (n <= 5) s = 5; else s = 10;
+    return s * pow;
+  }
+  function txDate(m, day) {
+    var parts = m.key.split('-');
+    return dateFmt.format(new Date(+parts[0], (+parts[1]) - 1, day));
+  }
+
+  /* =====================================================================
+   * 6. Tooltip
+   * =================================================================== */
+  var tooltip = document.getElementById('tooltip');
+  function showTip(html, x, y) {
+    tooltip.innerHTML = html;
+    tooltip.setAttribute('data-show', '1');
+    var pad = 14, r = tooltip.getBoundingClientRect();
+    var left = x + pad, top = y + pad;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - pad;
+    if (top + r.height > window.innerHeight - 8) top = y - r.height - pad;
+    tooltip.style.left = Math.max(8, left) + 'px';
+    tooltip.style.top = Math.max(8, top) + 'px';
+  }
+  function hideTip() { tooltip.setAttribute('data-show', '0'); }
+  window.addEventListener('scroll', hideTip, { passive: true });
+
+  /* Delegated tooltip wiring for any element carrying [data-tip-*] */
+  function bindTips(container) {
+    container.addEventListener('pointermove', function (e) {
+      var el = e.target.closest ? e.target.closest('[data-tip]') : null;
+      if (el) showTip(el.getAttribute('data-tip'), e.clientX, e.clientY);
+    });
+    container.addEventListener('pointerleave', hideTip);
+    container.addEventListener('focusin', function (e) {
+      var el = e.target.closest ? e.target.closest('[data-tip]') : null;
+      if (el) { var b = el.getBoundingClientRect(); showTip(el.getAttribute('data-tip'), b.left + 10, b.top + b.height / 2); }
+    });
+    container.addEventListener('focusout', hideTip);
+  }
+
+  /* =====================================================================
+   * 7. Header / theme
+   * =================================================================== */
+  var THEME_KEY = 'pf-theme';
+  var themeBtn = document.getElementById('themeBtn');
+  var themeIcon = document.getElementById('themeIcon');
+  var stored = null;
+  try { stored = localStorage.getItem(THEME_KEY); } catch (e) {}
+  function currentMode() { return stored || 'auto'; }
+  function resolveDark(mode) {
+    if (mode === 'dark') return true;
+    if (mode === 'light') return false;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function applyTheme() {
+    var mode = currentMode();
+    document.documentElement.setAttribute('data-theme', mode);
+    var dark = resolveDark(mode);
+    themeIcon.innerHTML = dark ? ICONS.moon : ICONS.sun;
+    var label = mode === 'auto' ? 'Switch color theme (currently following system)' : 'Switch color theme (currently ' + mode + ')';
+    themeBtn.setAttribute('aria-label', label);
+  }
+  ICONS.sun = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  ICONS.moon = '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>';
+  themeBtn.addEventListener('click', function () {
+    var order = ['auto', 'light', 'dark'];
+    stored = order[(order.indexOf(currentMode()) + 1) % order.length];
+    try { localStorage.setItem(THEME_KEY, stored); } catch (e) {}
+    applyTheme();
+    renderAll();
+  });
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    var onMQ = function () { if (currentMode() === 'auto') renderAll(); };
+    if (mq.addEventListener) mq.addEventListener('change', onMQ); else if (mq.addListener) mq.addListener(onMQ);
+  }
+
+  var sel = document.getElementById('monthSelect');
+  DISPLAY.forEach(function (m, i) {
+    var o = document.createElement('option');
+    o.value = String(i); o.textContent = m.full; sel.appendChild(o);
+  });
+  sel.value = String(state.monthIndex);
+  sel.addEventListener('change', function () { state.monthIndex = +sel.value; renderAll(); });
+
+  /* =====================================================================
+   * 8. KPI cards
+   * =================================================================== */
+  function deltaChip(value, invert, formatter) {
+    var good = invert ? value < 0 : value > 0;
+    var cls = value === 0 ? 'flat' : (good ? 'up' : 'down');
+    var arrow = value === 0
+      ? '<path d="M5 12h14"/>'
+      : (value > 0 ? '<path d="M12 5l6 7h-5v6h-2v-6H6z"/>' : '<path d="M12 19l-6-7h5V6h2v6h6z"/>');
+    return '<span class="chip ' + cls + '"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' + arrow + '</svg>' +
+      (value === 0 ? 'no change' : formatter) + '</span>';
+  }
+
+  function renderKPIs() {
+    var i = state.monthIndex, m = DISPLAY[i], prev = MONTHS[MONTHS.indexOf(m) - 1];
+    var cards = [
+      { label: 'Balance', dot: 'var(--brand)', value: money(m.balanceEnd),
+        delta: m.balanceEnd - prev.balanceEnd, invert: false, dfmt: signedMoney(m.balanceEnd - prev.balanceEnd) },
+      { label: 'Income', dot: 'var(--chart-income)', value: money(m.incomeTotal),
+        delta: m.incomeTotal - prev.incomeTotal, invert: false, dfmt: signedMoney(m.incomeTotal - prev.incomeTotal) },
+      { label: 'Spending', dot: 'var(--chart-spend)', value: money(m.expenseTotal),
+        delta: m.expenseTotal - prev.expenseTotal, invert: true, dfmt: signedMoney(m.expenseTotal - prev.expenseTotal) },
+      { label: 'Savings rate', dot: 'var(--amber)', value: m.savingsRate.toFixed(1) + '%',
+        delta: m.savingsRate - prev.savingsRate, invert: false,
+        dfmt: (m.savingsRate - prev.savingsRate >= 0 ? '+' : '\u2212') + Math.abs(m.savingsRate - prev.savingsRate).toFixed(1) + ' pts' }
+    ];
+    var html = cards.map(function (c) {
+      return '<article class="card kpi">' +
+        '<div class="label"><span class="dot" style="background:' + c.dot + '"></span>' + c.label + '</div>' +
+        '<div class="value num">' + c.value + '</div>' +
+        '<div class="foot">' + deltaChip(c.delta, c.invert, c.dfmt) + '<span class="vs">vs last month</span></div>' +
+      '</article>';
+    }).join('');
+    document.getElementById('kpis').innerHTML = html;
+  }
+
+  /* =====================================================================
+   * 9. Category bar chart (SVG, horizontal, sorted)
+   * =================================================================== */
+  function renderCategoryChart() {
+    var m = DISPLAY[state.monthIndex];
+    var data = EXPENSE_KEYS.map(function (k) { return { key: k, label: CATS[k].label, icon: CATS[k].icon, value: m.byCat[k] }; })
+      .filter(function (d) { return d.value > 0; })
+      .sort(function (a, b) { return b.value - a.value; });
+
+    var host = document.getElementById('catChart');
+    document.getElementById('catSub').textContent = 'Where the ' + money(m.expenseTotal) + ' went in ' + m.full;
+
+    if (!data.length) {
+      host.setAttribute('aria-label', 'No spending recorded this month.');
+      host.innerHTML = '<div style="padding:40px 8px;text-align:center;color:var(--text-faint)">No spending recorded this month.</div>';
+      document.getElementById('catTable').innerHTML = '';
+      return;
+    }
+    var W = Math.max(280, host.clientWidth || 320);
+    var narrow = W < 460;
+    var font = narrow ? 12 : 13;
+    var rowH = narrow ? 40 : 34;
+    var maxChars = data.reduce(function (mx, d) { return Math.max(mx, d.label.length); }, 0);
+    var leftPad = Math.round(Math.min(Math.max(narrow ? 104 : 126, 26 + maxChars * font * 0.66 + 16), W - (narrow ? 118 : 150)));
+    var rightPad = narrow ? 56 : 60;
+    var topPad = 6, bottomPad = 6;
+    var barMaxW = Math.max(60, W - leftPad - rightPad);
+    var maxVal = data[0].value;
+    var H = topPad + data.length * rowH + bottomPad;
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="presentation" aria-hidden="true">';
+    data.forEach(function (d, i) {
+      var y = topPad + i * rowH;
+      var barY = y + (rowH - 12) / 2;
+      var w = Math.max(3, (d.value / maxVal) * barMaxW);
+      var isTop = i === 0;
+      var pct = (d.value / m.expenseTotal * 100).toFixed(1);
+      var tip = '<div class="tt-title">' + esc(m.full) + '</div><div class="tt-row"><i style="background:var(--cat-bar)"></i><span>' +
+        esc(d.label) + '</span><span class="v">' + money2(d.value) + '</span></div><div class="tt-row" style="color:var(--text-faint)">' + pct + '% of spending</div>';
+      svg += '<g class="bar-hit" tabindex="0" data-tip="' + esc(tip) + '" aria-label="' + esc(d.label) + ', ' + money2(d.value) + '">' +
+        '<rect x="0" y="' + y + '" width="' + W + '" height="' + rowH + '" fill="transparent"/>' +
+        '<g transform="translate(2,' + (barY - 2.5) + ') scale(0.72)" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS[d.icon] + '</g>' +
+        '<text x="24" y="' + (y + rowH / 2 + 0.5) + '" dominant-baseline="middle" font-size="' + font + '" font-weight="600" fill="var(--text)">' + esc(d.label) + '</text>' +
+        '<rect x="' + leftPad + '" y="' + barY + '" width="' + barMaxW + '" height="12" rx="6" fill="var(--track)"/>' +
+        '<rect class="bar-grow-x" style="animation-delay:' + (i * 55) + 'ms" x="' + leftPad + '" y="' + barY + '" width="' + w + '" height="12" rx="6" fill="var(--cat-bar)" opacity="' + (isTop ? 1 : 0.82) + '"/>' +
+        '<text x="' + (W - 2) + '" y="' + (y + rowH / 2 + 0.5) + '" dominant-baseline="middle" text-anchor="end" font-size="' + font + '" font-weight="650" fill="var(--text)" style="font-variant-numeric:tabular-nums">' + money(d.value) + '</text>' +
+        '</g>';
+    });
+    svg += '</svg>';
+    host.innerHTML = svg;
+    host.setAttribute('aria-label', 'Spending by category for ' + m.full + ', ' + data.length + ' categories, largest ' + data[0].label + ' at ' + money2(data[0].value) + '.');
+
+    document.getElementById('catTable').innerHTML =
+      '<table><caption>Spending by category, ' + esc(m.full) + '</caption><thead><tr><th>Category</th><th>Amount</th></tr></thead><tbody>' +
+      data.map(function (d) { return '<tr><td>' + esc(d.label) + '</td><td>' + money2(d.value) + '</td></tr>'; }).join('') + '</tbody></table>';
+  }
+
+  /* =====================================================================
+   * 10. Income vs spending — grouped columns over 6 months (SVG)
+   * =================================================================== */
+  function renderTrendChart() {
+    var host = document.getElementById('trendChart');
+    var W = Math.max(300, host.clientWidth || 360);
+    var n = DISPLAY.length;
+    var H = W < 520 ? 230 : 260;
+    var pad = { l: 46, r: 14, t: 16, b: 30 };
+    var plotW = W - pad.l - pad.r;
+    var plotH = H - pad.t - pad.b;
+
+    var rawMax = 0;
+    DISPLAY.forEach(function (m) { rawMax = Math.max(rawMax, m.incomeTotal, m.expenseTotal); });
+    var ticksTarget = W < 520 ? 3 : 4;
+    var step = niceStep(rawMax / ticksTarget);
+    var maxV = Math.ceil(rawMax / step) * step;
+
+    function y(v) { return pad.t + plotH * (1 - v / maxV); }
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="presentation" aria-hidden="true">';
+
+    // gridlines + y labels
+    var t;
+    for (t = 0; t <= maxV + 0.0001; t += step) {
+      var gy = y(t);
+      svg += '<line x1="' + pad.l + '" y1="' + gy + '" x2="' + (W - pad.r) + '" y2="' + gy + '" stroke="var(--grid)" stroke-width="1" ' + (t === 0 ? '' : 'stroke-dasharray="3 4"') + '/>';
+      svg += '<text x="' + (pad.l - 8) + '" y="' + (gy + 3.5) + '" text-anchor="end" font-size="11" fill="var(--text-faint)" style="font-variant-numeric:tabular-nums">' + compact.format(t) + '</text>';
+    }
+
+    var bandW = plotW / n;
+    var showLabels = W >= 520;
+    var barW = Math.min(Math.max(bandW * 0.26, 8), 26);
+    var pairGap = barW * 0.4;
+
+    DISPLAY.forEach(function (m, i) {
+      var cx = pad.l + bandW * (i + 0.5);
+      var isSel = i === state.monthIndex;
+
+      if (isSel) {
+        svg += '<rect x="' + (pad.l + bandW * i) + '" y="' + pad.t + '" width="' + bandW + '" height="' + plotH + '" rx="10" fill="var(--highlight)"/>';
+      }
+      var ix = cx - barW - pairGap / 2;
+      var sx = cx + pairGap / 2;
+      var base = y(0);
+      var iTop = y(m.incomeTotal), sTop = y(m.expenseTotal);
+      var tipI = '<div class="tt-title">' + esc(m.full) + '</div><div class="tt-row"><i style="background:var(--chart-income)"></i><span>Income</span><span class="v">' + money2(m.incomeTotal) + '</span></div>';
+      var tipS = '<div class="tt-title">' + esc(m.full) + '</div><div class="tt-row"><i style="background:var(--chart-spend)"></i><span>Spending</span><span class="v">' + money2(m.expenseTotal) + '</span></div>';
+
+      svg += '<g class="bar-hit" tabindex="0" data-tip="' + esc(tipI) + '" aria-label="' + esc(m.full) + ' income ' + money2(m.incomeTotal) + '">' +
+        '<rect x="' + (ix - 3) + '" y="' + pad.t + '" width="' + (barW + 6) + '" height="' + plotH + '" fill="transparent"/>' +
+        '<rect class="bar-grow-y" style="animation-delay:' + (i * 70) + 'ms" x="' + ix + '" y="' + iTop + '" width="' + barW + '" height="' + (base - iTop) + '" rx="5" fill="var(--chart-income)" opacity="' + (isSel ? 1 : 0.9) + '"/>' +
+        (showLabels ? '<text x="' + (ix + barW / 2) + '" y="' + (iTop - 6) + '" text-anchor="middle" font-size="10" fill="var(--text-muted)" style="font-variant-numeric:tabular-nums">' + compact.format(m.incomeTotal) + '</text>' : '') +
+        '</g>';
+      svg += '<g class="bar-hit" tabindex="0" data-tip="' + esc(tipS) + '" aria-label="' + esc(m.full) + ' spending ' + money2(m.expenseTotal) + '">' +
+        '<rect x="' + (sx - 3) + '" y="' + pad.t + '" width="' + (barW + 6) + '" height="' + plotH + '" fill="transparent"/>' +
+        '<rect class="bar-grow-y" style="animation-delay:' + (i * 70 + 35) + 'ms" x="' + sx + '" y="' + sTop + '" width="' + barW + '" height="' + (base - sTop) + '" rx="5" fill="var(--chart-spend)" opacity="' + (isSel ? 1 : 0.9) + '"/>' +
+        (showLabels ? '<text x="' + (sx + barW / 2) + '" y="' + (sTop - 6) + '" text-anchor="middle" font-size="10" fill="var(--text-muted)" style="font-variant-numeric:tabular-nums">' + compact.format(m.expenseTotal) + '</text>' : '') +
+        '</g>';
+
+      svg += '<text x="' + cx + '" y="' + (H - 9) + '" text-anchor="middle" font-size="12" font-weight="' + (isSel ? 700 : 500) + '" fill="' + (isSel ? 'var(--text)' : 'var(--text-faint)') + '">' + esc(m.label) + '</text>';
+    });
+    svg += '</svg>';
+    host.innerHTML = svg;
+    host.setAttribute('aria-label', 'Income versus spending across the last ' + n + ' months. Selected month: ' + DISPLAY[state.monthIndex].full + '.');
+
+    document.getElementById('trendTable').innerHTML =
+      '<table><caption>Income vs spending, last 6 months</caption><thead><tr><th>Month</th><th>Income</th><th>Spending</th></tr></thead><tbody>' +
+      DISPLAY.map(function (m) { return '<tr><td>' + esc(m.full) + '</td><td>' + money2(m.incomeTotal) + '</td><td>' + money2(m.expenseTotal) + '</td></tr>'; }).join('') + '</tbody></table>';
+  }
+
+  /* =====================================================================
+   * 11. Transactions list
+   * =================================================================== */
+  function renderTransactions() {
+    var m = DISPLAY[state.monthIndex];
+    var list = m.transactions.slice().sort(function (a, b) { return b.day - a.day; });
+    var shown = list.slice(0, 9);
+    document.getElementById('txSub').textContent = 'Most recent activity in ' + m.full;
+    var html = shown.map(function (tx) {
+      var icon = tx.type === 'in' ? (INCOME_ICONS[tx.sub] || 'wallet') : (CATS[tx.cat] ? CATS[tx.cat].icon : 'wallet');
+      var catLabel = tx.type === 'in' ? 'Income' : CATS[tx.cat].label;
+      var amtCls = tx.type === 'in' ? 'in' : 'out';
+      var amtStr = (tx.type === 'in' ? '+' : '\u2212') + money2(tx.amt);
+      return '<div class="tx">' +
+        '<div class="badge">' + svgIcon(icon) + '</div>' +
+        '<div class="meta"><div class="t">' + esc(tx.t) + '</div>' +
+          '<div class="s"><span class="cat">' + esc(catLabel) + '</span><span aria-hidden="true">·</span><span>' + txDate(m, tx.day) + '</span></div></div>' +
+        '<div class="amt num ' + amtCls + '">' + amtStr + '</div>' +
+      '</div>';
+    }).join('');
+    document.getElementById('txList').innerHTML = html;
+    document.getElementById('txCount').textContent = 'Showing ' + shown.length + ' of ' + list.length + ' transactions in ' + m.full;
+  }
+
+  /* =====================================================================
+   * 12. Budget progress
+   * =================================================================== */
+  function renderBudgets() {
+    var m = DISPLAY[state.monthIndex];
+    document.getElementById('budgetSub').textContent = 'Limit vs spent in ' + m.full;
+    var rows = EXPENSE_KEYS.map(function (k) {
+      var spent = m.byCat[k], limit = CATS[k].budget;
+      var pct = limit > 0 ? (spent / limit) * 100 : 0;
+      return { key: k, label: CATS[k].label, icon: CATS[k].icon, spent: spent, limit: limit, pct: pct };
+    }).sort(function (a, b) { return b.pct - a.pct; });
+
+    var html = rows.map(function (r) {
+      var fill = r.pct > 100 ? 'var(--negative)' : (r.pct >= 80 ? 'var(--amber)' : 'var(--chart-income)');
+      var width = Math.min(r.pct, 100);
+      var status, sClass, sIcon;
+      if (r.pct > 100) { status = 'Over budget'; sClass = 'over'; sIcon = 'alert'; }
+      else if (r.pct >= 80) { status = 'Near limit'; sClass = 'warn'; sIcon = 'alert'; }
+      else { status = 'On track'; sClass = 'ok'; sIcon = 'check'; }
+      var remain = r.limit - r.spent;
+      var remainTxt = remain >= 0
+        ? money(remain) + ' left'
+        : money(Math.abs(remain)) + ' over';
+      return '<div class="budget-row">' +
+        '<div class="budget-top">' +
+          '<div class="badge">' + svgIcon(r.icon) + '</div>' +
+          '<div class="name">' + esc(r.label) + '</div>' +
+          '<div class="vals num"><span class="spent">' + money(r.spent) + '</span> <span class="lim">/ ' + money(r.limit) + '</span></div>' +
+        '</div>' +
+        '<div class="track" role="img" aria-label="' + esc(r.label) + ': ' + money2(r.spent) + ' of ' + money(r.limit) + ' (' + Math.round(r.pct) + '%, ' + status.toLowerCase() + ')">' +
+          '<div class="fill" style="width:' + width + '%;background:' + fill + '"></div>' +
+        '</div>' +
+        '<div class="budget-foot">' +
+          '<span class="status ' + sClass + '">' + svgIcon(sIcon, { sw: 2.2 }) + status + '</span>' +
+          '<span class="remain num' + (remain < 0 ? ' over' : '') + '">' + remainTxt + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    document.getElementById('budgetList').innerHTML = html;
+  }
+
+  /* =====================================================================
+   * 13. Orchestration
+   * =================================================================== */
+  function renderAll() {
+    var m = DISPLAY[state.monthIndex];
+    document.getElementById('periodHeading').textContent = 'Overview · ' + m.full;
+    document.getElementById('periodHint').textContent = 'Balance ' + money(m.balanceEnd);
+    renderKPIs();
+    renderCategoryChart();
+    renderTrendChart();
+    renderTransactions();
+    renderBudgets();
+  }
+
+  // tooltip delegation on the chart hosts
+  bindTips(document.getElementById('catChart'));
+  bindTips(document.getElementById('trendChart'));
+
+  // re-render charts on resize (debounced)
+  var raf = null;
+  window.addEventListener('resize', function () {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(function () { renderCategoryChart(); renderTrendChart(); });
+  });
+
+  applyTheme();
+  renderAll();
+})();
+</script>
+</body>
+</html>
