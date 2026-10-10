@@ -144,7 +144,7 @@ blind, so this measures agreement with the judge used everywhere in this repo):
 The binary checklist, which several papers recommend for large judges, was the worst here: the
 model passed almost every check, including 12 of 12 on a windmill page without lattice sails or tulip
 rows. Anchoring with scored examples helped most where it matters for stopping: on pages the judge
-gave 7.0, the plain critic said 8 (stop) on five of seven, the anchored critic said 7 on all seven.
+gave 7.0, the plain critic said 8 (stop) on four of seven; the anchored critic never went above 7.
 Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
 
 ## Harness traps found on the way
