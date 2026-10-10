@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #e0a090; overflow: hidden; }
+  #c { position: fixed; left: 0; top: 0; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .tag {
+    position: fixed; left: 14px; bottom: 10px; pointer-events: none;
+    font: 600 10px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: .35em; text-transform: uppercase; color: #f6eede; opacity: .6;
+    text-shadow: 0 1px 0 rgba(20, 28, 16, .8);
+  }
+  .tag small { display: block; font-weight: 400; letter-spacing: .5em; opacity: .75; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="tag">Bonsai<small>in the wind</small></div>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps;
+  const cv = document.getElementById("c");
+
+  const COL = {
+    sky: ["#2a3a6a", "#5a5a8a", "#a07898", "#e0a090", "#f8d0a0"],
+    hillFar: ["#4c4e7e", "#5a5c8c", "#686a9a"],
+    hillNear: ["#3f4468", "#4d5478", "#5a6288"],
+    meadow: ["#3c4a30", "#4c5c3c", "#5d6e4a", "#71835a"],
+    slab: R.stone,
+    slabEdge: "#1c1c28",
+    bark: R.bark,
+    foliage: ["#16301f", "#2f5d34", "#4a8a3c", "#78b84a", "#c9e87e"],
+    pot: ["#2a140c", "#6a3220", "#9a4e2e", "#c8764a", "#f0b878"],
+    potOut: "#241009",
+    soil: ["#241a10", "#3a2a1a", "#54412c"],
+    moss: ["#3f6a30", "#5c8c3e"],
+    jin: ["#6e5f4a", "#a8977a", "#d8cbae"],
+    blade: ["#1c2818", "#26351f", "#334529", "#43582f"],
+    leafAccent: "#d9a03a",
+    leafAccentDark: "#a87828",
+    streakTail: "#b6cfe2",
+    streakHead: "#eef6ff",
+    streakTailBack: "#9db8d0",
+    streakHeadBack: "#cfe0f0"
+  };
+
+  // ---- pot sprite: shallow terracotta bonsai pot, lit rim band, tapering body, inset feet ----
+  function buildPot(w) {
+    const rows = [];
+    const dot = (n) => ".".repeat(n);
+    rows.push("o" + "h".repeat(w - 2) + "o");
+    const a = Math.round(w * 0.55);
+    rows.push("o" + "l".repeat(a) + "m".repeat(w - 2 - a) + "o");
+    const body = 6;
+    for (let r = 0; r < body; r++) {
+      const ins = 1 + Math.round((r * 3) / (body - 1));
+      const ww = w - 2 * ins;
+      let inner = "";
+      for (let i = 0; i < ww; i++) {
+        const u = i / (ww - 1);
+        let c = u < 0.3 ? "l" : u < 0.62 ? "m" : "d";
+        if (r >= body - 2 && u > 0.22) c = c === "l" ? "m" : "d";
+        inner += c;
+      }
+      rows.push(dot(ins) + "o" + inner + "o" + dot(ins));
+    }
+    rows.push(dot(1) + "o".repeat(w - 2) + dot(1));
+    const fi = 4;
+    const mid = w - 2 * fi - 8;
+    rows.push(dot(fi) + "ddoo" + dot(mid) + "oodd" + dot(fi));
+    return rows;
+  }
+  const POT_PAL = {
+    o: COL.potOut, d: COL.pot[1], m: COL.pot[2],
+    l: COL.pot[3], h: COL.pot[4]
+  };
+
+  // ---- scene state (declared before fit) ------------------------------------------------------
+  let bg = null, view = null, layout = null;
+  const streaksF = PK.drift({ n: 18, seed: 5, area: [0, -10, 200, 200], vx: [22, 38], vy: [-1.4, 1.6], len: [6, 12] });
+  const streaksB = PK.drift({ n: 14, seed: 6, area: [0, -10, 200, 200], vx: [10, 18], vy: [-0.8, 1.0], len: [4, 8] });
+  const leaves = PK.drift({ n: 40, seed: 9, area: [0, -10, 200, 200], vx: [10, 24], vy: [2, 8], len: [1, 2] });
+
+  // foreground blade clusters, seeded so nothing flickers
+  const BLADES = [];
+  (function () {
+    const rnd = PK.rng(77);
+    for (let i = 0; i < 16; i++) {
+      const n = 3 + Math.floor(rnd() * 4);
+      const items = [];
+      for (let b = 0; b < n; b++) items.push({ dx: b - (n - 1) / 2, hh: 5 + Math.floor(rnd() * 7), tone: Math.floor(rnd() * 4) });
+      BLADES.push({ xf: rnd(), dy: Math.floor(rnd() * 24), ph: rnd() * 6.28 });
+      BLADES[BLADES.length - 1].items = items;
+    }
+  })();
+
+  function buildBg(v) {
+    const W = v.W, H = v.H;
+    const portrait = H > W * 1.25;
+    const groundY = Math.round(H * (portrait ? 0.72 : 0.76));
+    const horizonY = Math.round(groundY * 0.72);
+    const cx = Math.round(W / 2);
+    const h = Math.round(portrait ? Math.min(W * 0.6, H * 0.46) : Math.min(W * 0.55, H * 0.5));
+    const potW = Math.min(44, Math.max(22, Math.round(h * 0.42)));
+    const potRows = buildPot(potW);
+    const soilY = groundY - potRows.length + 1;
+    const sunX = Math.round(W * (portrait ? 0.78 : 0.76));
+    const sunY = Math.round(horizonY * 0.42);
+    const rnd = PK.rng(23);
+
+    bg = PK.layer(W, H, function () {
+      PK.gradient(0, 0, W, horizonY, COL.sky);
+      PK.glow(sunX, sunY, Math.round(h * 0.45), R.warmLight[3], 0.5, 5);
+      PK.disc(sunX, sunY, Math.max(4, Math.round(h * 0.09)), R.warmLight[3]);
+      PK.disc(sunX - 1, sunY - 1, Math.max(2, Math.round(h * 0.06)), R.warmLight[4]);
+
+      const hills = [
+        [Math.round(W * 0.12), horizonY, Math.round(W * 0.5), Math.round(h * 0.24), COL.hillFar, 3],
+        [Math.round(W * 0.58), horizonY, Math.round(W * 0.55), Math.round(h * 0.2), COL.hillFar, 8],
+        [Math.round(W * 0.32), horizonY + 2, Math.round(W * 0.5), Math.round(h * 0.15), COL.hillNear, 5]
+      ];
+      for (const [x, by, w, hh, ramp, seed] of hills)
+        PK.rock(x, by, w, hh, ramp, { profile: "mound", seed: seed, rough: 2, cracks: 0, ledges: 0 });
+
+      // ground plane: meadow bands light (far) to dark (near)
+      PK.rect(0, horizonY, W, H - horizonY, COL.meadow[1]);
+      const nearY = Math.round(horizonY + (H - horizonY) * 0.3);
+      PK.rect(0, horizonY, W, nearY - horizonY, COL.meadow[2]);
+      PK.rect(0, nearY, W, H - nearY, COL.meadow[1]);
+      PK.rect(0, Math.round(nearY + (H - nearY) * 0.5), W, H - Math.round(nearY + (H - nearY) * 0.5), COL.meadow[0]);
+      for (let i = 0; i < (H - horizonY) * W * 0.02; i++) {
+        const x = Math.floor(rnd() * W), y = horizonY + Math.floor(rnd() * (H - horizonY));
+        const c = rnd();
+        PK.px(x, y, c < 0.45 ? COL.meadow[0] : c < 0.8 ? COL.meadow[3] : COL.meadow[1]);
+      }
+      // scattered pebbles for the near plane
+      for (let i = 0; i < 7; i++) {
+        const x = Math.floor(rnd() * W);
+        const y = groundY + 4 + Math.floor(rnd() * (H - groundY - 6));
+        PK.disc(x, y, 1 + Math.floor(rnd() * 2), COL.slab[1]);
+        PK.px(x - 1, y - 1, COL.slab[3]);
+      }
+
+      // stone display slab under the pot
+      const slabW = potW + 12;
+      const sx = cx - Math.floor(slabW / 2);
+      PK.rect(sx, groundY, slabW, 3, COL.slab[3]);
+      for (let x = sx; x < sx + slabW; x++)
+        if (rnd() < 0.25) PK.px(x, groundY, COL.slab[4]);
+      PK.rect(sx, groundY + 3, slabW, 5, COL.slab[2]);
+      PK.rect(sx, groundY + 3, slabW, 1, COL.slab[1]);
+      PK.rect(sx, groundY + 8, slabW, 1, COL.slabEdge);
+      for (let x = sx - 2; x < sx + slabW + 2; x++)
+        for (let y = groundY + 9; y <= groundY + 10; y++)
+          if (PK.bayer(x, y) < 0.6) PK.px(x, y, COL.meadow[0]);
+
+      // terracotta pot on the slab
+      const px0 = cx - Math.floor(potW / 2);
+      PK.sprite(potRows, POT_PAL, px0, groundY - potRows.length);
+      const speck = PK.rng(44);
+      for (let i = 0; i < potW * 0.2; i++) {
+        const x = px0 + 2 + Math.floor(speck() * (potW - 4));
+        const y = groundY - potRows.length + 3 + Math.floor(speck() * 7);
+        PK.px(x, y, speck() < 0.5 ? COL.pot[4] : COL.pot[1]);
+      }
+
+      // soil, moss and pebbles at the trunk base
+      const inner = Math.round(potW / 2) - 3;
+      PK.ellipse(cx, soilY, inner, 2, COL.soil[1]);
+      PK.ellipse(cx, soilY - 1, Math.round(inner * 0.75), 1, COL.soil[2]);
+      const moss = PK.rng(51);
+      for (let i = 0; i < inner * 2.4; i++) {
+        const x = cx - inner + Math.floor(moss() * inner * 2);
+        const y = soilY - 1 + Math.floor(moss() * 4);
+        PK.px(x, y, moss() < 0.55 ? COL.moss[0] : moss() < 0.85 ? COL.moss[1] : COL.soil[0]);
+      }
+      for (const dx of [-Math.round(inner * 0.55), Math.round(inner * 0.65)]) {
+        PK.px(cx + dx, soilY + 1, COL.slab[3]);
+        PK.px(cx + dx + 1, soilY + 1, COL.slab[2]);
+      }
+    });
+    return { cx: cx, soilY: soilY, groundY: groundY, h: h, horizonY: horizonY };
+  }
+
+  // volume pass on each pad: dark bottom band, shaded right side, bright highlight cluster top-left
+  function shadePad(cx, cy, rx, ry, fol, seed) {
+    const rnd = PK.rng(seed + 7);
+    for (let i = -rx; i <= rx; i++) {
+      const t = Math.cos((i / rx) * Math.PI * 0.5);
+      const hh = Math.max(1, Math.round(t * 2.2 + (rnd() < 0.3 ? 1 : 0)));
+      for (let k = 0; k < hh; k++) PK.px(cx + i, cy + ry - 1 - k, fol[0]);
+    }
+    for (let j = -Math.round(ry * 0.3); j <= ry; j++)
+      for (let i = Math.round(rx * 0.45); i <= rx; i++)
+        if (rnd() < 0.5) PK.px(cx + i, cy + j, fol[1]);
+    PK.disc(cx - Math.round(rx * 0.42), cy - Math.round(ry * 0.55), Math.max(2, Math.round(rx * 0.24)), fol[3]);
+    PK.disc(cx - Math.round(rx * 0.48), cy - Math.round(ry * 0.7), Math.max(1, Math.round(rx * 0.14)), fol[4]);
+    for (let i = 0; i < rx * 0.6; i++) {
+      const x = cx - rx + Math.floor(rnd() * rx * 1.3);
+      const y = cy - ry + Math.floor(rnd() * ry * 0.9);
+      PK.px(x, y, rnd() < 0.5 ? fol[4] : fol[3]);
+    }
+  }
+
+  // curved, dither-faded wind streaks ("whoosh" shape, hard pixels, no alpha blur)
+  function whoosh(d, t, tail, head) {
+    for (const p of d.particles) {
+      const sp = Math.hypot(p.vx, p.vy) || 1;
+      const ux = p.vx / sp, uy = p.vy / sp;
+      const amp = 0.7 + p.k * 1.2, ph = p.k * 6.28 + t * 4;
+      for (let s = 0; s < p.len; s++) {
+        const x = p.x - ux * s;
+        const y = p.y - uy * s + Math.sin(s * 0.9 + ph) * amp;
+        if (s === 0) { PK.px(x, y, head); continue; }
+        if (PK.bayer(Math.round(x), Math.round(y)) < 1 - s / (p.len + 2))
+          PK.px(x, y, s < p.len * 0.5 ? head : tail);
+      }
+    }
+  }
+
+  // ---- bonsai: curved tapered trunk, root flare, branches, layered pads ----------------------
+  function bonsai(t, cx, soilY, h) {
+    const bark = COL.bark, fol = COL.foliage;
+    const gust = 0.8 + 0.4 * (Math.sin(t * 0.35) * 0.5 + 0.5);
+    const sway = (f, ph) => Math.round(Math.sin(t * 1.5 + f * 1.5 + (ph || 0)) * 3.2 * f * gust);
+    const R5 = (v) => Math.round(v * h);
+
+    const mid = { x: cx + R5(0.15), y: soilY - R5(0.5) };
+    const top = { x: cx - R5(0.07) + sway(0.9), y: soilY - R5(0.9) };
+    const a1 = { x: cx + R5(0.11), y: soilY - R5(0.44) };
+    const a2 = { x: cx + R5(0.09), y: soilY - R5(0.62) };
+    const a3 = { x: cx - R5(0.01), y: soilY - R5(0.78) };
+    const b1t = { x: cx - R5(0.3) + sway(0.5, 0.4), y: soilY - R5(0.52) };
+    const b2t = { x: cx + R5(0.3) + sway(0.72, 1.1), y: soilY - R5(0.7) };
+    const b3t = { x: cx - R5(0.21) + sway(0.92, 2.0), y: soilY - R5(0.86) };
+
+    for (const dir of [-1, 1])
+      PK.limb(cx + dir, soilY + 2, cx + dir * R5(0.05), soilY + 1, cx + dir * R5(0.115), soilY + 3,
+        Math.max(2, R5(0.05)), 2, bark, 31 + dir);
+
+    PK.limb(a1.x, a1.y, a1.x - R5(0.16), a1.y - R5(0.02), b1t.x, b1t.y, Math.max(2, R5(0.042)), 1, bark, 41);
+    PK.limb(a2.x, a2.y, a2.x + R5(0.16), a2.y - R5(0.03), b2t.x, b2t.y, Math.max(2, R5(0.04)), 1, bark, 42);
+    PK.limb(a3.x, a3.y, a3.x - R5(0.13), a3.y - R5(0.005), b3t.x, b3t.y, Math.max(2, R5(0.03)), 1, bark, 43);
+
+    PK.limb(cx, soilY + 1, cx + R5(0.21), soilY - R5(0.24), mid.x, mid.y,
+      Math.max(4, R5(0.125)), Math.max(3, R5(0.085)), bark, 7);
+    PK.limb(mid.x, mid.y, cx - R5(0.17), soilY - R5(0.74), top.x, top.y,
+      Math.max(3, R5(0.085)), Math.max(2, R5(0.045)), bark, 8);
+
+    PK.taper(top.x + 1, top.y + 1, top.x + R5(0.05), top.y - R5(0.05),
+      top.x + R5(0.12), top.y - R5(0.09), 2, 1, COL.jin[1]);
+    PK.taper(top.x + 1, top.y + 1, top.x + R5(0.05), top.y - R5(0.05),
+      top.x + R5(0.12), top.y - R5(0.09), 1, 1, COL.jin[2]);
+
+    const pad = (tip, size, side, seed) => {
+      const rx = Math.max(6, R5(size));
+      const ry = Math.max(3, Math.round(rx * 0.44));
+      const cxp = tip.x + side * Math.round(rx * 0.18) + Math.round(Math.sin(t * 2.6 + seed) * 2 * gust);
+      const cyp = tip.y - Math.round(ry * 0.55);
+      PK.pad(cxp, cyp, rx, ry, fol, { seed: seed });
+      shadePad(cxp, cyp, rx, ry, fol, seed);
+    };
+    pad(b1t, 0.21, -1, 101);
+    pad(b2t, 0.19, 1, 102);
+    pad(b3t, 0.14, -1, 103);
+    const arx = Math.max(6, R5(0.17));
+    const ary = Math.max(3, Math.round(arx * 0.44));
+    const acy = top.y - ary - 1;
+    PK.pad(top.x, acy, arx, ary, fol, { seed: 104 });
+    shadePad(top.x, acy, arx, ary, fol, 104);
+  }
+
+  // foreground grass blades, leaning with the wind
+  function blades(t, v) {
+    const gust = Math.sin(t * 0.35) * 0.5 + 0.5;
+    for (const cl of BLADES) {
+      const bx = Math.round(v.W * cl.xf);
+      const by = v.H - 2 - cl.dy;
+      for (const b of cl.items) {
+        const lean = Math.round((Math.sin(t * 1.3 + cl.ph + b.dx) + 1.4 + gust * 1.2) * 1.8);
+        const x0 = bx + Math.round(b.dx * 2);
+        PK.line(x0, by, x0 + Math.round(lean * 0.5), by - Math.round(b.hh * 0.6), COL.blade[1]);
+        PK.line(x0 + Math.round(lean * 0.5), by - Math.round(b.hh * 0.6), x0 + lean, by - b.hh, COL.blade[b.tone]);
+      }
+    }
+  }
+
+  // ---- boot -----------------------------------------------------------------------------------
+  view = PK.fit(cv, 140, function (v) {
+    layout = buildBg(v);
+    streaksF.setArea([0, -8, v.W, layout.groundY]);
+    streaksB.setArea([0, -8, v.W, layout.horizonY + 12]);
+    leaves.setArea([0, -8, v.W, v.H - 4]);
+    document.body.style.background = COL.sky[3];
+  });
+
+  PK.loop(function (t, dt) {
+    if (!bg || !layout) return;
+    PK.blit(bg);
+    streaksB.step(dt);
+    streaksB.streaks([COL.streakTailBack, COL.streakHeadBack]);
+    bonsai(t, layout.cx, layout.soilY, layout.h);
+    streaksF.step(dt);
+    streaksF.streaks([COL.streakTail, COL.streakHead]);
+    leaves.step(dt);
+    const gust = Math.sin(t * 0.35) * 8;
+    for (const p of leaves.particles) {
+      const fl = Math.sin(t * 3 + p.k * 20);
+      const x = p.x + gust + Math.sin(t * 0.7 + p.k * 9) * 3;
+      const y = p.y + fl * 2;
+      const c = p.k < 0.55 ? COL.foliage[3] : p.k < 0.8 ? COL.foliage[4] : COL.leafAccent;
+      const cd = p.k < 0.55 ? COL.foliage[1] : p.k < 0.8 ? COL.foliage[2] : COL.leafAccentDark;
+      if (p.k < 0.5) {
+        PK.px(x, y, c); PK.px(x - 1, y, cd);
+      } else {
+        PK.px(x, y, c); PK.px(x - 1, y + 1, cd); PK.px(x + 1, y - 1, c);
+      }
+    }
+    blades(t, view);
+  });
+})();
+</script>
+</body>
+</html>

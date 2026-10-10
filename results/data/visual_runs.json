@@ -955,5 +955,27 @@
   "score": 7.5,
   "outcome": "done",
   "note": "striped tower with a big glowing lantern room, red keeper's house, low rocky island with a continuous surf line and big splashes, moon behind clouds, rain; the beam crosses down through the tower"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.4, thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.4, thinking low",
+  "attempt": "#1",
+  "minutes": 25.1,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "big S-curved windswept tree, soft sun glow, sunset bands, mountains, grassy field; only three bunched pads, a small half-hidden pot on a stone slab"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.4, thinking low \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.4, thinking low",
+  "attempt": "#1",
+  "minutes": 24.7,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "striped tower with lantern and railing, moon partly behind clouds, connected surf along the island base, rain; over-spiky rock towers, a dim grey beam, a small house"
  }
 ]

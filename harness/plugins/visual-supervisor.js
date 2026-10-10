@@ -28,6 +28,12 @@ const CHECKPOINT_MIN = Number(process.env.VISUAL_SUPERVISOR_CHECKPOINT_MIN ?? 10
 // reverts (logged: 8, 8, 7 reverted, 7 reverted, ... until the budget ran out).
 const PLATEAU = Number(process.env.VISUAL_SUPERVISOR_PLATEAU ?? 2);
 const PLATEAU_FLOOR = Number(process.env.VISUAL_SUPERVISOR_PLATEAU_FLOOR ?? 7);
+// Phase-split reasoning: think hard where it pays (planning the page, planning a fix) and briefly
+// everywhere else. The first model request after the user's brief uses PLAN_EFFORT, the first after
+// each harness critique uses FIX_EFFORT; later requests keep the model's configured effort.
+const PLAN_EFFORT = process.env.VISUAL_SUPERVISOR_PLAN_EFFORT ?? "xhigh";
+const FIX_EFFORT = process.env.VISUAL_SUPERVISOR_FIX_EFFORT ?? "medium";
+const seenUserMessages = new Map(); // sessionID -> Set of user message ids already planned for
 // Keep the best round: models often make a page worse while "fixing" it (scores 8 then 7), so the
 // harness snapshots the project after every critique that beats the best so far, restores that
 // snapshot when a round scores lower, and leaves the best version on disk when supervision ends.
@@ -104,6 +110,13 @@ export const VisualSupervisor = async ({ client, $, directory }) => ({
       log(`error: ${err?.stack ?? err}`);
     }
   },
+  "chat.params": async (input, output) => {
+    try {
+      effort(input, output);
+    } catch (err) {
+      log(`chat.params error: ${err?.stack ?? err}`);
+    }
+  },
   "tool.execute.after": async (input, output) => {
     try {
       await checkpoint({ client, $, directory }, input, output);
@@ -113,6 +126,26 @@ export const VisualSupervisor = async ({ client, $, directory }) => ({
     }
   },
 });
+
+function effort(input, output) {
+  if (process.env.VISUAL_SUPERVISOR === "off" || (!PLAN_EFFORT && !FIX_EFFORT)) return;
+  const kwargs = output.options?.chat_template_kwargs;
+  if (!kwargs || kwargs.enable_thinking !== true) return; // thinking off stays off
+  const msgId = input.message?.id;
+  if (!msgId) return;
+  let seen = seenUserMessages.get(input.sessionID);
+  if (!seen) {
+    seen = new Set();
+    seenUserMessages.set(input.sessionID, seen);
+  }
+  if (seen.has(msgId)) return;
+  const first = seen.size === 0;
+  seen.add(msgId);
+  const level = first ? PLAN_EFFORT : FIX_EFFORT;
+  if (!level) return;
+  output.options.chat_template_kwargs = { ...kwargs, reasoning_effort: level };
+  log(`effort ${level} for ${first ? "the brief" : "a follow-up"} in ${input.sessionID}`);
+}
 
 async function runLook({ client, $, directory }, id) {
   const request = (await firstUserRequest(client, id)).slice(0, 1500);
