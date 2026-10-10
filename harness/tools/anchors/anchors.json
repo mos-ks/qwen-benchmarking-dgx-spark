@@ -1,0 +1,72 @@
+[
+ {
+  "file": "opus-5-5-claude-code-ref-bonsai.png",
+  "brief": "Bonsai",
+  "keyword": "bonsai",
+  "score": 9.0,
+  "note": "S-curved trunk, layered shaded pads, glazed pot on a stand, dusk sky, wind"
+ },
+ {
+  "file": "qwen3-8-flash-next-kit-v4-1-bonsai.png",
+  "brief": "Bonsai",
+  "keyword": "bonsai",
+  "score": 7.0,
+  "note": "big C-curved barked trunk, four shaded pads, wind streaks, sun, hills; pot sits on the lawn on cart-like feet, still framed"
+ },
+ {
+  "file": "qwen3-8-27b-kit-v2-1-bonsai.png",
+  "brief": "Bonsai",
+  "keyword": "bonsai",
+  "score": 4.2,
+  "note": "pixel trunk in a pot, no foliage (JS error)"
+ },
+ {
+  "file": "qwen3-6-35b-a3b-kit-v2-1-bonsai.png",
+  "brief": "Bonsai",
+  "keyword": "bonsai",
+  "score": 3.0,
+  "note": "canvas tiny in a corner, pot beside the tree"
+ },
+ {
+  "file": "opus-5-5-claude-code-ref-lighthouse.png",
+  "brief": "Lighthouse",
+  "keyword": "lighthouse",
+  "score": 9.0,
+  "note": "striped tower, keeper's house, cliff, moon, rain, sweeping beam"
+ },
+ {
+  "file": "qwen3-8-flash-next-kit-v4-1-lighthouse.png",
+  "brief": "Lighthouse",
+  "keyword": "lighthouse",
+  "score": 7.0,
+  "note": "striped tower, lit lantern, keeper's house, jagged cliff, sweeping beam, moon, rain, edge to edge; the cliff is a flat dark slab"
+ },
+ {
+  "file": "opus-5-5-claude-code-ref-windmill.png",
+  "brief": "Windmill",
+  "keyword": "windmill",
+  "score": 9.0,
+  "note": "tapered brick tower, thatched cap, gallery, lattice sails, tulip rows in perspective, canal reflecting the sky, sun, birds, a distant mill; framed"
+ },
+ {
+  "file": "qwen3-8-flash-next-kit-v4-1-windmill.png",
+  "brief": "Windmill",
+  "keyword": "windmill",
+  "score": 5.0,
+  "note": "brick tower with window, door and turning sails, a canal; the tulips are blocky stacked bars on a bare diagonal path, an empty purple corner"
+ },
+ {
+  "file": "opus-5-5-claude-code-ref-dashboard.png",
+  "brief": "Dashboard",
+  "keyword": "dashboard",
+  "score": 9.5,
+  "note": "KPI cards with sparklines, drill-in bars, donut, budgets, dark mode"
+ },
+ {
+  "file": "qwen3-8-flash-next-kit-v4-1-dashboard.png",
+  "brief": "Dashboard",
+  "keyword": "dashboard",
+  "score": 7.0,
+  "note": "KPI cards with sparklines, oversized donut, income vs spending bars; legend chips run together, half-empty panel; spent the whole 45 min on its own Playwright check script"
+ }
+]

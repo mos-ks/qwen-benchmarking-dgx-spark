@@ -224,7 +224,8 @@ Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
    [`harness/AGENTS.md`](harness/AGENTS.md) to `~/.config/opencode/`, the plugin to
    `~/.config/opencode/plugins/`, and put [`harness/tools/look`](harness/tools/look) and
    [`pick`](harness/tools/pick) on `PATH` (they need [uv](https://docs.astral.sh/uv/) and Playwright's
-   Chromium).
+   Chromium). Keep [`harness/tools/anchors/`](harness/tools/anchors/) next to `look` (link `look`
+   rather than copying it): those are the critic's calibration screenshots.
 3. Start `opencode serve --port 4096` and run a brief:
    `python scripts/run_server_agent.py http://127.0.0.1:4096 tasks/bonsai.txt out/bonsai-1`.
 4. Screenshot it with `scripts/capture_simple.py out/bonsai-1`; charts come from
