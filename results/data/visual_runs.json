@@ -845,5 +845,27 @@
   "score": 7.5,
   "outcome": "done",
   "note": "tall striped tower with lit windows, keeper's house, faceted rock with a continuous surf line, outcrops, haloed moon, clouds, beam, distant hills; the lantern room is cut off by the top edge"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.2, thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.2, thinking low",
+  "attempt": "#1",
+  "minutes": 26.7,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "well-proportioned windswept tree with a canopy of flat pads, soft banded sun, sky bands; the glazed pot is a broken half-hidden shape on a stone slab, striped ground"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.2, thinking low \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.2, thinking low",
+  "attempt": "#1",
+  "minutes": 26.3,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "whole striped tower with a glowing lantern, red-roofed keeper's house, rock island with surf, splashes on outcrops, haloed moon, distant hills; a crude dotted hand-drawn beam, stray white foam lines on open water"
  }
 ]

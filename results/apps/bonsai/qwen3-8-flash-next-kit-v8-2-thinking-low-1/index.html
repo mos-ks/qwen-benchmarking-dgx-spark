@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #b0d4ee; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps;
+  const canvas = document.getElementById("c");
+
+  // desaturated far-hill ramp (less contrast than foreground)
+  const hill = ["#9db8c6", "#aec4d0", "#bccfd8"];
+  // warm earth for the ground plane (dark -> light)
+  const earth = ["#3a2a22", "#54402f", "#6e5540", "#8a6e50", "#a8895f"];
+  // canopy ramp: deep cool shadow -> warm sunlit tips (strong contrast for a 3D "cloud" read)
+  const foliage = ["#0e2a1c", "#1e4a28", "#38762f", "#63a83c", "#a6d85a"];
+  // leaf accent ramp (amber -> warm green) for drifting leaves
+  const leafCols = ["#c7801f", "#e0a83a", "#7aa83a", "#3f7a38"];
+
+  let bg = null;               // static scenery layer
+  let layout = null;           // { pads: [...], } rebuilt on resize
+  let reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---- wind systems (declared before fit so callbacks can reach them) ----
+  let wind, leaves;
+
+  function build(v) {
+    const W = v.W, H = v.H;
+    const s = Math.min(W, H) / 150;          // design scale, short side ~150
+    const u = (x) => Math.round(x * s);
+
+    const cx = Math.round(W / 2);
+    const groundY = Math.round(H * 0.78);     // where the slab surface sits
+    const potW = u(40);
+    const potH = Math.max(6, u(11));
+    const baseY = groundY - 2;                // trunk base (soil) sits ~2px into the pot
+    const rimY = groundY - potH;              // top of the pot body / rim
+
+    // trunk control points -> clear tapering S-curve
+    const trunkMidX = cx + u(8), trunkMidY = baseY - u(30);
+    const apexX = cx - u(1), apexY = baseY - u(62);
+
+    // branches: {ax,ay, tipx,tipy, dir, seed}
+    const branches = [
+      { ax: cx + u(1),  ay: baseY - u(22), tipx: cx - u(18), tipy: baseY - u(27), dir: -1, seed: 101 },
+      { ax: cx + u(7),  ay: baseY - u(36), tipx: cx + u(20), tipy: baseY - u(42), dir:  1, seed: 102 },
+      { ax: cx + u(4),  ay: baseY - u(48), tipx: cx - u(16), tipy: baseY - u(53), dir: -1, seed: 103 },
+    ];
+
+    // foliage pads (drawn each frame so they can sway): cx,cy,rx,ry,seed,heightFactor
+    const padDefs = [
+      { cx: cx - u(1),  cy: apexY - u(3),                 rx: u(15), ry: u(7),   seed: 21, hf: 1.00, ph: 0.0 }, // crown
+      { axTip: 2, rx: u(11), ry: u(5), seed: 22, hf: 0.82, ph: 1.7 },                                          // upper-left
+      { axTip: 1, rx: u(13), ry: u(6), seed: 23, hf: 0.70, ph: 3.1 },                                          // mid-right
+      { axTip: 0, rx: u(12), ry: u(5), seed: 24, hf: 0.55, ph: 4.4 },                                          // low-left
+    ];
+    for (const p of padDefs) {
+      if (p.axTip != null) {
+        const b = branches[p.axTip];
+        p.cx = b.tipx + Math.round(p.rx * 0.12) * b.dir;
+        p.cy = b.tipy - Math.round(p.ry * 0.4);
+      }
+    }
+
+    layout = { W, H, s, cx, groundY, potW, potH, baseY, rimY, trunkMidX, trunkMidY, apexX, apexY, branches, padDefs };
+
+    wind.setArea([0, Math.round(H * 0.12), W, groundY]);
+    leaves.setArea([0, Math.round(H * 0.10), W, groundY + 2]);
+
+    bg = PK.layer(W, H, function () {
+      drawSky(W, H, groundY, cx);
+      drawHills(W, groundY, s);
+      drawGround(W, H, groundY, s, cx);
+      drawSlab(cx, groundY, potW, s);
+      drawPot(cx, groundY, potW, potH, s);
+      drawBonsaiWood();
+    });
+  }
+
+  function drawSky(W, H, groundY, cx) {
+    PK.gradient(0, 0, W, groundY + 1, PK.skies.day, 4);
+    // sun upper-right, behind the canopy, as a warm backlight
+    const sunX = Math.round(W * 0.80), sunY = Math.round(groundY * 0.32);
+    PK.glow(sunX, sunY, Math.max(10, Math.round(W * 0.13)), R.warmLight[2], 0.5, 5);
+    PK.glow(sunX, sunY, Math.max(6, Math.round(W * 0.06)), R.warmLight[3], 0.8, 4);
+    PK.disc(sunX, sunY, Math.max(4, Math.round(W * 0.028)), R.warmLight[4]);
+    PK.disc(sunX, sunY, Math.max(2, Math.round(W * 0.016)), "#fff8d8");
+  }
+
+  function drawHills(W, groundY, s) {
+    const top = groundY - Math.round(groundY * 0.14);
+    for (let x = 0; x < W; x++) {
+      const hy = top + Math.round(Math.sin(x * 0.03) * 3 + Math.sin(x * 0.011 + 1.3) * 5);
+      for (let y = hy; y < groundY; y++) {
+        const k = (y - hy) / Math.max(1, groundY - hy);
+        PK.px(x, y, hill[k < 0.35 ? 0 : k < 0.7 ? 1 : 2]);
+      }
+    }
+  }
+
+  function drawGround(W, H, groundY, s, cx) {
+    const bands = [4, 4, 3, 3, 2, 2, 1, 1, 0];
+    const bh = (H - groundY) / bands.length;
+    for (let y = groundY; y < H; y++) {
+      const b = bands[Math.min(bands.length - 1, Math.floor((y - groundY) / bh))];
+      PK.rect(0, y, W, 1, earth[b]);
+    }
+    // speckle texture on the near ground
+    const rnd = PK.rng(31);
+    for (let i = 0; i < W * (H - groundY) * 0.02; i++) {
+      const x = Math.floor(rnd() * W);
+      const y = groundY + 2 + Math.floor(rnd() * (H - groundY - 3));
+      PK.px(x, y, rnd() < 0.5 ? earth[0] : earth[4]);
+    }
+    // a few pebbles flanking the pot so the ground reads as stone, not a flat fill
+    for (const [dx, w, h, seed] of [[-1, 6, 3, 5], [1, 8, 4, 6], [-2, 4, 2, 7], [2, 5, 2, 8]]) {
+      const px = cx + Math.round(dx * s * 26);
+      if (px < 2 || px > W - 3) continue;
+      PK.rock(px - w, groundY, w, h, R.stone, { seed, rough: 1, profile: "mound", cracks: 0, ledges: 0 });
+    }
+  }
+
+  function drawSlab(cx, groundY, potW, s) {
+    const w = potW + Math.round(s * 22);
+    const h = Math.max(4, Math.round(s * 6));
+    const x = cx - Math.round(w / 2);
+    const top = groundY;
+    // flat-topped stone slab with rounded ends, lit top face, shadowed front
+    for (let i = 0; i < w; i++) {
+      const edge = Math.min(i, w - 1 - i);
+      const cap = edge < 2 ? 1 : 0;
+      for (let y = top; y < top + h; y++) {
+        if (y === top) { PK.px(x + i, y, i < w * 0.55 ? R.stone[4] : R.stone[3]); continue; }
+        const lit = i < w * 0.5;
+        PK.px(x + i, y, y === top + 1 ? (lit ? R.stone[3] : R.stone[2]) : (lit ? R.stone[2] : R.stone[1]));
+      }
+      if (cap) { PK.px(x + i, top, R.stone[3]); PK.px(x + i, top + h - 1, R.stone[0]); }
+    }
+    // front shadow line + contact shadow under the pot
+    PK.rect(x + 1, top + h - 1, w - 2, 1, R.stone[0]);
+    const pw = Math.round(potW / 2) + 1;
+    for (let i = -pw; i <= pw; i++) {
+      PK.px(cx + i, top, R.stone[0]);
+      if (Math.abs(i) < pw - 1) PK.px(cx + i, top - 1, R.stone[1]);
+    }
+    // soft contact shadow where the slab meets the ground (light from the left -> shadow spills right)
+    const shBot = top + h;
+    const shW = Math.round(w / 2) + Math.round(s * 6);
+    for (let dx = -shW; dx <= shW * 1.5; dx++) {
+      const depth = Math.max(0, 1 - Math.abs(dx) / (shW * 1.4));
+      const rows = Math.max(1, Math.round(depth * 3 + (dx > 0 ? 1 : 0)));
+      for (let k = 0; k < rows; k++) {
+        const yy = shBot + k;
+        if (yy >= layout.H) break;
+        if (PK.bayer(cx + dx, yy) < 0.28 + depth * 0.4) PK.px(cx + dx, yy, k === 0 ? earth[0] : earth[1]);
+      }
+    }
+  }
+
+  function drawPot(cx, groundY, potW, potH, s) {
+    const left = cx - Math.round(potW / 2);
+    const top = groundY - potH;
+    const rimH = Math.max(2, Math.round(potH * 0.28));
+    const inset = Math.max(3, Math.round(potW * 0.16));
+    // rim lip (slightly wider than body)
+    PK.rect(left - 1, top, potW + 2, rimH, R.glaze[2]);
+    for (let x = left - 1; x < left + potW + 1; x++) {
+      PK.px(x, top, x < cx ? R.glaze[4] : R.glaze[3]);      // lit top of rim
+    }
+    PK.rect(left - 1, top + rimH - 1, potW + 2, 1, R.glaze[1]); // under-rim shade
+    // tapered trapezoid body, per-column shading (light from the left)
+    const bodyTop = top + rimH;
+    const bodyBot = groundY;
+    const h = bodyBot - bodyTop;
+    for (let y = bodyTop; y < bodyBot; y++) {
+      const tt = h > 1 ? (y - bodyTop) / (h - 1) : 1;
+      const ins = Math.round(inset * tt);
+      for (let x = left + ins; x < left + potW - ins; x++) {
+        const lit = (x - (left + ins)) / Math.max(1, (potW - ins * 2) - 1);
+        const c = R.glaze[lit < 0.35 ? 4 : lit < 0.6 ? 3 : lit < 0.82 ? 2 : 1];
+        PK.px(x, y, c);
+      }
+    }
+    // specular shine: a bright vertical band on the upper-left face
+    for (let y = bodyTop + 1; y < bodyBot - 1; y++) {
+      const t = (y - bodyTop) / Math.max(1, h - 2);
+      const sx = left + inset + Math.round(2 + t * 2);
+      PK.px(sx, y, "#e8f2ff");
+      if (y > bodyTop + 1 && y < bodyBot - 2) PK.px(sx + 1, y, R.glaze[4]);
+    }
+    // bottom edge shadow + two feet
+    PK.rect(left + inset, groundY - 1, potW - inset * 2, 1, R.glaze[1]);
+    const fL = left + inset + 1, fR = left + potW - inset - 4;
+    PK.rect(fL, groundY, Math.min(3, potW >> 4), 2, R.glaze[2]);
+    PK.rect(fR, groundY, Math.min(3, potW >> 4), 2, R.glaze[2]);
+  }
+
+  function drawBonsaiWood() {
+    const L = layout;
+    const bark = R.bark;
+    // root flare spreading over the soil line
+    PK.limb(L.cx, L.baseY + 1, L.cx - Math.round(L.s * 4), L.baseY - Math.round(L.s * 2), L.cx - Math.round(L.s * 7), L.baseY + 1,
+            Math.max(3, Math.round(L.s * 4)), Math.max(2, Math.round(L.s * 2)), bark, 41);
+    PK.limb(L.cx, L.baseY + 1, L.cx + Math.round(L.s * 4), L.baseY - Math.round(L.s * 2), L.cx + Math.round(L.s * 7), L.baseY + 1,
+            Math.max(3, Math.round(L.s * 4)), Math.max(2, Math.round(L.s * 2)), bark, 42);
+    // main trunk: S-curve, wide base tapering to the apex
+    const tp1 = PK.limb(L.cx, L.baseY + 1, L.cx - Math.round(L.s * 5), L.baseY - Math.round(L.s * 16), L.trunkMidX, L.trunkMidY,
+            Math.max(7, Math.round(L.s * 8)), Math.max(4, Math.round(L.s * 5)), bark, 40);
+    const tp2 = PK.limb(L.trunkMidX, L.trunkMidY, L.trunkMidX + Math.round(L.s * 6), L.baseY - Math.round(L.s * 47), L.apexX, L.apexY,
+            Math.max(4, Math.round(L.s * 5)), Math.max(2, Math.round(L.s * 2)), bark, 43);
+    // bark: vertical grooves on the shaded (right) side + a couple of knots, following the curve
+    const rnd = PK.rng(44);
+    const trunk = tp1.concat(tp2);
+    for (let i = 3; i < trunk.length; i += 3) {
+      const p = trunk[i];
+      if (p.r < 2.2) continue;
+      const off = Math.round(p.r * 0.6);
+      PK.line(p.x + off, p.y, p.x + off, p.y + 2, bark[0]);            // groove
+      if (rnd() < 0.4) PK.px(p.x - off, p.y, bark[4]);                 // catch-light on lit side
+      if (rnd() < 0.06 && p.r > 3) { PK.disc(p.x + off - 1, p.y, 1, bark[0]); PK.px(p.x + off, p.y - 1, bark[3]); } // knot
+    }
+    // soil mound at the base of the trunk
+    PK.ellipse(L.cx, L.rimY + 1, Math.round(L.potW * 0.42), Math.max(2, Math.round(L.s * 2)), earth[0]);
+    // branches (drawn before pads which cap their tips)
+    L.branches.forEach(function (b) {
+      const dir = b.dir;
+      PK.limb(b.ax, b.ay, b.ax + dir * Math.round(L.s * 8), b.ay + Math.round(L.s * 2), b.tipx, b.tipy,
+              Math.max(3, Math.round(L.s * 4)), Math.max(1, Math.round(L.s * 1)), bark, b.seed);
+      // a small twig off each branch for ramification
+      PK.limb(b.ax + dir * Math.round(L.s * 7), b.ay + Math.round(L.s * 1), b.ax + dir * Math.round(L.s * 11), b.ay - Math.round(L.s * 3),
+              b.tipx + dir * Math.round(L.s * 4), b.tipy - Math.round(L.s * 4),
+              Math.max(2, Math.round(L.s * 2)), 1, bark, b.seed + 3);
+    });
+  }
+
+  function drawPads(t) {
+    const L = layout;
+    const amp = reduced ? 1.0 : 2.6;
+    L.padDefs.forEach(function (p) {
+      const sway = Math.round(Math.sin(t * 1.25 + p.ph) * amp * p.hf + Math.sin(t * 2.3 + p.ph * 0.5) * 0.6 * p.hf);
+      const cxp = p.cx + sway;
+      // main clumpy pad with built-in shading (lit top-left, shaded flat bottom)
+      const blobs = PK.pad(cxp, p.cy, p.rx, p.ry, foliage, { seed: p.seed, n: Math.max(7, Math.round((p.rx * p.ry) / 6)) });
+      // warm sun rim-light on the upper-right (sun sits to the right): bright pixels on lit edges
+      const rnd = PK.rng(p.seed + 555);
+      for (const b of blobs) {
+        const k = Math.max(1, Math.round(b.r * 0.7));
+        for (let j = 0; j < k; j++) {
+          const ex = b.x + Math.round(b.r * 0.4) + Math.round(rnd() * b.r * 0.6);
+          const ey = b.y - Math.round(rnd() * b.r * 0.8);
+          PK.px(ex, ey, rnd() < 0.5 ? foliage[4] : foliage[3]);
+        }
+      }
+    });
+  }
+
+  // ---- particles --------------------------------------------------------------------------
+  wind = PK.drift({ n: 34, seed: 71, area: [0, 0, 1, 1], vx: [14, 24], vy: [-1.5, 2.5], len: [3, 6] });
+  leaves = PK.drift({ n: 26, seed: 90, area: [0, 0, 1, 1], vx: [7, 17], vy: [2, 6], len: [1, 1] });
+
+  function drawLeaves(t) {
+    const [x0, y0, x1, y1] = leaves.area;
+    for (const p of leaves.particles) {
+      const fy = Math.sin(t * 2.2 + p.k * 12) * 2.2;      // gentle float/flutter
+      const fx = Math.cos(t * 1.6 + p.k * 9) * 1.4;
+      const x = ((p.x + fx - x0) % (x1 - x0) + (x1 - x0)) % (x1 - x0) + x0;
+      const y = ((p.y + fy - y0) % (y1 - y0) + (y1 - y0)) % (y1 - y0) + y0;
+      const c = leafCols[Math.floor(p.k * leafCols.length)];
+      if (p.len >= 1 && p.k > 0.5) { PK.px(x, y, c); PK.px(x + 1, y, c); PK.px(x, y + 1, leafCols[0]); }
+      else PK.px(x, y, c);
+    }
+  }
+
+  const view = PK.fit(canvas, 150, function (v) { build(v); });
+
+  PK.loop(function (t, dt) {
+    PK.blit(bg);
+    wind.step(dt);
+    leaves.step(dt);
+    wind.streaks(["#e9f4fb", "#ffffff"]);
+    drawPads(t);
+    drawLeaves(t);
+  });
+})();
+</script>
+</body>
+</html>
