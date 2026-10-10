@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Ledgerline — Money for Alex Rivera</title>
+  <meta name="description" content="Personal finance dashboard: monthly balance, income, spending, savings rate, budgets and transactions.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#kpis">Skip to the numbers</a>
+
+  <header class="app-header">
+    <div class="bar">
+      <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+          <rect x="1.5" y="6" width="23" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M16 6v14" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 2.6"/>
+          <circle cx="6.5" cy="13" r="1.4" fill="currentColor"/>
+        </svg>
+        <span class="name">Ledgerline</span>
+        <span class="who">Alex Rivera · Everyday Checking ··4821</span>
+      </div>
+      <div class="pass">
+        <span class="punch" aria-hidden="true"></span>
+        <label for="month-select">Pass for</label>
+        <select id="month-select" aria-label="Choose month"></select>
+        <span class="stamp" id="stamp" aria-hidden="true"></span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section aria-labelledby="kpi-h">
+      <div class="sec-head">
+        <h2 id="kpi-h">At a glance</h2>
+        <span class="sec-note" id="kpi-month"></span>
+        <span class="chip-note" id="kpi-partial" hidden>Through Oct 10 · partial month</span>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </section>
+
+    <section class="charts" aria-label="Charts">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Where it went</h2>
+          <span class="sub" id="chart-category-note"></span>
+        </div>
+        <div class="chart-box" id="chart-category"></div>
+        <div class="sr-only"><table id="table-category"></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Income vs spending</h2>
+          <span class="legend" id="trend-legend">
+            <span><i class="sw sw-income"></i>Income</span>
+            <span><i class="sw sw-spend"></i>Spending</span>
+          </span>
+        </div>
+        <div class="chart-box" id="chart-trend"></div>
+        <div class="sr-only"><table id="table-trend"></table></div>
+      </div>
+    </section>
+
+    <section class="lower" aria-label="Transactions and budgets">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Recent transactions</h2>
+          <span class="sub" id="tx-month"></span>
+        </div>
+        <ul class="tx-list" id="tx-list"></ul>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Budget progress</h2>
+          <span class="sub" id="budget-month"></span>
+        </div>
+        <div class="budgets" id="budgets"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="sample" id="sample-note"></span>
+    <span>Ledgerline · balances from an opening balance of $4,820.55 on May 1 · data through Oct 10, 2026</span>
+  </footer>
+
+  <div id="tooltip" role="tooltip" aria-hidden="true"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
