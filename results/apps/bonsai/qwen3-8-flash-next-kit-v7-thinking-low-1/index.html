@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bonsai in the Wind</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #141833; overflow: hidden; }
+  canvas { display: block; }
+  .title {
+    position: fixed; left: 0; right: 0; top: max(14px, env(safe-area-inset-top));
+    text-align: center; pointer-events: none;
+    font: 500 clamp(11px, 2.4vw, 14px)/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: .28em; text-transform: uppercase; color: #ffe6c0;
+    text-shadow: 0 1px 0 #2a1a20, 0 0 10px rgba(0,0,0,.35); opacity: .82;
+  }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Pixel-art bonsai tree swaying in the wind"></canvas>
+<div class="title">Bonsai&nbsp;·&nbsp;Wind</div>
+<script src="pixel-kit.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = PK.ramps;
+  const skyBands = ["#12204a", "#1c2f5e", "#2c4070", "#465a8c", "#6f6a96", "#9a7690", "#c48a82", "#e6ab84", "#f6cf9c"];
+  const leafCols = ["#2f5d34", "#4a8a3c", "#78b84a", "#b8e070"];
+  const streak = ["#c9d6ec", "#ffffff"];
+
+  let scene = null;
+  let leaves, gusts, bg = null;
+  const canvas = document.getElementById("c");
+
+  // a tapered limb spec (drawn later inside the bg/canopy contexts)
+  function seg(x0, y0, cx, cy, x1, y1, w0, w1, seed) { return { x0, y0, cx, cy, x1, y1, w0, w1, seed }; }
+  function drawSeg(g) { return PK.limb(g.x0, g.y0, g.cx, g.cy, g.x1, g.y1, g.w0, g.w1, R.bark, g.seed); }
+
+  function buildScene(W, H) {
+    const cx = Math.round(W / 2);
+    const gy = Math.round(H * 0.84);                 // table top line
+    // size the tree to fill ~half the height but never spill off the sides
+    const f = Math.max(0.85, Math.min((H * 0.46) / 46, (W * 0.46) / 31));
+    const T = Math.round(46 * f);                     // trunk height
+    const potW = Math.round(40 * f);                  // shallow + wide
+    const potH = Math.max(7, Math.round(8 * f));
+    const rimH = Math.max(2, Math.round(2 * f));
+    const soilY = gy - potH + 1;
+    const apexY = soilY - T;
+
+    // informal-upright S-curve trunk: clearly thick at the base, thin at the apex
+    const lean = Math.round(7 * f);
+    const m1 = { x: cx + Math.round(4 * f), y: soilY - T * 0.58 };
+    const trunkSegs = [
+      seg(cx, soilY, cx - lean, soilY - T * 0.38, m1.x, m1.y, 8.5 * f, 3.8 * f, 21),
+      seg(m1.x, m1.y, cx - Math.round(10 * f), soilY - T * 0.82, cx - Math.round(2 * f), apexY, 3.8 * f, 1.5 * f, 7),
+    ];
+    // thin roots flaring sideways out of the soil (not a ball)
+    const rootSegs = [
+      seg(cx - 2, soilY - 1, cx - 5 * f, soilY, cx - Math.round(11 * f), soilY + Math.round(2 * f), 2.6 * f, 0.8 * f, 31),
+      seg(cx + 2, soilY - 1, cx + 5 * f, soilY, cx + Math.round(10 * f), soilY + Math.round(2 * f), 2.6 * f, 0.8 * f, 52),
+      seg(cx - 1, soilY - 1, cx - 2 * f, soilY, cx - Math.round(5 * f), soilY + Math.round(2 * f), 2 * f, 0.7 * f, 64),
+      seg(cx + 1, soilY - 1, cx + 2 * f, soilY, cx + Math.round(5 * f), soilY + Math.round(2 * f), 2 * f, 0.7 * f, 81),
+    ];
+
+    // branch tips (pad centres) anchored to points along the trunk
+    const a = { leftLow: 0.55, rightMid: 0.34, leftUp: 0.74 };
+    const P1 = PK.limb(trunkSegs[0].x0, trunkSegs[0].y0, trunkSegs[0].cx, trunkSegs[0].cy, m1.x, m1.y, trunkSegs[0].w0, trunkSegs[0].w1, R.bark, 21);
+    const P2 = PK.limb(trunkSegs[1].x0, trunkSegs[1].y0, trunkSegs[1].cx, trunkSegs[1].cy, trunkSegs[1].x1, trunkSegs[1].y1, trunkSegs[1].w0, trunkSegs[1].w1, R.bark, 7);
+    const at = (p, k) => p[Math.max(0, Math.min(p.length - 1, Math.round(k * (p.length - 1))))];
+
+    const pads = [
+      { bx: at(P1, a.leftLow),  ox: -Math.round(16 * f), oy: Math.round(3 * f),   rx: Math.round(15 * f), ry: Math.round(7 * f),  seed: 11 },
+      { bx: at(P2, a.rightMid), ox: Math.round(15 * f),  oy: Math.round(2 * f),   rx: Math.round(14 * f), ry: Math.round(7 * f),  seed: 23 },
+      { bx: at(P2, a.leftUp),   ox: -Math.round(12 * f), oy: -Math.round(1 * f),  rx: Math.round(12 * f), ry: Math.round(6.5 * f), seed: 37 },
+      { bx: at(P2, 1.0),        ox: Math.round(2 * f),   oy: -Math.round(6 * f),  rx: Math.round(17 * f), ry: Math.round(8.5 * f), seed: 53 },
+    ];
+    for (const p of pads) {
+      p.px = Math.round(p.bx.x + p.ox);
+      p.py = Math.round(p.bx.y + p.oy);
+      p.h = (gy - p.py) / T;
+      p.phase = p.seed;
+      p.br = seg(p.bx.x, p.bx.y, 0, 0, p.px, p.py, 2.6 * f, 1.4 * f, p.seed + 3);
+    }
+
+    return { W, H, f, T, cx, gy, potW, potH, rimH, soilY, apexY, trunkSegs, rootSegs, pads };
+  }
+
+  function drawPot(s) {
+    const { cx, gy, potW, potH, rimH, f } = s;
+    const ramp = R.clay;
+    const half = Math.round(potW / 2);
+    const topY = gy - potH;
+    const bodyH = potH - rimH;
+    PK.rect(cx - half, topY, potW, rimH, ramp[2]);
+    PK.rect(cx - half, topY, potW, 1, ramp[4]);
+    PK.rect(cx - half, topY + rimH - 1, potW, 1, ramp[0]);
+    for (let j = 0; j < bodyH; j++) {
+      const y = topY + rimH + j;
+      const hf = Math.round(half * (1 - 0.28 * (j / bodyH)));
+      const last = j === bodyH - 1;
+      for (let i = -hf; i <= hf; i++) {
+        const p = (i + hf) / (2 * hf || 1);
+        let c;
+        if (last) c = ramp[0];
+        else if (p < 0.10) c = ramp[4];
+        else if (p < 0.34) c = ramp[3];
+        else if (p > 0.86) c = ramp[1];
+        else if (p > 0.70) c = ramp[1];
+        else c = ramp[2];
+        PK.px(cx + i, y, c);
+      }
+    }
+    PK.rect(cx - half + Math.round(2 * f), topY + rimH + 1, Math.max(2, Math.round(3 * f)), 1, ramp[4]);
+    const footW = Math.max(2, Math.round(4 * f)), footY = gy;
+    PK.rect(cx - half + 2, footY, footW, 2, ramp[0]);
+    PK.rect(cx + half - 2 - footW, footY, footW, 2, ramp[0]);
+    PK.rect(cx - half + 2, topY + 1, potW - 4, Math.max(1, Math.round(2 * f)), "#3a2617");
+    const rnd = PK.rng(99);
+    for (let k = 0; k < 20 * f; k++) {
+      const ang = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * (half - 5);
+      PK.px(cx + Math.cos(ang) * d, topY + 1 + (rnd() < 0.5 ? 0 : 1), rnd() < 0.55 ? "#2b1a12" : (rnd() < 0.5 ? "#4a6a34" : "#243318"));
+    }
+  }
+
+  function drawBg() {
+    const s = scene;
+    const bands = skyBands.length;
+    for (let y = 0; y < s.gy; y++) {
+      const i = Math.min(bands - 1, Math.floor((y / s.gy) * bands));
+      PK.rect(0, y, s.W, 1, skyBands[i]);
+    }
+    // low sun + halo, a few high stars
+    const sx = Math.round(s.W * 0.74), sy = Math.round(s.gy - s.H * 0.12);
+    PK.glow(sx, sy, Math.round(s.H * 0.10), "#ffe0a8", 0.45);
+    PK.disc(sx, sy, Math.max(4, Math.round(4 * s.f)), "#fff2c0");
+    PK.stars(0, 0, s.W, Math.round(s.gy * 0.4), Math.round(s.W / 8), 0, ["#8a90c0", "#ffffff"], 4);
+    // distant hill behind the table
+    const hr = R.stone;
+    for (let x = 0; x < s.W; x++) {
+      const hy = s.gy - Math.round((Math.sin(x * 0.010 + 1.2) * 0.5 + 0.5) * s.H * 0.07 + s.H * 0.015);
+      for (let y = hy; y < s.gy; y++) PK.px(x, y, y === hy ? hr[3] : hr[1]);
+    }
+    // wooden table
+    const wood = ["#3a2418", "#5a3a24", "#7a5230", "#9a6e40", "#c08e58"];
+    PK.rect(0, s.gy, s.W, s.H - s.gy, wood[1]);
+    PK.rect(0, s.gy, s.W, 1, wood[3]);
+    PK.rect(0, s.gy + 1, s.W, 1, wood[2]);
+    const wr = PK.rng(2);
+    for (let y = s.gy + 3; y < s.H; y += 3) for (let x = 0; x < s.W; x++) if (wr() < 0.10) PK.px(x, y, wr() < 0.5 ? wood[0] : wood[2]);
+    // contact shadow (flat, only under the pot), then pot, trunk, roots
+    PK.ellipse(s.cx, s.gy + 3, Math.round(s.potW * 0.55), Math.max(1, Math.round(2 * s.f)), "#221016");
+    drawPot(s);
+    for (const g of s.trunkSegs) drawSeg(g);
+    for (const g of s.rootSegs) drawSeg(g);
+  }
+
+  function drawCanopy(s, t) {
+    const lean = Math.round(Math.sin(t * 0.5) * 2 + 2);
+    for (const p of s.pads) {
+      const amp = 2 + p.h * 3.5;
+      const ox = Math.round(Math.sin(t * 0.9 + p.phase) * amp) + lean;
+      const oy = Math.round(Math.sin(t * 0.7 + p.phase * 1.3) * amp * 0.6);
+      drawSeg({ x0: p.bx.x, y0: p.bx.y, cx: Math.round((p.bx.x + p.px + ox) / 2), cy: Math.round((p.bx.y + p.py + oy) / 2) - Math.round(2 * s.f), x1: p.px + ox, y1: p.py + oy, w0: p.br.w0, w1: p.br.w1, seed: p.br.seed });
+    }
+    for (const p of s.pads.slice().sort((a, b) => b.py - a.py)) {
+      const amp = 2 + p.h * 3.5;
+      const ox = Math.round(Math.sin(t * 0.9 + p.phase) * amp) + lean;
+      const oy = Math.round(Math.sin(t * 0.7 + p.phase * 1.3) * amp * 0.6);
+      PK.pad(p.px + ox, p.py + oy, p.rx, p.ry, R.foliage, { seed: p.seed });
+    }
+  }
+
+  PK.fit(canvas, 150, (v) => {
+    // compute geometry against a throwaway ctx so limb() doesn't paint the main canvas
+    const dummy = document.createElement("canvas");
+    PK.use(dummy.getContext("2d"));
+    scene = buildScene(v.W, v.H);
+    PK.use(v.ctx);
+    if (!leaves) {
+      leaves = PK.drift({ n: 44, seed: 7, area: [0, 0, 1, 1], vx: [16, 36], vy: [5, 12], len: [1, 1] });
+      gusts = PK.drift({ n: 24, seed: 5, area: [0, 0, 1, 1], vx: [46, 84], vy: [-2, 2], len: [5, 10] });
+    }
+    leaves.setArea([-10, -8, v.W + 10, v.H]);
+    gusts.setArea([-10, -8, v.W + 10, v.H * 0.92]);
+    bg = PK.layer(v.W, v.H, drawBg);
+  });
+
+  function leaf(x, y, c) { PK.px(x, y, c); PK.px(x + 1, y, c); PK.px(x + 1, y - 1, c); PK.px(x + 2, y, "#1d3b2a"); }
+
+  PK.loop((t, dt) => {
+    PK.blit(bg);
+    drawCanopy(scene, t);
+    leaves.step(dt);
+    gusts.step(dt);
+    for (const p of leaves.particles) leaf(p.x, p.y + Math.round(Math.sin(t * 2 + p.k * 6.28)), leafCols[Math.floor(p.k * leafCols.length)]);
+    gusts.streaks(streak);
+  });
+})();
+</script>
+</body>
+</html>

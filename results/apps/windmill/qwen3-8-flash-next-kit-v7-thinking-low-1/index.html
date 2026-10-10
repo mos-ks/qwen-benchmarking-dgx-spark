@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dutch Windmill at Sunset</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #141a3e;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #c {
+    display: block;
+    touch-action: none;
+  }
+  #cap {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    text-align: center;
+    font: 500 clamp(9px, 2.4vmin, 12px)/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #f6d9b0;
+    text-shadow: 0 1px 0 #14102a, 0 0 8px rgba(0,0,0,.5);
+    pointer-events: none;
+    opacity: .8;
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="cap">Tulipveld &middot; bij zonsondergang</div>
+  <script src="pixel-kit.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

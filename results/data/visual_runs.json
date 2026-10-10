@@ -515,5 +515,27 @@
   "score": 8.0,
   "outcome": "done",
   "note": "KPI cards with sparklines and correctly coloured deltas, category bars with shares, income vs spending, transactions with icons, budgets flagged over the limit; 2.5 min over budget"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v7 + thinking low \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v7 + thinking low",
+  "attempt": "#1",
+  "minutes": 13.6,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "twisting trunk with root flare in a shallow terracotta pot, four clumped shaded pads, banded sunset, wind streaks and leaves; dotted-grid sun, bare ground band"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 kit v7 + thinking low \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v7 + thinking low",
+  "attempt": "#1",
+  "minutes": 16.9,
+  "score": 7.0,
+  "outcome": "done",
+  "note": "oversized plank sails cover most of the tower, door and lit windows, path through tulip rows, sunset sun, birds; tower barely visible, clouds drawn as orbs"
  }
 ]
