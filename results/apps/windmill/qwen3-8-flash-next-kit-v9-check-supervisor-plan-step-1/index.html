@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Windmill in a Tulip Field at Sunset</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #17102e; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="pixel-kit.js"></script>
+<script>
+"use strict";
+const R = PK.ramps;
+
+/* ------- palette (limited, hue-shifted ramps) ------- */
+const SKY   = ["#251a4a", "#43275e", "#6e3260", "#a34a5a", "#d66a48", "#f0904c", "#ffc274"];
+const CLOUD = { dark: "#3f2a54", mid: "#6e4066", lit: "#e0785a", hi: "#ffb870" };
+const FAR   = { dike: "#82567a", mill: "#9a6a84", sail: "#bd8ba0", bush: "#6f4a72" };
+const GRASS = ["#1c3626", "#2a4d32", "#3a663c", "#4e8146", "#6fa155"];
+const FIELD = ["#7d9066", "#57774b", "#3d5d3a", "#2b462d"];
+const SOIL  = ["#241323", "#3a2230", "#553540"];
+const BRICK = R.brickRed, CAPR = R.clay, WOOD = R.bark, LAMP = R.warmLight;
+const WATER = ["#131333", "#252150", "#3d2c5e", "#5c3c6a", "#8a5c7a"];
+const GLINT = ["#c4612a", "#f2a33a", "#ffe08a"];
+const TULIPS = [
+  ["#57101e", "#8c1c28", "#c7373c", "#ef6a52"],   // red
+  ["#6e4a10", "#a87a18", "#ddaf30", "#f6d976"],   // yellow
+  ["#5a1f46", "#8e3367", "#c55e92", "#ef92ba"],   // pink
+];
+const STEM = ["#183120", "#234a2a", "#2f5e34"];
+const BIRD = "#241536";
+
+/* ------- state (declared before fit; fit calls onResize immediately) ------- */
+let bg = null, motes = null;
+let clouds = [], reeds = [], glints = [], birds = [];
+const L = {};
+
+L.towerHW = function (y) {
+  if (y < L.towerTop) return 0;
+  const f = Math.min(1, (y - L.towerTop) / (L.base - L.towerTop));
+  return L.wTop / 2 + (L.wBase / 2 - L.wTop / 2) * f;
+};
+L.poleXAt = function (y) {
+  const y0 = L.capTop + 4, xa = L.cx + L.wTop / 2;
+  const f = Math.max(0, Math.min(1, (y - y0) / (L.base - y0)));
+  return xa + (L.tailX - xa) * f;
+};
+L.inMill = function (x, y) {
+  if (y > L.towerTop - 1 && Math.abs(x - L.cx) <= L.towerHW(y) + 2) return true;
+  if (y > L.capTop + 2 && x > L.cx && x <= L.tailX + 2 && Math.abs(x - L.poleXAt(y)) <= 2) return true;
+  if (y > L.base - 6 && Math.abs(x - L.cx) <= 4 + Math.max(0, y - L.base) * 1.2) return true;
+  return false;
+};
+
+function layout(v) {
+  L.W = v.W; L.H = v.H;
+  L.hz = Math.round(v.H * 0.45);
+  L.fieldBot = Math.round(v.H * 0.71);
+  L.waterTop = Math.round(v.H * 0.75);
+  L.cx = Math.round(v.W * 0.5);
+  L.towerTop = Math.round(v.H * 0.335);
+  L.capTop = Math.round(v.H * 0.29);
+  L.hubY = Math.round(v.H * 0.305);
+  L.base = L.fieldBot;
+  L.wBase = Math.max(17, Math.round(v.H * 0.18));
+  L.wTop = Math.round(L.wBase * 0.52);
+  L.sailL = Math.round(v.H * 0.205);
+  L.sunX = Math.round(v.W * 0.30);
+  L.sunY = L.hz - Math.round(v.H * 0.02);
+  L.galleryY = L.towerTop + Math.round((L.base - L.towerTop) * 0.34);
+  L.tailX = L.cx + Math.round(L.wBase * 0.55) + 2;
+}
+
+/* ------- seeded scene data ------- */
+function seedAll() {
+  const rnd = PK.rng(9001);
+  L.rows = [];
+  const y0 = L.hz + 2, y1 = L.waterTop - 4;
+  const N = Math.max(16, Math.min(30, Math.round(L.H * 0.21)));
+  let fam = Math.floor(rnd() * 3), left = 0;
+  for (let i = 0; i < N; i++) {
+    const d = N === 1 ? 1 : i / (N - 1);
+    const y = Math.round(y0 + (y1 - y0) * Math.pow(d, 1.5));
+    const spacing = Math.max(2, Math.round(2 + d * 5));
+    const step = Math.max(1, Math.round(spacing / 2));
+    const size = 1 + (d > 0.3 ? 1 : 0) + (d > 0.65 ? 1 : 0);
+    if (left <= 0) { fam = (fam + 1 + Math.floor(rnd() * 2)) % 3; left = 2 + Math.floor(rnd() * 3); }
+    left--;
+    L.rows.push({ y, spacing, step, size, fam, phase: rnd() * 6.28, off: Math.floor(rnd() * spacing) });
+  }
+  clouds = [];
+  for (let i = 0; i < 5; i++) {
+    const w = Math.max(11, Math.round(L.W * (0.07 + rnd() * 0.13)));
+    const n = Math.max(4, Math.round(w / 2.6));
+    const puffs = [];
+    for (let j = 0; j < n; j++) {
+      const e = Math.min(j, n - 1 - j) / Math.max(1, n / 2);
+      const r = Math.max(1, 1 + Math.round(Math.min(3, 1 + e * 2.2 + rnd() * 1.4)));
+      puffs.push({ dx: Math.round((j / (n - 1)) * w), dy: 3 - r, r });
+    }
+    clouds.push({
+      x: rnd() * L.W, y: Math.round(L.H * (0.08 + rnd() * 0.24)),
+      w, puffs, sp: 2 + rnd() * 2,
+    });
+  }
+  birds = [];
+  for (let i = 0; i < 3; i++) {
+    birds.push({
+      x: rnd() * L.W, y: Math.round(L.H * (0.10 + rnd() * 0.16)),
+      sp: 10 + rnd() * 7, ph: rnd() * 6.28, size: 1 + Math.floor(rnd() * 2),
+    });
+  }
+  glints = [];
+  for (let y = L.waterTop + 2; y < L.H - 1; y += 3) {
+    const m = Math.max(3, Math.round(L.W * 0.04));
+    for (let i = 0; i < m; i++) {
+      const inCol = i < m * 0.8;
+      const gx = inCol ? L.sunX + Math.round((rnd() * 2 - 1) * 10) : Math.floor(rnd() * L.W);
+      glints.push({ x: gx, y, k: rnd(), sp: 1.5 + rnd() * 2.5, ph: rnd() * 6.28 });
+    }
+  }
+  reeds = [];
+  const nr = Math.max(6, Math.round(L.W / 14));
+  for (let i = 0; i < nr; i++) {
+    reeds.push({ x: Math.floor(rnd() * L.W), h: 2 + Math.floor(rnd() * 4), ph: rnd() * 6.28, k: rnd() });
+  }
+  motes = PK.drift({ n: 14, seed: 55, area: [0, L.hz + 1, L.W, L.waterTop], vx: [3, 7], vy: [-2, 1], len: [1, 1] });
+}
+
+/* ------- static scenery layer ------- */
+function farMill(x, gy) {
+  PK.rect(x - 1, gy - 6, 3, 6, FAR.mill);
+  PK.px(x, gy - 7, FAR.mill);
+  PK.line(x, gy - 6, x - 3, gy - 9, FAR.sail);
+  PK.line(x, gy - 6, x + 3, gy - 3, FAR.sail);
+  PK.line(x, gy - 6, x + 3, gy - 9, FAR.sail);
+  PK.line(x, gy - 6, x - 3, gy - 3, FAR.sail);
+}
+
+function drawMill() {
+  const rnd = PK.rng(404);
+  const base = L.base, top = L.towerTop, cx = L.cx;
+  const halfB = Math.round(L.wBase / 2), halfT = Math.round(L.wTop / 2);
+  // plinth
+  PK.rect(cx - halfB - 1, base - 2, L.wBase + 2, 2, SOIL[1]);
+  // tower body with cylindrical shading (lit left, dark right, darker near the base)
+  for (let y = top; y <= base; y++) {
+    const hw = Math.max(1, Math.round(L.towerHW(y)));
+    const nearBase = (y - top) / (base - top) > 0.82;
+    for (let x = cx - hw; x <= cx + hw; x++) {
+      const u = (x - (cx - hw)) / (hw * 2);
+      let c = u < 0.08 ? BRICK[4] : u < 0.2 ? BRICK[3] : u < 0.62 ? BRICK[2] : u < 0.84 ? BRICK[1] : BRICK[0];
+      if (nearBase && (x + y) % 2 === 0) c = BRICK[Math.max(0, (u < 0.2 ? 2 : u < 0.62 ? 1 : u < 0.84 ? 0 : 0))];
+      const r = rnd();
+      if (r < 0.04) c = BRICK[Math.max(0, (u < 0.62 ? 1 : 0))];
+      else if (r > 0.975 && u < 0.45) c = BRICK[4];
+      PK.px(x, y, c);
+    }
+  }
+  // courses
+  for (let y = top + 2; y < base - 1; y += 3) {
+    const hw = Math.round(L.towerHW(y));
+    for (let x = cx - hw; x <= cx + hw; x++) if (rnd() < 0.35) PK.px(x, y, BRICK[1]);
+  }
+  // gallery (balcony)
+  const gy = L.galleryY;
+  PK.rect(cx - halfB - 2, gy, L.wBase + 4, 1, WOOD[2]);
+  PK.rect(cx - halfB - 2, gy + 1, L.wBase + 4, 1, WOOD[0]);
+  for (let x = cx - halfB - 2; x <= cx + halfB + 2; x += 2) PK.px(x, gy - 2, WOOD[1]);
+  PK.rect(cx - halfB - 2, gy - 3, L.wBase + 4, 1, WOOD[1]);
+  // door
+  const dh = Math.max(7, Math.round((base - top) * 0.2)), dy = base - dh;
+  PK.rect(cx - 2, dy + 1, 5, dh, WOOD[0]);
+  PK.rect(cx - 1, dy, 3, 1, WOOD[0]);
+  for (let y = dy + 2; y < base - 1; y++) PK.px(cx - 1, y, WOOD[1]);
+  PK.rect(cx - 3, base - 1, 7, 1, SOIL[2]);
+  // lamp beside the door
+  PK.glow(cx + 4, dy + 3, 4, "#f2a33a", 0.45, 3);
+  PK.px(cx + 4, dy + 3, LAMP[3]);
+  PK.px(cx + 4, dy + 4, LAMP[2]);
+  // lit window
+  const wy = top + Math.round((base - top) * 0.45);
+  PK.rect(cx - 2, wy - 2, 5, 5, WOOD[0]);
+  PK.rect(cx - 1, wy - 1, 3, 3, LAMP[2]);
+  PK.rect(cx - 1, wy - 1, 3, 1, LAMP[3]);
+  PK.px(cx, wy - 1, WOOD[1]); PK.px(cx, wy, WOOD[1]); PK.px(cx, wy + 1, WOOD[1]);
+  PK.px(cx - 2, wy + 3, WOOD[2]); PK.px(cx - 1, wy + 3, WOOD[2]);
+  PK.px(cx, wy + 3, WOOD[2]); PK.px(cx + 1, wy + 3, WOOD[2]); PK.px(cx + 2, wy + 3, WOOD[2]);
+  // small dark window above
+  PK.px(cx - 1, top + 3, WOOD[0]); PK.px(cx, top + 3, WOOD[1]); PK.px(cx + 1, top + 3, WOOD[0]);
+  // cap (dome)
+  const capH = top - L.capTop + 2;
+  for (let j = 0; j < capH; j++) {
+    const w = 2 + Math.round(halfT * Math.sqrt(Math.max(0, 1 - (1 - j / capH) * (1 - j / capH))));
+    const yy = L.capTop + j;
+    PK.rect(cx - w, yy, w * 2 + 1, 1, CAPR[2]);
+    if (w > 2) { PK.rect(cx + 1, yy, w, 1, CAPR[1]); PK.px(cx - w, yy, CAPR[3]); }
+    if (j < 2) { PK.px(cx - 1, yy, CAPR[3]); PK.px(cx - 2, yy, CAPR[3]); }
+  }
+  // ridge + finial
+  PK.rect(cx - 3, L.capTop - 1, 6, 1, WOOD[1]);
+  PK.px(cx, L.capTop - 2, WOOD[3]);
+  // tail pole
+  PK.line(cx + halfT, L.capTop + 4, L.tailX, base - 1, WOOD[1]);
+  PK.line(cx + halfT, L.capTop + 5, L.tailX, base, WOOD[0]);
+  for (let f = 0.25; f < 0.95; f += 0.16) {
+    const rx = Math.round(cx + halfT + (L.tailX - cx - halfT) * f);
+    const ry = Math.round(L.capTop + 4 + (base - 1 - L.capTop - 4) * f);
+    PK.px(rx, ry, WOOD[2]);
+  }
+  PK.rect(L.tailX - 2, base - 2, 4, 2, WOOD[0]);
+}
+
+function drawScene() {
+  PK.gradient(0, 0, L.W, L.hz + 1, SKY);
+  // sun (backlight, left of the mill)
+  PK.glow(L.sunX, L.sunY, Math.max(8, Math.round(L.H * 0.08)), "#ffb060", 0.5, 4);
+  PK.disc(L.sunX, L.sunY, Math.max(3, Math.round(L.H * 0.035)), "#ffd078");
+  PK.disc(L.sunX, L.sunY, Math.max(1, Math.round(L.H * 0.018)), "#ffeab8");
+  // far dike silhouette + bushes + two tiny far mills
+  const rnd = PK.rng(77);
+  for (let x = 0; x < L.W; x += 5 + Math.floor(rnd() * 9)) {
+    PK.ellipse(x, L.hz - 2, 3 + Math.floor(rnd() * 4), 2 + Math.floor(rnd() * 3), FAR.dike);
+  }
+  PK.rect(0, L.hz - 2, L.W, 3, FAR.dike);
+  for (let i = 0; i < 10; i++) PK.disc(Math.floor(rnd() * L.W), L.hz - 3, 1 + Math.floor(rnd() * 2), FAR.bush);
+  farMill(Math.round(L.W * 0.14), L.hz - 2);
+  farMill(Math.round(L.W * 0.86), L.hz - 2);
+  // field
+  PK.gradient(0, L.hz + 1, L.W, L.waterTop, FIELD);
+  for (const r of L.rows) {
+    for (let x = r.off; x < L.W; x += r.step) PK.rect(x, r.y + 1, Math.min(2, Math.max(1, r.step - 1)), 1, SOIL[r.size - 1]);
+  }
+  // dirt path from the door to the bank
+  const rnd2 = PK.rng(313);
+  for (let y = L.base - 4; y < L.waterTop; y++) {
+    const hw = 3 + Math.round((y - (L.base - 4)) * 0.9);
+    for (let x = L.cx - hw; x <= L.cx + hw; x++) {
+      if (rnd2() < 0.7) PK.px(x, y, rnd2() < 0.5 ? SOIL[1] : SOIL[2]);
+    }
+  }
+  // mill
+  drawMill();
+  // dark bank edge above the water
+  PK.rect(0, L.waterTop - 1, L.W, 1, WATER[0]);
+}
+
+/* ------- animated pieces ------- */
+function drawHead(x, y, s, p) {
+  if (s === 1) {
+    PK.px(x, y, p[2]); PK.px(x, y + 1, p[1]);
+  } else if (s === 2) {
+    PK.px(x, y - 1, p[3]); PK.px(x + 1, y - 1, p[3]);
+    PK.px(x, y, p[2]); PK.px(x + 1, y, p[2]);
+    PK.px(x, y + 1, p[1]); PK.px(x + 1, y + 1, p[1]);
+  } else {
+    PK.px(x - 1, y - 1, p[3]); PK.px(x, y - 1, p[0]); PK.px(x + 1, y - 1, p[3]);
+    PK.rect(x - 1, y, 3, 1, p[2]);
+    PK.px(x - 1, y + 1, p[0]); PK.px(x, y + 1, p[1]); PK.px(x + 1, y + 1, p[0]);
+  }
+}
+
+function drawTulips(t) {
+  for (const r of L.rows) {
+    const pal = TULIPS[r.fam];
+    const stem = STEM[r.size - 1];
+    for (let x = r.off; x < L.W; x += r.step) {
+      if (L.inMill(x, r.y)) continue;
+      const amp = 0.45 + r.size * 0.6;
+      const dx = Math.round(Math.sin(t * 2.1 + r.phase + x * 0.5) * amp);
+      const h = 2 + r.size;
+      const hy = r.y - h;
+      PK.line(x, r.y, x + dx, hy + 1, stem);
+      PK.px(x - 1, r.y - 1, STEM[Math.max(0, r.size - 2)]);
+      PK.px(x + dx + 1, hy + 2, STEM[Math.max(0, r.size - 2)]);
+      drawHead(x + dx, hy, r.size, pal);
+    }
+  }
+}
+
+function drawSail(ang) {
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const nx = -sa, ny = ca;
+  const f0 = 0.22;
+  const fw = 3 + Math.round(L.sailL * 0.16);
+  const o0 = 1, o1 = 1 + fw;
+  const P = (f, o) => [L.cx + ca * L.sailL * f + nx * o, L.hubY + sa * L.sailL * f + ny * o];
+  const axy = P(f0, 0), tip = P(1, 0);
+  const litSide = -(nx + ny) > 0 ? 1 : -1;
+  // bare spar from the hub to the lattice
+  PK.line(L.cx, L.hubY, tip[0], tip[1], WOOD[1]);
+  // solid panel backing
+  for (let f = f0; f <= 1.001; f += 0.5 / L.sailL) {
+    const a = P(f, o0), b = P(f, o1);
+    PK.line(a[0], a[1], b[0], b[1], WOOD[2]);
+  }
+  // reed slats across the panel
+  for (let f = f0; f <= 1.001; f += 1.8 / L.sailL) {
+    const a = P(f, o0), b = P(f, o1);
+    PK.line(a[0], a[1], b[0], b[1], WOOD[0]);
+  }
+  // longitudinal stringer, dotted so the lattice reads as a mesh
+  const om = Math.round((o0 + o1) / 2);
+  let alt = 0;
+  for (let f = f0; f <= 1.001; f += 0.5 / L.sailL) {
+    if (alt++ % 2) continue;
+    const m = P(f, om);
+    PK.px(m[0], m[1], WOOD[3]);
+  }
+  // rails and end bar
+  const a1 = P(f0, o1), b1 = P(1, o1), a0 = P(f0, o0), b0 = P(1, o0);
+  PK.line(a1[0], a1[1], b1[0], b1[1], litSide > 0 ? WOOD[3] : WOOD[1]);
+  PK.line(a0[0], a0[1], b0[0], b0[1], WOOD[0]);
+  PK.line(b0[0], b0[1], b1[0], b1[1], WOOD[1]);
+  PK.px(b1[0], b1[1], litSide > 0 ? WOOD[4] : WOOD[3]);
+}
+
+function drawSails(t) {
+  const w = t * (Math.PI * 2 / 8);
+  for (let k = 0; k < 4; k++) drawSail(w + (k * Math.PI) / 2);
+  PK.disc(L.cx, L.hubY, 2, WOOD[0]);
+  PK.px(L.cx - 1, L.hubY - 1, WOOD[3]);
+}
+
+function drawCloud(c) {
+  for (const p of c.puffs) PK.disc(c.x + p.dx, c.y + p.dy, p.r, CLOUD.mid);
+  for (const p of c.puffs) {
+    const bx = c.x + p.dx, by = c.y + p.dy;
+    for (let dx = -p.r + 1; dx <= p.r - 1; dx++) {
+      PK.px(bx + dx, by + p.r - 1, CLOUD.lit);
+      PK.px(bx + dx, by - p.r, CLOUD.dark);
+    }
+    PK.px(bx - 1, by + p.r, CLOUD.hi);
+    PK.px(bx, by + p.r, CLOUD.hi);
+    PK.px(bx + 1, by + p.r, CLOUD.hi);
+  }
+}
+
+function drawBird(b, t) {
+  const flap = Math.sin(t * 9 + b.ph) > 0 ? -1 : 1;
+  PK.px(b.x, b.y, BIRD);
+  PK.px(b.x - 1, b.y + flap, BIRD);
+  PK.px(b.x + 1, b.y + flap, BIRD);
+  if (b.size > 1) {
+    PK.px(b.x - 2, b.y + flap * 2, BIRD);
+    PK.px(b.x + 2, b.y + flap * 2, BIRD);
+  }
+}
+
+function drawReflection(t) {
+  const reflH = Math.round((L.base - L.towerTop) * 0.8);
+  for (let k = 1; k < reflH; k++) {
+    const y = L.waterTop + k;
+    if (y >= L.H - 1) break;
+    if (Math.sin(y * 0.8 + t * 2.6) > 0.62) continue; // row broken by a wave trough
+    const srcY = Math.min(L.base, L.base - k / 0.8);
+    const hw = Math.max(2, Math.round(L.towerHW(srcY)));
+    const wob = Math.round(Math.sin(y * 0.7 + t * 2.2) * (1 + k * 0.06));
+    const col = k % 5 === 0 ? "#6b2f48" : k % 3 === 0 ? "#421a30" : "#542138";
+    const th = 0.35 + 0.5 * (0.5 + 0.5 * Math.sin(y * 1.7 + t * 4));
+    for (let x = L.cx - hw + wob; x <= L.cx + hw + wob; x++) {
+      if (PK.bayer(x, y) < th) PK.px(x, y, col);
+    }
+  }
+}
+
+function drawWater(t) {
+  PK.sea(0, L.waterTop, L.W, L.H, t, WATER, 31);
+  PK.rect(0, L.waterTop, L.W, 1, WATER[0]);
+  for (const g of glints) {
+    const wob = Math.round(Math.sin(t * g.sp + g.ph) * 2 + Math.sin(t * g.sp * 2.3 + g.ph));
+    const c = g.k < 0.55 ? GLINT[0] : g.k < 0.85 ? GLINT[1] : g.k > 0.97 ? "#fff2c8" : GLINT[2];
+    PK.rect(g.x + wob, g.y, 2, 1, c);
+    if (g.k > 0.9) PK.px(g.x + wob + 2, g.y, GLINT[2]);
+  }
+  drawReflection(t);
+  for (const rd of reeds) {
+    const s = Math.round(Math.sin(t * 1.4 + rd.ph));
+    for (let k = 0; k < rd.h; k++) PK.px(rd.x, L.waterTop - k, k < rd.h - 1 ? STEM[0] : STEM[2]);
+    PK.px(rd.x + s, L.waterTop - rd.h - 1, rd.k < 0.5 ? "#4a3a1e" : STEM[2]);
+  }
+}
+
+/* ------- wiring ------- */
+function onResize(v) {
+  layout(v);
+  seedAll();
+  bg = PK.layer(v.W, v.H, drawScene);
+}
+
+PK.fit(document.getElementById("c"), 140, onResize);
+
+PK.loop((t, dt) => {
+  PK.blit(bg);
+  drawWater(t);
+  drawTulips(t);
+  drawSails(t);
+  for (const c of clouds) {
+    c.x -= c.sp * dt;
+    if (c.x < -c.w - 6) c.x = L.W + 6;
+    drawCloud(c);
+  }
+  for (const b of birds) {
+    b.x += b.sp * dt;
+    if (b.x > L.W + 8) b.x = -8;
+    drawBird(b, t);
+  }
+  motes.step(dt);
+  motes.dots(["#c8785a", "#f0a870"]);
+});
+</script>
+</body>
+</html>

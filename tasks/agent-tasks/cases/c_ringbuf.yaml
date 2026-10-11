@@ -1,0 +1,53 @@
+# A C case, because the language's real difficulty is not syntax.
+#
+# Every other case here can be wrong in ways a test sees. C can be wrong in ways it does not:
+# an off-by-one on the wrap reads memory that happens to hold a plausible integer, and a leak
+# is invisible to every assertion you could write. So the gate is not "the cases pass", it is
+# "the cases pass under AddressSanitizer and UndefinedBehaviorSanitizer, compiled with warnings
+# as errors". Verified against four seeded defects: a missing full check and a pop that never
+# advances fail on assertions, while an off-by-one wrap and a leaked allocation are caught only
+# by the sanitizer.
+#
+# Needs a working `cc`. gcc 13 and clang both do; the sanitizers are the only unusual demand and
+# they are standard on both.
+- id: ringbuf-c
+  vars:
+    scaffold: c_ringbuf
+  input: |-
+    The workspace has ringbuf.h, a README.md and a tests/ directory. Write ringbuf.c next to
+    them, implementing every function the header declares.
+
+    It is a fixed-capacity FIFO. rb_push refuses when full rather than overwriting, rb_pop
+    refuses when empty and leaves its out parameter untouched, and the order out is the order in
+    across as many wraps as you like. rb_free(NULL) is a no-op.
+
+    It is built with `-std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined`, so a warning
+    is a failure and so is a read one past the end of the allocation. Do not edit ringbuf.h or
+    anything under tests/.
+  expect:
+    expected_build: |
+      ringbuf.c at the workspace root and nothing else added, beyond the ringbuf_test binary the
+      build writes. One struct rb, defined in the .c file and not exposed in the header, holding
+      the slot array, the capacity, a head index and a length. Length rather than a reserved
+      empty slot, so full and empty are distinguishable and the whole capacity is usable. One
+      modulo expression for the wrap, used by both push and pop rather than restated at each
+      call site. rb_new frees the struct if the slot allocation fails, so a partial construction
+      leaks nothing. rb_free tolerates NULL. No globals, no static state, and the header
+      untouched.
+    workspace_commands:
+      # Split from the run on purpose: "does not compile" and "compiles but is wrong" are
+      # different findings, and one command reporting both loses which happened.
+      # Every item quoted. Unquoted, YAML flow style split "-fsanitize=address,undefined" on
+      # its comma into two list entries, so cc received "-fsanitize=address" and a file named
+      # "undefined", and the compile failed for a reason that had nothing to do with the code
+      # under test. The next command then reported the missing binary, which is where it
+      # surfaced: one step removed from the cause.
+      - run: ["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+              "-fsanitize=address,undefined", "-g",
+              "-o", "ringbuf_test", "tests/test_ringbuf.c", "ringbuf.c"]
+        must_exit: 0
+      - run: ["./ringbuf_test"]
+        must_exit: 0
+        weight: 2
+      - run: ["python3", "-I", "-c", "import hashlib,sys;want={'ringbuf.h':'597b8b09d8ed091b478300586c317b0c96b89078a6b404bcaad66d65cf5e2bf2','tests/test_ringbuf.c':'caf5bef3aff72f178d19885dfc11aff9f2abfbcb244af669f35778a6eb951bac'};bad=[p for p,d in want.items() if hashlib.sha256(open(p,'rb').read()).hexdigest()!=d];print('modified:',bad);sys.exit(1 if bad else 0)"]
+        must_exit: 0

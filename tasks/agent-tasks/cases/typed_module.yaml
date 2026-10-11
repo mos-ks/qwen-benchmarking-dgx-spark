@@ -1,0 +1,58 @@
+# A typed module, where the compiler is half the gate.
+#
+# Two commands rather than one, because they fail differently: tsc catches a signature that was
+# widened to make the code compile, node --test catches code that compiles and is wrong.
+
+- id: duration-module
+  input: |
+    Write src/duration.ts, exporting exactly two functions:
+
+        export function formatDuration(ms: number): string;
+        export function parseDuration(text: string): number;
+
+    formatDuration renders milliseconds as `d`/`h`/`m`/`s` components, largest first, joined by
+    single spaces, dropping the zero components except that zero itself renders "0s"; anything
+    below a second is truncated. A negative, NaN or infinite input throws a RangeError.
+    parseDuration is its inverse: one or more `<integer><unit>` components separated by spaces,
+    each unit at most once, in any order, lowercase only, and anything else throws a RangeError
+    whose message quotes the text it was given. README.md has the examples.
+
+    Two commands must both pass:
+
+        tsc -p tsconfig.json
+        node --test tests/duration.test.mjs
+
+    The cases import the build output, so the compile has to have run. tsconfig.json is strict
+    and src/contract.ts pins the signatures at the type level, so widening a parameter to `any`
+    fails the build rather than the cases. There is no node_modules and nothing to install: the
+    toolchain comes from outside the workspace. tsconfig.json, src/contract.ts and
+    tests/duration.test.mjs are checked by digest.
+  tags: [coding, typescript, node, types]
+  vars:
+    scaffold: ts_duration
+    expected_build: |
+      src/duration.ts added and nothing else changed. One table of unit sizes that both
+      functions read, so they cannot disagree about what an hour is. Precise types on the two
+      exports with no `any`, no `as` cast and no non-null assertion used to get past the strict
+      settings (noUncheckedIndexedAccess in particular makes a regex group `string | undefined`,
+      which is a check to write rather than a cast to add). RangeErrors that quote the offending
+      text. dist/ present because tsc wrote it, never hand-edited.
+  expect:
+    workspace_commands:
+      # Type check first: when both are red, the compile error is the one worth reading, and
+      # running it first puts it at the top of the details.
+      - run: [tsc, -p, tsconfig.json]
+        must_exit: 0
+        weight: 2
+      # `--test-reporter=tap` rather than the default, which changes with the terminal: TAP is
+      # the same output whether or not a tty is attached, so the tail in the details reads the
+      # same in CI as it does by hand. It is not read as a `report:` here, because this
+      # evaluation scores all-or-nothing.
+      # The file is named rather than the directory: `node --test tests/` resolves the argument
+      # as a module on Node 22.11 and dies with MODULE_NOT_FOUND, which reads as a failed build.
+      - run: [node, --test, --test-reporter=tap, tests/duration.test.mjs]
+        must_exit: 0
+        weight: 3
+      - run: ["python3", "-I", "-c", "import hashlib,sys;want={'tsconfig.json':'7373fcb8dc4ec027ec7e3b05b0009ae8d16666e3dfc4d80a32570232b92671ee','src/contract.ts':'d7e4850366000935d6f3f992f3a9ba5992f90e11cb3c572dbfe3245bd2931bf9','tests/duration.test.mjs':'3945fd5886cc51dc4a9987b0a49f2d9280276896af7cd98c342d59317e5a01f7'};bad=[p for p,d in want.items() if hashlib.sha256(open(p,'rb').read()).hexdigest()!=d];print('modified:',bad);sys.exit(1 if bad else 0)"]
+        must_exit: 0
+        weight: 1

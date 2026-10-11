@@ -1,0 +1,39 @@
+# A small service written from an empty directory: the shape of a real "build me X" request,
+# where nothing in the workspace says how to check the work. Partial credit per hidden test, so
+# the score separates "mostly right" from "looks like an API".
+
+- id: habits-api
+  input: |
+    Build the habits API described in README.md, with tests.
+  tags: [coding, python, http, greenfield, hard]
+  vars:
+    scaffold: py_habits_api
+  expect:
+    workspace_commands:
+      - run: [python3, -m, unittest, discover, -s, tests]
+        must_exit: 0
+        weight: 2
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_create_returns_trimmed_habit]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_create_validation]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_bad_json]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_keyset_pagination]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_checkins_and_conflicts]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_streaks]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_delete_and_not_found]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/habits_hidden_test.py", HabitsApiTest.test_survives_restart]
+        must_exit: 0
+        weight: 1

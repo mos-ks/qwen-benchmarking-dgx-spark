@@ -1,0 +1,43 @@
+# Build a Python CLI from an empty directory, against cases that ship with the scaffold.
+#
+# The pytest file is the contract and it is shipped, not written by the agent: a case that lets
+# the candidate author its own cases measures its optimism, not its code.
+
+- id: wordfreq-cli
+  input: |
+    The workspace has a README.md and a tests/ directory. Write wordfreq.py next to them.
+
+    It is a command line tool: `python3 wordfreq.py [--top N] PATH` reads a UTF-8 text file and
+    prints its most frequent words, one per line as `<word> <count>`, most frequent first with
+    ties broken alphabetically. A word is a maximal run of characters for which str.isalnum() is
+    true, lowercased, so punctuation and underscores separate: `Don't` is two words. `--top`
+    defaults to 10. A path that cannot be read exits 2, printing nothing on stdout and one line
+    on stderr that starts with `error:` and names the path. README.md has the full contract.
+
+    Standard library only, one file, no packaging. `python3 -m pytest -q` must pass. Do not edit
+    anything under tests/ and do not add pytest configuration: the case file is checked by
+    digest, and a run that goes green because the checks changed scores zero.
+  tags: [coding, python, cli, from-scratch]
+  vars:
+    scaffold: py_wordfreq
+    expected_build: |
+      wordfreq.py at the workspace root and nothing else added. An argparse command line with a
+      --top option and a path argument; one tokenizing pass over the text (str.isalnum,
+      lowercased) defined in one place; a Counter and a sort by (-count, word). An unreadable
+      path is caught and reported as a single `error:` line on stderr with exit 2, not raised as
+      a traceback. No package layout for a one-file script, no dependency, no debug output left
+      behind, and tests/ untouched.
+  expect:
+    workspace_commands:
+      # No `--junit-xml`, and no `report:` block to read one: the evaluation runs this scorer
+      # with partial_credit off, so a report would be parsed and then ignored, and the file
+      # would sit in the tree the judge is about to grade. Which cases failed is in the
+      # command's stdout tail either way.
+      - run: ["${env:AEVAL_CASE_PYTHON}", "-m", "pytest", "-q"]
+        must_exit: 0
+        weight: 3
+      # The tamper check lives in the CASE, not in the workspace: a checker the agent can edit
+      # checks nothing. Deleting the file fails this too, loudly, with the traceback naming it.
+      - run: ["python3", "-I", "-c", "import hashlib,sys;want={'tests/test_wordfreq.py':'72db9468b8861bbe86937b7f90e8f480cd9403fceff336c89d349dc342a90aeb'};bad=[p for p,d in want.items() if hashlib.sha256(open(p,'rb').read()).hexdigest()!=d];print('modified:',bad);sys.exit(1 if bad else 0)"]
+        must_exit: 0
+        weight: 1

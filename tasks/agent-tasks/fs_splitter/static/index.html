@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Splitter</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <h1>Splitter</h1>
+    <p id="error" role="alert"></p>
+
+    <section id="start">
+      <h2>New group</h2>
+      <form id="group-form">
+        <label for="group-name">Group name</label>
+        <input id="group-name" required maxlength="40">
+        <label for="group-members">Members, one per line</label>
+        <textarea id="group-members" rows="4" required></textarea>
+        <button type="submit">Create group</button>
+      </form>
+    </section>
+
+    <section id="group" hidden>
+      <h2 id="group-title"></h2>
+      <h3>Balances</h3>
+      <ul id="balances"></ul>
+
+      <h3>Add an expense</h3>
+      <form id="expense-form">
+        <label for="description">Description</label>
+        <input id="description" required maxlength="80">
+        <label for="amount">Amount</label>
+        <input id="amount" inputmode="decimal" required placeholder="0.00">
+        <label for="payer">Paid by</label>
+        <select id="payer"></select>
+        <button type="submit">Add expense</button>
+      </form>
+
+      <h3>Expenses</h3>
+      <ul id="expenses"></ul>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

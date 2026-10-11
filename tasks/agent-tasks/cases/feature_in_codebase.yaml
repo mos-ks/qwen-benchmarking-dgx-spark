@@ -1,0 +1,32 @@
+# A feature added to an existing multi-file TypeScript project, modelled on the failures seen in a
+# real local-model session: ignoring the theme module, state that does not survive a restart, and
+# "done" without running anything. The brief is deliberately short, like a real request: the
+# rules are in README.md, so an agent that does not read the project fails.
+
+- id: garden-feature
+  input: |
+    Implement the watering and growth feature described in README.md in this project.
+    Run `npm run check` before you finish.
+  tags: [coding, typescript, feature, existing-codebase]
+  vars:
+    scaffold: ts_garden
+  expect:
+    workspace_commands:
+      # The project's own gate, including whatever tests the agent wrote.
+      - run: [npm, run, -s, check]
+        must_exit: 0
+        weight: 2
+      # Hidden acceptance tests the agent never sees: growth, the bonsai cap, save-per-watering,
+      # resume after restart, exact markup, and colors read from the theme at call time.
+      - run: [node, --test, --test-reporter=tap, "hidden-tests/garden.hidden.test.mjs"]
+        must_exit: 0
+        weight: 4
+      - run: ["python3", "-I", "-c", "import re,pathlib,sys;bad=[str(p) for p in pathlib.Path('src').rglob('*.ts') if p.name!='theme.ts' and re.search(r'#[0-9a-fA-F]{3,8}\\b',p.read_text())];print('color literals outside theme.ts:',bad);sys.exit(1 if bad else 0)"]
+        must_exit: 0
+        weight: 1
+      - run: ["python3", "-I", "-c", "import hashlib,sys;want={'tsconfig.json':'d2e01903512a37d6e3f029523d30065cb93c562c26b8c39fee1e10715844c2d3','tests/storage.test.ts':'dc255e0139aecfd2d398593db3280dc3f2fc72248c861f786b1de9049b469312','src/storage.ts':'5dc7a1170208eed1551b3d95fe19a60e8a8cedf70539e4a8863c606220e452d0','src/theme.ts':'bd8b92a6beccc449c29e96dc3ab4eeffeed05808d57e7c7a6bdf1e8a9040ac25'};bad=[p for p,d in want.items() if hashlib.sha256(open(p,'rb').read()).hexdigest()!=d];print('modified:',bad);sys.exit(1 if bad else 0)"]
+        must_exit: 0
+        weight: 1
+      - run: ["python3", "-I", "-c", "import pathlib,sys;t=[p for p in pathlib.Path('tests').rglob('*.test.ts') if p.name!='storage.test.ts' and 'water' in p.read_text()];print('new behaviour tests:',[str(p) for p in t]);sys.exit(0 if t else 1)"]
+        must_exit: 0
+        weight: 1

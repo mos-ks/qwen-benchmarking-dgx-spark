@@ -1,0 +1,170 @@
+[
+ {
+  "suite": "coding_agents_oc",
+  "case": "duration-module",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 61
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "garden-feature",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 70
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "habits-api",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 316
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "ledger-cents",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 41
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "plants-fullstack",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 572
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "ringbuf-c",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 45
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "status-page",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 286
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "wordfreq-cli",
+  "arm": "Opus 5.5 (Claude Code subagent)",
+  "score": 1.0,
+  "seconds": 81
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "duration-module",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 50
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "garden-feature",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 356
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "habits-api",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 741
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "ledger-cents",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 55
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "plants-fullstack",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 1172
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "ringbuf-c",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 305
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "status-page",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 876
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "wordfreq-cli",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v8.5",
+  "score": 1.0,
+  "seconds": 70
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "duration-module",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 1.0,
+  "seconds": 135
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "garden-feature",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 1.0,
+  "seconds": 386
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "habits-api",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 1.0,
+  "seconds": 1081
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "ledger-cents",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 1.0,
+  "seconds": 71
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "plants-fullstack",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 0.9,
+  "seconds": 1552
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "ringbuf-c",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 1.0,
+  "seconds": 61
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "status-page",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 1.0,
+  "seconds": 886
+ },
+ {
+  "suite": "coding_agents_oc",
+  "case": "wordfreq-cli",
+  "arm": "Qwen3.8-Flash-Next + OpenCode + kit v9",
+  "score": 1.0,
+  "seconds": 481
+ }
+]

@@ -999,5 +999,71 @@
   "score": 7.5,
   "outcome": "done",
   "note": "tall striped tower with a glowing lantern and a strong horizontal beam, moon behind clouds, red-roofed house, rain; very thin tower on a small rock, a foam band across the rock face"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.5, phase-split thinking \u00b7 #2",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.5, phase-split thinking",
+  "attempt": "#2",
+  "minutes": 22.9,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "S-curved trunk with four blossom-dotted pads on a terracotta pot and bench, sun, clouds, dithered sky bands; the trunk outgrows the small pot, noisy grass dashes and floating leaf specks"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v8.5, phase-split thinking \u00b7 #2",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v8.5, phase-split thinking",
+  "attempt": "#2",
+  "minutes": 27.0,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "striped tower with a lit lantern and a long beam, rain, moon, clouds, cottage, outlying rocks with surf; scribbled crack lines over the rock, a lumpy desktop moon, a flat strip of foam"
+ },
+ {
+  "run": "Bonsai \u00b7 Qwen3.8-Flash-Next \u00b7 kit v9, check supervisor + plan step \u00b7 #1",
+  "brief": "Bonsai",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v9, check supervisor + plan step",
+  "attempt": "#1",
+  "minutes": 25.4,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "big S-curved trunk with four blossom pads against a banded sunset, sun glow, mountains, mossy rock; the small blue pot is half hidden under the trunk base and the foreground is a flat dark band"
+ },
+ {
+  "run": "Lighthouse \u00b7 Qwen3.8-Flash-Next \u00b7 kit v9, check supervisor + plan step \u00b7 #1",
+  "brief": "Lighthouse",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v9, check supervisor + plan step",
+  "attempt": "#1",
+  "minutes": 22.8,
+  "score": 6.5,
+  "outcome": "done",
+  "note": "striped tower, cottage with lit windows, haloed moon, rain, surf around a huge blocky rock; the lantern and beam are cut off by the top edge on desktop and the tower is a thin pole on phone"
+ },
+ {
+  "run": "Windmill \u00b7 Qwen3.8-Flash-Next \u00b7 kit v9, check supervisor + plan step \u00b7 #1",
+  "brief": "Windmill",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v9, check supervisor + plan step",
+  "attempt": "#1",
+  "minutes": 27.9,
+  "score": 7.5,
+  "outcome": "done",
+  "note": "red brick mill with four lattice sails, tulip rows in stripes, sunset with clouds, distant mills, reflection and sun glitter on the canal; tulip rows read as repeating noise"
+ },
+ {
+  "run": "Dashboard \u00b7 Qwen3.8-Flash-Next \u00b7 kit v9, check supervisor + plan step \u00b7 #1",
+  "brief": "Dashboard",
+  "model": "Qwen3.8-Flash-Next",
+  "kit": "kit v9, check supervisor + plan step",
+  "attempt": "#1",
+  "minutes": 26.8,
+  "score": 8.0,
+  "outcome": "done",
+  "note": "clean KPI cards with deltas, month picker and theme toggle, ranked category bars, grouped income vs spending columns with the current month highlighted; mono digits look out of place"
  }
 ]

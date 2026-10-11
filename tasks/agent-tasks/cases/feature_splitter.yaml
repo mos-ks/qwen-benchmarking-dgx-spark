@@ -1,0 +1,57 @@
+# A change request in an existing full-stack codebase: one money bug and one cross-layer feature (schema
+# migration, API, money logic, UI, tests). Hidden modes check that the old behaviour still holds, that the
+# bug is fixed, that the feature works through the API and through the UI in a real browser, and that a
+# database from the shipped version upgrades without losing data.
+
+- id: splitter-feature
+  input: |
+    Splitter (see README.md; code in app/ and static/) needs two changes.
+
+    1. Bug: balances in a group no longer add up to zero. A 10.00 dinner split three ways leaves a cent
+       unaccounted for. Make the app follow the README.
+
+    2. Feature: uneven splits and settling up.
+       - POST /api/groups/{id}/expenses takes an optional "shares": [{"member_id", "share_cents"}]. Each
+         member of the group at most once, share_cents a non-negative integer, and the shares add up to
+         amount_cents; anything else is a 400 validation error. Members left out owe nothing. Without
+         "shares" the expense is split equally, as today.
+       - Every expense the API returns carries "shares": [{"member_id", "share_cents"}] for every member of
+         the group, sorted by member_id (0 for members who owe nothing). That includes expenses created
+         before this change.
+       - Balances follow the shares.
+       - GET /api/groups/{id}/settlements returns the payments that settle the group up:
+         [{"from_member_id", "to_member_id", "amount_cents"}], each amount positive, at most one payment
+         fewer than there are members, and after they are made every balance is zero.
+       - UI: in "Add an expense", a select labelled "Split" with the options "Equally" and "Custom". With
+         Custom, one input per member, labelled with the member's name, taking an amount in the same format
+         as Amount. In the group view, a "Settle up" button that lists the payments as
+         "<from> pays <to> <amount>", for example "Bob pays Ann 12.50".
+       - Groups already in use run on version 1 of the database schema. Their data has to survive the
+         upgrade.
+       - Update README.md and the tests.
+  tags: [coding, fullstack, http, sqlite, migration, ui, existing-codebase, hard]
+  vars:
+    scaffold: fs_splitter
+  expect:
+    workspace_commands:
+      - run: [python3, -I, "hidden-tests/splitter_hidden_test.py", regression]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/splitter_hidden_test.py", rounding]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/splitter_hidden_test.py", custom]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/splitter_hidden_test.py", settle]
+        must_exit: 0
+        weight: 1
+      - run: [python3, -I, "hidden-tests/splitter_hidden_test.py", migrate]
+        must_exit: 0
+        weight: 1
+      - run: ["python3", "-I", "hidden-tests/splitter_hidden_test.py", ui]
+        must_exit: 0
+        weight: 3
+      - run: [python3, -I, "hidden-tests/splitter_hidden_test.py", owntests]
+        must_exit: 0
+        weight: 1

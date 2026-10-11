@@ -25,10 +25,11 @@ is judged as one, not as the best run any version ever produced on each brief.
 | Personal finance dashboard (held out) | 9.5 in 11.6 min | 7.5 in 26.1 min (3 min over budget) | -2.0 |
 | Mean | 9.1 | 7.4 | -1.7 |
 
-Current goal: one configuration that reaches at least 8.5 on the bonsai and the lighthouse without
-losing ground on the windmill and the dashboard. In progress: the same kit in three other harnesses
-(Qwen Code, Pi, oh-my-pi), then kit v8. Every other configuration is in
-[Flash-Next configurations side by side](#flash-next-configurations-side-by-side).
+Current goals: one configuration that reaches at least 8.5 on the bonsai and the lighthouse without
+losing ground on the windmill and the dashboard, and that matches Opus on
+[full-stack coding](#full-stack-coding-hidden-tests) within twice its time. Kit v8.5 is live (best
+8.0 on the bonsai and on the lighthouse; its windmill and dashboard runs are queued). Every other
+configuration is in [Flash-Next configurations side by side](#flash-next-configurations-side-by-side).
 
 **[Open the results viewer](https://mos-ks.github.io/qwen-benchmarking-dgx-spark/)**: Opus's page
 on the left, every local run on a slider on the right, per brief.
@@ -51,6 +52,46 @@ Open the pages live (they animate):
 All generated pages are in [`results/apps/`](results/apps/) and open directly in a browser; the
 frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 [`results/data/`](results/data/).
+
+## Full-stack coding (hidden tests)
+
+The agent is meant for full-stack development, so every kit is also measured on coding cases scored by
+deterministic [hidden tests](tasks/agent-tasks/hidden-tests/) the agent never sees: they start the app the
+way its README says, call the API, restart it, and drive the UI in a real browser. Case files:
+[`tasks/agent-tasks/cases/`](tasks/agent-tasks/cases/); runner: [`scripts/run_code_cases.py`](scripts/run_code_cases.py).
+Opus 5.5 ran each case as a Claude Code subagent restricted to the workspace; Qwen ran through the
+OpenCode server with the kit. Score is the weighted share of hidden checks passed; time is wall clock.
+
+| Case | What it tests | Opus 5.5 | kit v8.5 (live) | kit v9 |
+|---|---|---|---|---|
+| `ledger-cents` | fix two money bugs in an existing Python module | 1.0 in 0.7 min | 1.0 in 0.9 min | 1.0 in 1.2 min |
+| `ringbuf-c` | C ring buffer, built with ASan and UBSan | 1.0 in 0.8 min | 1.0 in 5.1 min | 1.0 in 1.0 min |
+| `garden-feature` | feature in an existing TypeScript project | 1.0 in 1.2 min | 1.0 in 5.9 min | 1.0 in 6.4 min |
+| `plants-fullstack` | API + SQLite + web UI from a README, UI driven in a real browser | 1.0 in 9.5 min | 1.0 in 19.5 min | 0.9 in 25.9 min |
+| `habits-api` | standard-library HTTP + SQLite API from an empty folder | 1.0 in 5.3 min | 1.0 in 12.3 min | 1.0 in 18.0 min |
+| `wordfreq-cli` | Python CLI with an exact output contract | 1.0 in 1.4 min | 1.0 in 1.2 min | 1.0 in 8.0 min |
+| `status-page` | static incident status page (mechanical checks only) | 1.0 in 4.8 min | 1.0 in 14.6 min | 1.0 in 14.8 min |
+| `duration-module` | strict TypeScript module, signatures pinned by type tests | 1.0 in 1.0 min | 1.0 in 0.8 min | 1.0 in 2.2 min |
+| **All eight** | | **1.00**, 25 min | **1.00**, 60 min | **0.99**, 78 min |
+
+- **Quality matches, time does not.** Kit v8.5 passes every hidden check, but takes 2.4 times Opus's
+  time over the eight cases, and 2 to 3 times on the greenfield full-stack apps.
+- **Kit v9 (a requirements checklist in `PLAN.md` before coding, plus the harness running the project's
+  checks on every stop) made it slower and no better.** The agents already ran their own tests; the
+  check supervisor found one real failure in eight runs.
+- **These eight cases no longer separate configurations.** Two harder cases were added: a multi-user
+  notes app (accounts and sessions, per-user privacy, keyset pagination, lost-update protection,
+  idempotent retries, UI) and a change request in an existing app (a money bug plus a feature across
+  schema migration, API, money logic and UI). Each hidden mode was checked against a reference
+  implementation and against mutants that make one typical mistake (a 403 that leaks a note exists,
+  last write wins, a retried POST that duplicates, editing a shipped migration instead of adding one).
+  Runs in progress. Raw data: [`results/data/fullstack_runs.json`](results/data/fullstack_runs.json).
+
+Two hidden-test bugs were found and fixed on the way, and every run was rescored with the fixed checks:
+the pytest check of two cases used a `${env:...}` reference the runner did not expand (every agent
+failed it), and the plant app's UI check picked the innermost element containing the plant's name,
+which in a valid `<li><div>Basil</div><button>Water</button></li>` layout holds no button, and expected
+an ISO date where the README asks only for "the next watering date".
 
 ## What moved the needle
 
@@ -80,8 +121,11 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
    7/10 pages 8/10 and stopping the fix loop; three judge-scored example screenshots fixed that
    (Spearman 0.63 to 0.74). A binary checklist made it worse.
 9. **Easy, well-scoped coding tasks do not separate anything.** Every model and harness passed five
-   small agent tasks and a feature added to an existing codebase. Differences only appear on
-   from-scratch and visual work.
+   small agent tasks and a feature added to an existing codebase; on the eight-case hidden-test suite
+   Opus and kit v8.5 both score 1.00. What separates them there is time (2.4x), see
+   [Full-stack coding](#full-stack-coding-hidden-tests).
+10. **More process is not more quality.** A requirements checklist step and a harness-run test loop
+   (kit v9) slowed full-stack work by 30% without raising a single score.
 
 ![Decode speed](results/charts/decode_speed.png)
 
@@ -109,6 +153,14 @@ frames are in [`results/screenshots/`](results/screenshots/). Raw numbers:
 | kit v5.1 | kit v5 plus a wrap-up note: from minute 20 of a page-building session the supervisor appends "the harness checks the page when you stop; do not write your own check scripts; finish and stop" to tool results |
 | kit v6 | kit v5.1 plus a calibrated critic (three judge-scored example screenshots from other briefs, see [Critic calibration](#critic-calibration)), measured page checks handed to the critic (blank page, share of pixels that move between frames, phone overflow), and keep-best: the project is snapshotted whenever a round beats the best score and restored when a later round scores lower |
 | kit v7 | kit v6 plus one mid-course check: at minute 10 the supervisor looks at the page once and appends the critique to the agent's next tool result |
+| kit v8 | kit v7 plus an art-direction step (`ART.md`) in the pixel-art skill and a supervisor target of 9 (keep-best makes extra rounds safe) |
+| kit v8.1 | kit v8 plus drawing-library rendering fixes (banded glow, seam-only sky dither, banded beam) |
+| kit v8.2 | kit v8.1 plus a windswept/pine tree and connected rock foam in the drawing library |
+| kit v8.3 | kit v8.2 plus a plateau stop (two looks in a row without beating the best version, once the best is 7 or more), a critic that flags a cut-off or tiny main subject, condensed craft rules, and replayed reasoning across turns (`interleaved: reasoning_content`) |
+| kit v8.4 | kit v8.3 plus a foam fix for cliffs |
+| kit v8.5 (live) | kit v8.4 plus phase-split reasoning: the plugin sets `reasoning_effort` per request, `xhigh` for the first request after the brief, `medium` for the first after each critique, `low` otherwise |
+| kit v9 | kit v8.5 plus a `PLAN.md` step (requirements checklist, design, acceptance checks) and a check supervisor that runs the project's own checks when the agent stops and sends failures back |
+| kit v10 (in test) | kit v8.5 plus the check supervisor and one fresh-context [`spec-review`](harness/tools/spec-review) on stop: a separate model call compares the request and README with the code and lists unmet requirements |
 
 Third-party skills used (not redistributed here; install from their repos):
 [obra/superpowers](https://github.com/obra/superpowers) (TDD, debugging, verification, plans),
@@ -132,8 +184,8 @@ Third-party skills used (not redistributed here; install from their repos):
   so expect a bias toward the reference. Every screenshot and page is published so you can judge
   for yourself.
 - **Code checks** (deterministic, no judge): BigCodeBench-Hard (89 tasks, partial credit = share of
-  unit tests passed), five small agent tasks, a feature added to an existing TypeScript project and
-  a standard-library HTTP + SQLite API built from an empty folder, both scored by
+  unit tests passed), five small agent tasks, and the full-stack cases in
+  [Full-stack coding](#full-stack-coding-hidden-tests), all scored by
   [hidden tests](tasks/agent-tasks/hidden-tests/) the agent never sees.
 
 | Check | Qwen3-Coder-Next | Qwen3.8-27B |
@@ -160,6 +212,13 @@ unless noted. Opus 5.5 averages 9.1 on the same briefs.
 | kit v7, thinking low | 7.5 | 7.5 | 7.0 | 7.5 | 7.4 |
 | kit v7, thinking medium | 6.5 | 8.0 | 6.0 | 8.0 | 7.1 |
 | kit v7, thinking low, best of 2 (calibrated critic picks) | 7.0 | 7.5 | 7.0 | 7.5 | 7.3 |
+| kit v8, thinking low (2 runs on bonsai and lighthouse) | 7.5, 7.5 | 7.5, 6.5 | | | 7.3 (two briefs) |
+| kit v8.1, thinking low | 7.5, 8.0 | 8.0, 7.5 | | | 7.8 (two briefs) |
+| kit v8.2, thinking low | 7.5, 6.5 | 7.5, 8.0 | 7.0 | 8.0 | 7.4 |
+| kit v8.3, thinking low | 6.5, 7.5 | 7.5, 7.5 | | | 7.3 (two briefs) |
+| kit v8.4, thinking low | 7.5 | 7.5 | | | 7.5 (two briefs) |
+| kit v8.5, phase-split thinking (live) | 8.0, 7.5 | 7.5, 7.5 | queued | queued | 7.6 (two briefs) |
+| kit v9 | 7.5 | 6.5 | 7.5 | 8.0 | 7.4 |
 
 Single runs swing by a point or more (the same setup produced a 3.5 and a 7.5 lighthouse), so read
 the means, not single cells. Thinking low wins on the windmill every time (8.0, 8.0 against 6.5, 7.0)
@@ -236,6 +295,11 @@ Full numbers: [`results/data/critic_replay.md`](results/data/critic_replay.md).
 - Kit v7 (one mid-course critique at minute 10, folded into the agent's next tool result, so every run gets feedback even if it never stops), thinking low: bonsai 7.5, lighthouse 7.5, windmill 7.0, dashboard 7.5. Same mean as kit v6 within noise; no run below 7.
 - Kit v7 with thinking medium: bonsai 6.5 (tree too small), lighthouse 8.0 in 15 min, windmill 6.0 (sails drawn as a dark disc), dashboard 8.0. Mean 7.1, against 7.4 for low: medium is not better and swings more.
 - Best-of-2 with kit v7 and thinking low (two attempts per brief in parallel, the calibrated critic picks, `pick` breaks ties): 7.0, 7.5, 7.0, 7.5. No gain over single runs: the two drafts were usually close, and the critic picked the weaker windmill. Its wall clock is the slower draft plus selection, so the dashboard ran 5 minutes over budget.
+- Kits v8 to v8.5 (art direction, drawing-library fixes, plateau stop, phase-split reasoning): bonsai
+  and lighthouse between 6.5 and 8.0, best 8.0 on each; none reached the 8.5 goal on both. Phase-split
+  reasoning (v8.5) was the fastest good configuration (22 to 27 min).
+- Kit v9 on all four briefs: 7.5, 6.5 (lantern cut off by the top edge), 7.5 (best windmill since kit
+  v6), 8.0. On the eight coding cases: 0.99, 78 min against kit v8.5's 1.00 in 60 min. Not shipped.
 - This repository is updated as runs finish.
 
 ## Reproduce

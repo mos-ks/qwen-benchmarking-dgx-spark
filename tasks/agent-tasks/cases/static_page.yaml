@@ -1,0 +1,45 @@
+# The judged case. The command settles whether the page is complete and self-contained; whether
+# it is a page anyone would want to land on during an outage is not a fact a parser can hold.
+
+- id: status-page
+  input: |
+    Build index.html: the public status page a customer lands on during an incident, on a phone,
+    in a hurry. The content is data/incidents.json, which is four services and seven incidents,
+    two of them still open.
+
+    One self-contained file, no build step, no framework, and nothing loaded from the network:
+    no CDN script, no webfont, no remote image. The page opens straight from the filesystem, so
+    the content has to be in the markup. `fetch` cannot read a local file, and the check below
+    does not run JavaScript, so names written into the DOM at load time are not on the page as
+    far as it is concerned.
+
+    `python3 checks/check_page.py` must pass. It checks the mechanical half: one `<h1>`, a title
+    and a lang, a viewport meta, alt text on every image, every service name and incident id
+    present in the visible text, no remote references, some CSS, no placeholder text left behind.
+
+    Passing it is the floor. What is being judged is the other half: on a 375px screen, can a
+    person see what is broken without pinching or scrolling sideways, are the open incidents
+    obviously distinct from the resolved ones, is the state readable without colour vision, and
+    are the times written for a person rather than left as ISO strings. checks/ and data/ are
+    checked by digest and must not change.
+  tags: [coding, web, html, judged]
+  vars:
+    scaffold: web_status
+    expected_build: |
+      index.html at the workspace root, self-contained: one <style> block, one <h1> naming the
+      page, the four services each with their state as a word (not only a colour), then the
+      seven incidents with the two open ones first and visually distinct from the five
+      resolved. Times rendered like "31 Aug 2026, 06:12 UTC". A single-column layout that holds
+      at 375px with no horizontal scrolling, body text around 16px on a background it contrasts
+      with, and no remote script, font or image. No hero image, no animation, nothing pushing
+      the open incidents below the fold.
+  expect:
+    workspace_commands:
+      # Stdlib only, so this one runs on the /usr/bin/python3 every box has: the case does not
+      # need the interpreter the pytest cases need.
+      - run: [python3, -I, checks/check_page.py]
+        must_exit: 0
+        weight: 3
+      - run: ["python3", "-I", "-c", "import hashlib,sys;want={'checks/check_page.py':'d7f9ac15384eacbf8325ee323e66a8c35912eddef3f3d9bfc6e153c5cc4421e7','data/incidents.json':'a235395e79ff03718b6dd1f34b976a8eacdf56b85e02fb847671b46a3ec106e1'};bad=[p for p,d in want.items() if hashlib.sha256(open(p,'rb').read()).hexdigest()!=d];print('modified:',bad);sys.exit(1 if bad else 0)"]
+        must_exit: 0
+        weight: 1

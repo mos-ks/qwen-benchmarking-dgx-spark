@@ -1,0 +1,9 @@
+{
+  "name": "bonsai-in-the-wind",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Single-page pixel-art bonsai scene with drifting wind. No build step, no dependencies.",
+  "scripts": {
+    "check": "node --check pixel-kit.js && node --check bonsai.js && node scripts/smoke.mjs"
+  }
+}

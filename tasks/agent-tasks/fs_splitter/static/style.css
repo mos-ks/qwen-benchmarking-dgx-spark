@@ -1,0 +1,14 @@
+:root { --ink: #1d2433; --muted: #5b6475; --line: #d9dee8; --accent: #2457c5; --owed: #13795b; --owes: #b42318; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: #f6f7fb; }
+main { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+form { display: grid; gap: 6px; margin-bottom: 16px; }
+input, select, textarea, button { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+button { background: var(--accent); color: #fff; border: 0; cursor: pointer; justify-self: start; }
+ul { list-style: none; padding: 0; margin: 0 0 16px; }
+li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.owed { color: var(--owed); }
+.owes { color: var(--owes); }
+.muted { color: var(--muted); }
+#error:empty { display: none; }
+#error { color: var(--owes); }
